@@ -1,0 +1,17 @@
+{
+  "name": "Room Planner",
+  "short_name": "Room Planner",
+  "description": "Plan your room layout with an intuitive drag-and-drop interface",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

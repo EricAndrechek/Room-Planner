@@ -25,7 +25,7 @@
 
   @keyframes slide-up {
     from {
-      transform: translateY(100%);
+      transform: translateY(20px);
       opacity: 0;
     }
     to {
@@ -46,15 +46,15 @@
   }
 
   .animate-fade-in {
-    animation: fade-in 0.2s ease-in-out;
+    animation: fade-in 0.15s ease-out;
   }
 
   .animate-slide-in-right {
-    animation: slide-in-right 0.3s ease-out;
+    animation: slide-in-right 0.25s ease-out;
   }
 
   .animate-slide-up {
-    animation: slide-up 0.3s ease-out;
+    animation: slide-up 0.2s ease-out;
   }
 }
 
@@ -133,17 +133,25 @@ input[type="range"]::-moz-range-thumb:hover {
   box-sizing: border-box;
 }
 
+html {
+  /* Prevent iOS tap highlight */
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Prevent pull-to-refresh on mobile */
+  overscroll-behavior: none;
 }
 
 #root {
   width: 100%;
   height: 100vh;
+  height: 100dvh; /* Use dynamic viewport height for mobile */
 }
 
 /* Smooth transitions */
@@ -158,4 +166,24 @@ select:focus-visible,
 textarea:focus-visible {
   outline: 2px solid #4f46e5;
   outline-offset: 2px;
+}
+
+/* Prevent text selection on draggable items */
+.select-none {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Touch optimization for draggable elements */
+.cursor-grab {
+  touch-action: none;
+}
+
+/* Improve touch targets */
+@media (hover: none) and (pointer: coarse) {
+  button, 
+  [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }

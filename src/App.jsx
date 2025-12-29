@@ -151,23 +151,23 @@ const DimensionInput = ({ value, onChange, className, placeholder, min = 0, max 
 };
 
 const Modal = ({ isOpen, onClose, title, children }) => {
-    if (!isOpen) return null;
-    
     useEffect(() => {
+      if (!isOpen) return;
+      
       const handleEscape = (e) => {
         if (e.key === 'Escape') onClose();
       };
       
-      if (isOpen) {
-        document.addEventListener('keydown', handleEscape);
-        document.body.style.overflow = 'hidden';
-      }
+      document.addEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'hidden';
       
       return () => {
         document.removeEventListener('keydown', handleEscape);
         document.body.style.overflow = 'unset';
       };
     }, [isOpen, onClose]);
+    
+    if (!isOpen) return null;
     
     return (
         <div 
@@ -178,14 +178,14 @@ const Modal = ({ isOpen, onClose, title, children }) => {
           aria-labelledby="modal-title"
         >
             <div 
-              className="bg-white rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]"
+              className="bg-white rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh] animate-slide-up"
               onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex justify-between items-center p-4 border-b border-slate-100">
                     <h3 id="modal-title" className="font-bold text-slate-800">{title}</h3>
                     <button 
                       onClick={onClose} 
-                      className="p-1 hover:bg-slate-100 rounded-full transition-colors"
+                      className="p-2 hover:bg-slate-100 rounded-full transition-colors"
                       aria-label="Close modal"
                     >
                       <X className="w-5 h-5 text-slate-500" />
@@ -988,7 +988,7 @@ export default function RoomSimulator() {
         <div className="flex items-center gap-2 sm:gap-4">
           {/* Undo/Redo */}
           <div className="flex items-center gap-1">
-            <Tooltip text="Undo (⌘Z)">
+            <Tooltip text="Undo">
               <button 
                 onClick={undo}
                 disabled={historyIndex <= 0}
@@ -998,7 +998,7 @@ export default function RoomSimulator() {
                 <Undo2 className="w-4 h-4" />
               </button>
             </Tooltip>
-            <Tooltip text="Redo (⌘⇧Z)">
+            <Tooltip text="Redo">
               <button 
                 onClick={redo}
                 disabled={historyIndex >= history.length - 1}
@@ -1063,25 +1063,26 @@ export default function RoomSimulator() {
             ${sidebarOpen ? 'md:w-80 translate-x-0' : 'md:w-0 -translate-x-full md:opacity-0 md:overflow-hidden'}`}
         >
           {/* Mobile header for sidebar */}
-          <div className="md:hidden bg-indigo-600 px-4 py-4 flex justify-between items-center sticky top-0 z-10 shadow-md">
-            <h2 className="font-bold text-white text-base">Edit Room & Furniture</h2>
+          <div className="md:hidden bg-white px-4 py-4 flex justify-between items-center sticky top-0 z-10 border-b border-slate-200">
+            <h2 className="font-bold text-slate-800 text-base">Settings</h2>
             <button 
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 setSidebarOpen(false);
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-indigo-600 rounded-lg text-sm font-bold transition-colors shadow-sm active:scale-95"
+              className="flex items-center gap-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors active:scale-95"
               aria-label="Done editing"
               type="button"
             >
+              <Check className="w-4 h-4" />
               <span>Done</span>
             </button>
           </div>
 
-          <div className="bg-indigo-50 p-3 text-xs text-indigo-800 border-b border-indigo-100 flex gap-2">
-            <Info className="w-4 h-4 shrink-0" />
-            <p>Inputs: <strong>12.5</strong>, <strong>12'6"</strong>, or <strong>150"</strong>.</p>
+          <div className="bg-slate-50 p-3 text-xs text-slate-600 border-b border-slate-100 flex gap-2 items-center">
+            <Info className="w-4 h-4 shrink-0 text-slate-400" />
+            <p>Accepts feet, inches, or decimals (e.g., <strong>12'6"</strong>, <strong>150"</strong>, <strong>12.5</strong>)</p>
           </div>
 
           <div className="p-6 space-y-8 min-w-0 md:min-w-[20rem]">
@@ -1113,8 +1114,8 @@ export default function RoomSimulator() {
                   />
                 </div>
               </div>
-              <div className="mt-2 text-xs text-slate-500 bg-indigo-50 p-2 rounded">
-                Area: <strong>{roomArea} sq ft</strong>
+              <div className="mt-2 text-xs text-slate-500">
+                Total area: <strong>{roomArea} sq ft</strong>
               </div>
             </section>
 
@@ -1294,11 +1295,10 @@ export default function RoomSimulator() {
               setSidebarOpen(true);
               setActiveId(null);
             }}
-            className="fixed bottom-6 right-6 z-40 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full p-4 shadow-2xl flex items-center gap-2 transition-all active:scale-95 animate-fade-in"
-            aria-label="Open settings"
+            className="fixed bottom-6 right-6 z-40 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full p-4 shadow-lg flex items-center justify-center transition-all active:scale-95 animate-fade-in"
+            aria-label="Edit room settings"
           >
             <Settings className="w-6 h-6" />
-            <span className="font-medium pr-1">Edit Room</span>
           </button>
         )}
 
@@ -1307,12 +1307,11 @@ export default function RoomSimulator() {
           className="flex-1 bg-slate-100 overflow-auto flex items-center justify-center p-4 md:p-8 relative w-full"
           ref={containerRef}
         >
-          {/* Instruction badge - hidden when sidebar is open on mobile */}
+          {/* Instruction badge - subtle hint that fades out */}
           {!(isMobile && sidebarOpen) && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-indigo-600 text-white px-3 py-2 rounded-full shadow-lg text-[10px] sm:text-xs lg:text-sm z-20 pointer-events-none animate-fade-in opacity-90 max-w-[95vw] text-center leading-tight">
-              <span className="hidden lg:inline"><strong>Drag</strong> to move • <strong>Rotate handle:</strong> spin, slide up/down, or left/right • <strong>Arrow keys</strong> to nudge • <strong>R</strong> to rotate 90° • <strong>Del</strong> to delete</span>
-              <span className="hidden md:inline lg:hidden"><strong>Drag</strong> • <strong>Rotate:</strong> spin or slide • <strong>Arrows</strong> nudge • <strong>R</strong> rotate • <strong>Del</strong> delete</span>
-              <span className="md:hidden"><strong>Drag</strong> to move • <strong>Rotate handle:</strong> spin or slide</span>
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-800/80 text-white px-4 py-2 rounded-full shadow-lg text-xs z-20 pointer-events-none animate-fade-in backdrop-blur-sm">
+              <span className="hidden sm:inline">Drag items to move • Use handle to rotate</span>
+              <span className="sm:hidden">Drag to move • Tap to select</span>
             </div>
           )}
 
@@ -1345,28 +1344,30 @@ export default function RoomSimulator() {
                     transform: `translate(${item.x * PIXELS_PER_UNIT}px, ${item.y * PIXELS_PER_UNIT}px) rotate(${item.rotation}deg)`,
                     borderWidth: '2px',
                     zIndex: isActive ? 50 : 10,
-                    boxShadow: isActive ? '0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.1)' : '0 1px 3px rgba(0, 0, 0, 0.1)'
+                    boxShadow: isActive ? '0 8px 20px -4px rgba(0, 0, 0, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.08)',
+                    touchAction: 'none'
                   }}
                   role="button"
                   tabIndex={0}
                   aria-label={`${item.label}, ${formatDimension(item.width)} by ${formatDimension(item.height)}`}
                 >
-                  {item.label}
+                  <span className="truncate px-1">{item.label}</span>
                   {isActive && (
                     <div 
                        onMouseDown={(e) => handleMouseDown(e, item.id, 'rotate')}
                        onTouchStart={(e) => handleMouseDown(e, item.id, 'rotate')}
-                       className={`absolute -top-8 left-1/2 -translate-x-1/2 w-8 h-8 md:w-6 md:h-6 bg-white border-2 rounded-full flex items-center justify-center cursor-crosshair hover:scale-110 transition-all z-50 
-                       ${isRotating && isSnapped ? 'border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'border-indigo-600'}`}
+                       className={`absolute -top-8 left-1/2 -translate-x-1/2 w-8 h-8 md:w-6 md:h-6 bg-white border-2 rounded-full flex items-center justify-center cursor-crosshair hover:scale-110 transition-all z-50 shadow-md
+                       ${isRotating && isSnapped ? 'border-emerald-500' : 'border-indigo-500'}`}
+                       style={{ touchAction: 'none' }}
                        aria-label="Rotate handle"
                     >
-                       <RotateCw className={`w-4 h-4 md:w-3 md:h-3 ${isRotating && isSnapped ? 'text-emerald-600' : 'text-indigo-600'}`} />
+                       <RotateCw className={`w-4 h-4 md:w-3 md:h-3 ${isRotating && isSnapped ? 'text-emerald-600' : 'text-indigo-500'}`} />
                     </div>
                   )}
                   
                   {isActive && (
                       <div className={`absolute -top-8 left-1/2 h-8 w-0.5 -z-10 origin-bottom transition-colors
-                      ${isRotating && isSnapped ? 'bg-emerald-500' : 'bg-indigo-600'}`}></div>
+                      ${isRotating && isSnapped ? 'bg-emerald-500' : 'bg-indigo-500'}`}></div>
                   )}
                 </div>
               );
@@ -1381,7 +1382,7 @@ export default function RoomSimulator() {
               
               {/* URL Share Section */}
               <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                  <label className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
                       <Share2 className="w-4 h-4" /> Direct Link
                   </label>
                   <div className="flex gap-2">
@@ -1409,7 +1410,7 @@ export default function RoomSimulator() {
               {/* JSON Import/Export Section */}
               <div>
                   <div className="flex justify-between items-end mb-2">
-                      <label className="block text-sm font-medium text-slate-700 flex items-center gap-2">
+                      <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
                           <Download className="w-4 h-4" /> Layout Config (JSON)
                       </label>
                       <button 
@@ -1428,7 +1429,7 @@ export default function RoomSimulator() {
                   />
 
                   {/* Import Area */}
-                  <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                  <label className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
                       <Upload className="w-4 h-4" /> Import Config
                   </label>
                   <textarea 
