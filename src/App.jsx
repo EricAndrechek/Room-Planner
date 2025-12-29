@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import { Move, RotateCw, Lock, Unlock, Settings, RotateCcw, Info, ArrowLeftRight, ArrowUpDown, ChevronLeft, ChevronRight, Share2, X, Copy, Check, Download, Upload, Plus, Trash2, Eye, EyeOff, Undo2, Redo2, Maximize2, Palette, ZoomIn, ZoomOut, Home, Sofa, ArrowRight, ChevronDown, ChevronUp, FolderOpen, FileText, Edit3, Copy as CopyIcon, MoreVertical, CheckSquare, Square, FileDown, FileUp } from 'lucide-react';
+import { Move, RotateCw, Lock, Unlock, RotateCcw, Info, ArrowLeftRight, ArrowUpDown, ChevronLeft, ChevronRight, Share2, X, Copy, Check, Download, Upload, Plus, Trash2, Eye, EyeOff, Undo2, Redo2, Maximize2, Palette, ZoomIn, ZoomOut, Home, Sofa, ArrowRight, ChevronDown, ChevronUp, FolderOpen, FileText, Edit3, Copy as CopyIcon, MoreVertical, CheckSquare, Square, FileDown, FileUp, AlertTriangle } from 'lucide-react';
 import Knob from './Knob';
 
 // Constants
@@ -906,6 +906,52 @@ export default function RoomSimulator() {
                 height: convertLength(i.height),
                 color: migrateColor(i.color)
               })));
+              
+              // If the shared config has a name, save as a new project with that name
+              if (parsed.name) {
+                const now = new Date().toISOString();
+                const newProject = {
+                  id: `project-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                  name: parsed.name,
+                  data: {
+                    roomDims: {
+                      width: convertLength(parsed.roomDims.width),
+                      height: convertLength(parsed.roomDims.height)
+                    },
+                    doors: parsed.doors ? parsed.doors.map(d => ({
+                      ...d,
+                      width: convertLength(d.width),
+                      position: convertLength(d.position)
+                    })) : INITIAL_DOORS,
+                    windows: parsed.windows ? parsed.windows.map(w => ({
+                      ...w,
+                      width: convertLength(w.width),
+                      position: convertLength(w.position)
+                    })) : INITIAL_WINDOWS,
+                    items: parsed.items.map(i => ({
+                      ...i,
+                      x: convertLength(i.x),
+                      y: convertLength(i.y),
+                      width: convertLength(i.width),
+                      height: convertLength(i.height),
+                      color: migrateColor(i.color)
+                    }))
+                  },
+                  createdAt: now,
+                  updatedAt: now
+                };
+                try {
+                  const existingProjects = JSON.parse(localStorage.getItem(PROJECTS_STORAGE_KEY) || '[]');
+                  localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify([...existingProjects, newProject]));
+                  setSavedProjects([...existingProjects, newProject]);
+                  setCurrentProjectId(newProject.id);
+                  localStorage.setItem(STORAGE_PREFIX + 'currentProject', newProject.id);
+                  setSaveStatus('saved');
+                  setLastSavedAt(new Date());
+                } catch (e) {
+                  console.error('Failed to save imported project:', e);
+                }
+              }
           }
       }
   }, []);
@@ -1122,6 +1168,11 @@ export default function RoomSimulator() {
   const toggleVisibility = (id) => {
       setItems(items.map(i => i.id === id ? { ...i, visible: !i.visible } : i));
   };
+
+  const toggleLock = (id) => {
+      setItems(items.map(i => i.id === id ? { ...i, locked: !i.locked } : i));
+      saveToHistory();
+  };
   
   const updateRoomDims = (newDims) => {
     const validWidth = Math.max(1, newDims.width || 1);
@@ -1197,6 +1248,7 @@ export default function RoomSimulator() {
     const convertLength = (feet) => feetToUnitValue(feet, targetUnitSystem);
     
     return {
+      name: getCurrentProjectName(),
       unitSystem: targetUnitSystem,
       roomDims: {
         width: convertLength(roomDims.width),
@@ -1297,6 +1349,29 @@ export default function RoomSimulator() {
           }
           setWindows(converted.windows.length > 0 ? converted.windows : INITIAL_WINDOWS);
           setItems(converted.items);
+          
+          // If the imported config has a name, save as a new project
+          if (parsed.name) {
+            const now = new Date().toISOString();
+            const newProject = {
+              id: generateProjectId(),
+              name: parsed.name,
+              data: {
+                roomDims: converted.roomDims,
+                doors: converted.doors.length > 0 ? converted.doors : INITIAL_DOORS,
+                windows: converted.windows.length > 0 ? converted.windows : INITIAL_WINDOWS,
+                items: converted.items
+              },
+              createdAt: now,
+              updatedAt: now
+            };
+            saveProjectsToStorage([...savedProjects, newProject]);
+            setCurrentProjectId(newProject.id);
+            localStorage.setItem(STORAGE_PREFIX + 'currentProject', newProject.id);
+            setSaveStatus('saved');
+            setLastSavedAt(new Date());
+          }
+          
           setModalOpen(false);
           setImportText('');
           setImportError(null);
@@ -1530,6 +1605,17 @@ export default function RoomSimulator() {
     if (isFurnitureMode && (entityType === 'door' || entityType === 'window')) {
       // Doors/windows are locked during furniture placement
       return;
+    }
+    
+    // Check if individual item is locked
+    if (entityType === 'item') {
+      const item = items.find(i => i.id === id);
+      if (item?.locked) {
+        // Allow selection but not dragging/rotating
+        setActiveId(id);
+        setActiveType(entityType);
+        return;
+      }
     }
     
     e.stopPropagation();
@@ -2371,24 +2457,73 @@ export default function RoomSimulator() {
       
       {/* Header */}
       <div className="bg-white border-b border-slate-200 px-4 py-2 flex justify-between items-center shadow-sm relative z-50 h-16">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
             {/* File Browser Button */}
             <Tooltip text="My Floor Plans">
               <button 
                 onClick={() => setFileBrowserOpen(true)}
-                className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"
+                className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors shrink-0"
                 aria-label="Open file browser"
               >
                 <FolderOpen className="w-5 h-5" />
               </button>
             </Tooltip>
             
-            <Settings className="w-6 h-6 text-indigo-600" />
-            <div className="hidden sm:block">
-              <h1 className="text-sm font-bold text-slate-800 leading-tight">{getCurrentProjectName()}</h1>
+            <div className="min-w-0 flex-1">
+              {editingProjectId === 'header' ? (
+                <input
+                  type="text"
+                  value={editingName}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  onBlur={() => {
+                    if (editingName.trim() && currentProjectId) {
+                      renameProject(currentProjectId, editingName.trim());
+                    }
+                    setEditingProjectId(null);
+                    setEditingName('');
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      if (editingName.trim() && currentProjectId) {
+                        renameProject(currentProjectId, editingName.trim());
+                      }
+                      setEditingProjectId(null);
+                      setEditingName('');
+                    } else if (e.key === 'Escape') {
+                      setEditingProjectId(null);
+                      setEditingName('');
+                    }
+                  }}
+                  className="text-sm font-bold text-slate-800 leading-tight bg-transparent border-b-2 border-indigo-500 outline-none w-full max-w-[200px]"
+                  autoFocus
+                />
+              ) : (
+                <button
+                  onClick={() => {
+                    if (currentProjectId) {
+                      setEditingProjectId('header');
+                      setEditingName(getCurrentProjectName());
+                    } else {
+                      // Auto-save as new project first
+                      const newProject = saveCurrentAsProject('Untitled');
+                      if (newProject) {
+                        setEditingProjectId('header');
+                        setEditingName('Untitled');
+                      }
+                    }
+                  }}
+                  className="text-left group hover:bg-slate-50 rounded px-1 -mx-1 transition-colors"
+                  title="Click to rename"
+                >
+                  <h1 className="text-sm font-bold text-slate-800 leading-tight truncate group-hover:text-indigo-600 transition-colors">
+                    {getCurrentProjectName()}
+                    <Edit3 className="w-3 h-3 inline ml-1 opacity-0 group-hover:opacity-50 transition-opacity" />
+                  </h1>
+                </button>
+              )}
               <div className="flex items-center gap-1 text-[10px] text-slate-500">
-                <Maximize2 className="w-3 h-3" />
-                <span>{feetToDisplay(roomDims.width, unitSystem)} × {feetToDisplay(roomDims.height, unitSystem)} ({roundNum(roomDims.width * roomDims.height, 1)} sq ft)</span>
+                <Maximize2 className="w-3 h-3 shrink-0" />
+                <span className="truncate">{feetToDisplay(roomDims.width, unitSystem)} × {feetToDisplay(roomDims.height, unitSystem)} ({roundNum(roomDims.width * roomDims.height, 1)} sq ft)</span>
               </div>
             </div>
         </div>
@@ -2491,20 +2626,40 @@ export default function RoomSimulator() {
             ${sidebarOpen ? 'md:w-80 translate-x-0' : 'md:w-0 -translate-x-full md:opacity-0 md:overflow-hidden'}`}
         >
           {/* Mobile header for sidebar */}
-          <div className="md:hidden bg-white px-4 py-4 flex justify-between items-center sticky top-0 z-10 border-b border-slate-200">
-            <h2 className="font-bold text-slate-800 text-base">Settings</h2>
+          <div className="md:hidden bg-white px-4 py-3 flex justify-between items-center sticky top-0 z-10 border-b border-slate-200">
+            <div className="flex items-center gap-2">
+              <div className={`p-1.5 rounded-lg ${designMode === DESIGN_MODES.ROOM_SETUP ? 'bg-indigo-100' : 'bg-emerald-100'}`}>
+                {designMode === DESIGN_MODES.ROOM_SETUP 
+                  ? <Home className="w-4 h-4 text-indigo-600" />
+                  : <Sofa className="w-4 h-4 text-emerald-600" />}
+              </div>
+              <div>
+                <h2 className="font-bold text-slate-800 text-sm leading-tight">
+                  {designMode === DESIGN_MODES.ROOM_SETUP ? 'Room Setup' : 'Furniture'}
+                </h2>
+                <p className="text-[10px] text-slate-500">
+                  {designMode === DESIGN_MODES.ROOM_SETUP 
+                    ? 'Configure room, doors & windows'
+                    : 'Add and arrange furniture'}
+                </p>
+              </div>
+            </div>
             <button 
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 setSidebarOpen(false);
               }}
-              className="flex items-center gap-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors active:scale-95"
-              aria-label="Done editing"
+              className={`flex items-center gap-1 px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors active:scale-95 ${
+                designMode === DESIGN_MODES.ROOM_SETUP 
+                  ? 'bg-indigo-600 hover:bg-indigo-700' 
+                  : 'bg-emerald-600 hover:bg-emerald-700'
+              }`}
+              aria-label="View floor plan"
               type="button"
             >
-              <Check className="w-4 h-4" />
-              <span>Done</span>
+              <Eye className="w-4 h-4" />
+              <span>View</span>
             </button>
           </div>
 
@@ -2963,23 +3118,50 @@ export default function RoomSimulator() {
                     {items.map((item) => {
                       const colorButtonRef = React.createRef();
                       const isSelected = activeId === item.id && activeType === 'item';
+                      const isItemLocked = item.locked;
+                      
+                      // Check for warnings (collision/out-of-bounds)
+                      const isOutOfBounds = !isItemInBounds(item, roomDims);
+                      const hasCollision = items.some(other => 
+                        other.id !== item.id && 
+                        other.visible !== false && 
+                        checkItemsCollision(item, other)
+                      );
+                      const hasWarning = item.visible !== false && (isOutOfBounds || hasCollision);
+                      const warningText = isOutOfBounds && hasCollision 
+                        ? 'Outside room & overlapping' 
+                        : isOutOfBounds 
+                          ? 'Outside room bounds' 
+                          : 'Overlapping furniture';
+                      
                       return (
                       <div 
                         key={item.id} 
-                        className={`p-3 bg-white rounded-lg border transition-all duration-200 cursor-pointer hover:border-emerald-300 ${item.visible === false ? 'opacity-60 border-dashed' : 'border-slate-200'} ${isSelected ? 'ring-2 ring-emerald-500' : ''} overflow-hidden`}
+                        className={`p-3 bg-white rounded-lg border transition-all duration-200 cursor-pointer hover:border-emerald-300 ${item.visible === false ? 'opacity-60 border-dashed' : 'border-slate-200'} ${isSelected ? 'ring-2 ring-emerald-500' : ''} ${isItemLocked ? 'bg-slate-50' : ''} ${hasWarning ? 'border-red-300 bg-red-50/50' : ''} overflow-hidden`}
                         onClick={() => { setActiveId(item.id); setActiveType('item'); }}
                       >
                         <div className="flex justify-between items-center mb-3 gap-2">
                           <div className="flex items-center gap-2 flex-1 min-w-0 relative">
+                            {hasWarning && (
+                              <div className="w-5 h-5 bg-red-100 rounded flex items-center justify-center shrink-0" title={warningText}>
+                                <AlertTriangle className="w-3 h-3 text-red-500" />
+                              </div>
+                            )}
+                            {isItemLocked && !hasWarning && (
+                              <div className="w-5 h-5 bg-amber-100 rounded flex items-center justify-center shrink-0" title="Locked">
+                                <Lock className="w-3 h-3 text-amber-600" />
+                              </div>
+                            )}
                             <button
                               ref={colorButtonRef}
-                              onClick={(e) => { e.stopPropagation(); setShowColorPicker(showColorPicker === item.id ? null : item.id); }}
-                              className="w-6 h-6 rounded-full border-2 border-slate-300 hover:border-emerald-500 transition-colors cursor-pointer shrink-0"
+                              onClick={(e) => { e.stopPropagation(); if (!isItemLocked) setShowColorPicker(showColorPicker === item.id ? null : item.id); }}
+                              className={`w-6 h-6 rounded-full border-2 border-slate-300 transition-colors shrink-0 ${isItemLocked ? 'cursor-not-allowed opacity-60' : 'hover:border-emerald-500 cursor-pointer'}`}
                               style={{ backgroundColor: migrateColor(item.color) }}
                               aria-label="Change item color"
                               data-color-button
+                              disabled={isItemLocked}
                             />
-                            {!isMobile && showColorPicker === item.id && (
+                            {!isMobile && showColorPicker === item.id && !isItemLocked && (
                               <ColorPicker
                                 currentColor={migrateColor(item.color)}
                                 onChange={(color) => {
@@ -2996,11 +3178,20 @@ export default function RoomSimulator() {
                               onChange={(e) => setItems(items.map(i => i.id === item.id ? { ...i, label: e.target.value } : i))}
                               onBlur={saveToHistory}
                               onClick={(e) => e.stopPropagation()}
-                              className="bg-transparent font-medium text-slate-700 border-b border-transparent hover:border-slate-300 focus:border-emerald-500 outline-none min-w-0 flex-1 text-sm truncate"
+                              className={`bg-transparent font-medium text-slate-700 border-b border-transparent outline-none min-w-0 flex-1 text-sm truncate ${isItemLocked ? 'cursor-not-allowed' : 'hover:border-slate-300 focus:border-emerald-500'}`}
                               aria-label="Item label"
+                              readOnly={isItemLocked}
                             />
                           </div>
                           <div className="flex items-center shrink-0">
+                            <Tooltip text={isItemLocked ? "Unlock" : "Lock"}>
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); toggleLock(item.id); }}
+                                className={`p-1.5 rounded transition-colors ${isItemLocked ? 'text-amber-600 bg-amber-50 hover:bg-amber-100' : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'}`}
+                              >
+                                {isItemLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                              </button>
+                            </Tooltip>
                             <Tooltip text={item.visible !== false ? "Hide" : "Show"}>
                               <button 
                                 onClick={(e) => { e.stopPropagation(); toggleVisibility(item.id); }}
@@ -3019,6 +3210,28 @@ export default function RoomSimulator() {
                             </Tooltip>
                           </div>
                         </div>
+                        
+                        {/* Warning message for collision or out-of-bounds */}
+                        {hasWarning && (
+                          <div className="mb-2 py-1.5 px-2 bg-red-50 border border-red-200 rounded text-center">
+                            <p className="text-[10px] text-red-600 flex items-center justify-center gap-1">
+                              <AlertTriangle className="w-3 h-3" />
+                              {warningText}
+                            </p>
+                          </div>
+                        )}
+                        
+                        {/* Show locked message or editable inputs */}
+                        {isItemLocked ? (
+                          <div className="py-3 px-2 bg-amber-50 border border-amber-200 rounded-lg text-center">
+                            <p className="text-xs text-amber-700 flex items-center justify-center gap-1.5">
+                              <Lock className="w-3 h-3" />
+                              Position and size locked
+                            </p>
+                            <p className="text-[10px] text-amber-600 mt-1">Click the lock icon to unlock</p>
+                          </div>
+                        ) : (
+                        <>
                         <div className="grid grid-cols-2 gap-2">
                           <div>
                             <label className="text-[10px] text-slate-500">Width</label>
@@ -3104,6 +3317,8 @@ export default function RoomSimulator() {
                             />
                           </div>
                         </div>
+                        </>
+                        )}
                       </div>
                     )})}
                     {items.length === 0 && (
@@ -3126,10 +3341,16 @@ export default function RoomSimulator() {
               setSidebarOpen(true);
               setActiveId(null);
             }}
-            className="fixed bottom-6 right-6 z-40 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full p-4 shadow-lg flex items-center justify-center transition-all active:scale-95 animate-fade-in"
-            aria-label="Edit room settings"
+            className={`fixed bottom-6 right-6 z-40 text-white rounded-full pl-4 pr-5 py-3 shadow-lg flex items-center gap-2 transition-all active:scale-95 animate-fade-in ${
+              designMode === DESIGN_MODES.ROOM_SETUP 
+                ? 'bg-indigo-600 hover:bg-indigo-700' 
+                : 'bg-emerald-600 hover:bg-emerald-700'
+            }`}
+            aria-label={designMode === DESIGN_MODES.ROOM_SETUP ? "Edit room settings" : "Edit furniture"}
           >
-            <Settings className="w-6 h-6" />
+            {designMode === DESIGN_MODES.ROOM_SETUP 
+              ? <><Home className="w-5 h-5" /><span className="text-sm font-medium">Edit Room</span></>
+              : <><Sofa className="w-5 h-5" /><span className="text-sm font-medium">Edit Furniture</span></>}
           </button>
         )}
 
@@ -3140,20 +3361,22 @@ export default function RoomSimulator() {
         >
           {/* Mode indicator badge */}
           {!(isMobile && sidebarOpen) && (
-            <div className={`absolute top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full shadow-lg text-xs z-20 pointer-events-none animate-fade-in backdrop-blur-sm ${
+            <div className={`absolute top-4 left-1/2 -translate-x-1/2 px-3 sm:px-4 py-2 rounded-full shadow-lg text-[11px] sm:text-xs z-20 pointer-events-none animate-fade-in backdrop-blur-sm ${
               designMode === DESIGN_MODES.ROOM_SETUP 
                 ? 'bg-indigo-600/90 text-white' 
                 : 'bg-emerald-600/90 text-white'
             }`}>
               {designMode === DESIGN_MODES.ROOM_SETUP ? (
                 <>
-                  <span className="hidden sm:inline"><Home className="w-3 h-3 inline mr-1 -mt-0.5" /> Room Setup Mode • Drag door/window handles to reposition</span>
-                  <span className="sm:hidden"><Home className="w-3 h-3 inline mr-1 -mt-0.5" /> Room Setup</span>
+                  <Home className="w-3 h-3 inline mr-1 -mt-0.5" />
+                  <span className="hidden sm:inline">Room Setup Mode • Drag door/window handles to reposition</span>
+                  <span className="sm:hidden">Drag handles to reposition</span>
                 </>
               ) : (
                 <>
-                  <span className="hidden sm:inline"><Sofa className="w-3 h-3 inline mr-1 -mt-0.5" /> Furniture Mode • Drag to move • Handle to rotate</span>
-                  <span className="sm:hidden"><Sofa className="w-3 h-3 inline mr-1 -mt-0.5" /> Furniture Mode</span>
+                  <Sofa className="w-3 h-3 inline mr-1 -mt-0.5" />
+                  <span className="hidden sm:inline">Furniture Mode • Drag to move • Handle to rotate</span>
+                  <span className="sm:hidden">Drag to move • Handle to rotate</span>
                 </>
               )}
             </div>
@@ -3175,8 +3398,31 @@ export default function RoomSimulator() {
 
             {items.filter(i => i.visible !== false).map((item) => {
               const isActive = activeId === item.id && activeType === 'item';
-              const isFurnitureLocked = designMode === DESIGN_MODES.ROOM_SETUP;
+              const isModeLockedFurniture = designMode === DESIGN_MODES.ROOM_SETUP;
+              const isItemLocked = item.locked;
+              const isLocked = isModeLockedFurniture || isItemLocked;
               const itemColor = migrateColor(item.color);
+              
+              // Check for collisions and out-of-bounds
+              const isOutOfBounds = !isItemInBounds(item, roomDims);
+              const collidingItems = items.filter(other => 
+                other.id !== item.id && 
+                other.visible !== false && 
+                checkItemsCollision(item, other)
+              );
+              const hasCollision = collidingItems.length > 0;
+              const hasWarning = isOutOfBounds || hasCollision;
+              
+              // Determine border color based on state
+              let borderColor = getBorderColor(itemColor);
+              let borderWidth = '2px';
+              if (hasWarning) {
+                borderColor = '#ef4444'; // red-500
+                borderWidth = '3px';
+              } else if (isItemLocked && !isModeLockedFurniture) {
+                borderColor = '#d97706'; // amber-600
+                borderWidth = '3px';
+              }
               
               return (
                 <div
@@ -3185,35 +3431,54 @@ export default function RoomSimulator() {
                   onTouchStart={(e) => handleMouseDown(e, item.id, 'drag', 'item')}
                   onClick={() => { setActiveId(item.id); setActiveType('item'); }}
                   className={`absolute flex items-center justify-center text-xs font-bold text-slate-700 select-none transition-shadow rounded-md ${
-                    isFurnitureLocked 
+                    isModeLockedFurniture 
                       ? 'cursor-not-allowed opacity-50' 
-                      : 'cursor-grab active:cursor-grabbing'
+                      : isItemLocked 
+                        ? 'cursor-pointer'
+                        : 'cursor-grab active:cursor-grabbing'
                   }`}
                   style={{
                     width: item.width * PIXELS_PER_UNIT,
                     height: item.height * PIXELS_PER_UNIT,
                     transform: `translate(${item.x * PIXELS_PER_UNIT}px, ${item.y * PIXELS_PER_UNIT}px) rotate(${item.rotation}deg)`,
                     backgroundColor: itemColor,
-                    borderColor: getBorderColor(itemColor),
-                    borderWidth: '2px',
+                    borderColor: borderColor,
+                    borderWidth: borderWidth,
                     zIndex: isActive ? 50 : 10,
-                    boxShadow: isActive && !isFurnitureLocked ? '0 8px 20px -4px rgba(0, 0, 0, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.08)',
+                    boxShadow: isActive && !isLocked ? '0 8px 20px -4px rgba(0, 0, 0, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.08)',
                     touchAction: 'none'
                   }}
                   role="button"
                   tabIndex={0}
-                  aria-label={`${item.label}, ${feetToDisplay(item.width, unitSystem)} by ${feetToDisplay(item.height, unitSystem)}${isFurnitureLocked ? ' (locked)' : ''}`}
+                  aria-label={`${item.label}, ${feetToDisplay(item.width, unitSystem)} by ${feetToDisplay(item.height, unitSystem)}${isLocked ? ' (locked)' : ''}${hasWarning ? ' (warning)' : ''}`}
                 >
                   <span className="truncate px-1">{item.label}</span>
                   
-                  {/* Lock indicator when furniture is locked */}
-                  {isFurnitureLocked && (
+                  {/* Warning indicator for collision or out-of-bounds */}
+                  {hasWarning && (
+                    <div 
+                      className="absolute -top-2 -left-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center shadow-md"
+                      title={isOutOfBounds && hasCollision ? 'Outside room & overlapping' : isOutOfBounds ? 'Outside room bounds' : 'Overlapping with other furniture'}
+                    >
+                      <AlertTriangle className="w-3 h-3 text-white" />
+                    </div>
+                  )}
+                  
+                  {/* Lock indicator when mode locks all furniture */}
+                  {isModeLockedFurniture && (
                     <div className="absolute -top-2 -right-2 w-5 h-5 bg-slate-600 rounded-full flex items-center justify-center shadow-md">
                       <Lock className="w-3 h-3 text-white" />
                     </div>
                   )}
                   
-                  {isActive && !isFurnitureLocked && (
+                  {/* Lock indicator when individual item is locked */}
+                  {isItemLocked && !isModeLockedFurniture && (
+                    <div className="absolute -top-2 -right-2 w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center shadow-md">
+                      <Lock className="w-3 h-3 text-white" />
+                    </div>
+                  )}
+                  
+                  {isActive && !isLocked && (
                     <div 
                        onMouseDown={(e) => handleMouseDown(e, item.id, 'rotate', 'item')}
                        onTouchStart={(e) => handleMouseDown(e, item.id, 'rotate', 'item')}
@@ -3226,7 +3491,7 @@ export default function RoomSimulator() {
                     </div>
                   )}
                   
-                  {isActive && !isFurnitureLocked && (
+                  {isActive && !isLocked && (
                       <div className={`absolute -top-8 left-1/2 h-8 w-0.5 -z-10 origin-bottom transition-colors
                       ${isRotating && isSnapped ? 'bg-emerald-500' : 'bg-emerald-500'}`}></div>
                   )}
