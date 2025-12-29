@@ -911,44 +911,76 @@ export default function RoomSimulator() {
               // If the shared config has a name, save as a new project with that name
               if (parsed.name) {
                 const now = new Date().toISOString();
-                const newProject = {
-                  id: `project-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                  name: parsed.name,
-                  data: {
-                    roomDims: {
-                      width: convertLength(parsed.roomDims.width),
-                      height: convertLength(parsed.roomDims.height)
-                    },
-                    doors: parsed.doors ? parsed.doors.map(d => ({
-                      ...d,
-                      width: convertLength(d.width),
-                      position: convertLength(d.position)
-                    })) : INITIAL_DOORS,
-                    windows: parsed.windows ? parsed.windows.map(w => ({
-                      ...w,
-                      width: convertLength(w.width),
-                      position: convertLength(w.position)
-                    })) : INITIAL_WINDOWS,
-                    items: parsed.items.map(i => ({
-                      ...i,
-                      x: convertLength(i.x),
-                      y: convertLength(i.y),
-                      width: convertLength(i.width),
-                      height: convertLength(i.height),
-                      color: migrateColor(i.color)
-                    }))
+                const newProjectData = {
+                  roomDims: {
+                    width: convertLength(parsed.roomDims.width),
+                    height: convertLength(parsed.roomDims.height)
                   },
-                  createdAt: now,
-                  updatedAt: now
+                  doors: parsed.doors ? parsed.doors.map(d => ({
+                    ...d,
+                    width: convertLength(d.width),
+                    position: convertLength(d.position)
+                  })) : INITIAL_DOORS,
+                  windows: parsed.windows ? parsed.windows.map(w => ({
+                    ...w,
+                    width: convertLength(w.width),
+                    position: convertLength(w.position)
+                  })) : INITIAL_WINDOWS,
+                  items: parsed.items.map(i => ({
+                    ...i,
+                    x: convertLength(i.x),
+                    y: convertLength(i.y),
+                    width: convertLength(i.width),
+                    height: convertLength(i.height),
+                    color: migrateColor(i.color)
+                  }))
                 };
+                
                 try {
                   const existingProjects = JSON.parse(localStorage.getItem(PROJECTS_STORAGE_KEY) || '[]');
-                  localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify([...existingProjects, newProject]));
-                  setSavedProjects([...existingProjects, newProject]);
-                  setCurrentProjectId(newProject.id);
-                  localStorage.setItem(STORAGE_PREFIX + 'currentProject', newProject.id);
-                  setSaveStatus('saved');
-                  setLastSavedAt(new Date());
+                  
+                  // Check if an identical project already exists (by comparing data content)
+                  // Compare only the layout data (roomDims, doors, windows, items), not designMode/unitSystem
+                  const compareLayoutData = (data) => JSON.stringify({
+                    roomDims: data.roomDims,
+                    doors: data.doors,
+                    windows: data.windows,
+                    items: data.items
+                  });
+                  
+                  const newDataString = compareLayoutData(newProjectData);
+                  const duplicateProject = existingProjects.find(p => 
+                    p.data && compareLayoutData(p.data) === newDataString
+                  );
+                  
+                  if (duplicateProject) {
+                    // Load the existing project instead of creating a duplicate
+                    setCurrentProjectId(duplicateProject.id);
+                    localStorage.setItem(STORAGE_PREFIX + 'currentProject', duplicateProject.id);
+                    setSaveStatus('saved');
+                    setLastSavedAt(new Date(duplicateProject.updatedAt));
+                    setSavedProjects(existingProjects);
+                  } else {
+                    // Create new project only if no duplicate exists
+                    const newProject = {
+                      id: `project-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                      name: parsed.name,
+                      data: newProjectData,
+                      createdAt: now,
+                      updatedAt: now
+                    };
+                    localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify([...existingProjects, newProject]));
+                    setSavedProjects([...existingProjects, newProject]);
+                    setCurrentProjectId(newProject.id);
+                    localStorage.setItem(STORAGE_PREFIX + 'currentProject', newProject.id);
+                    setSaveStatus('saved');
+                    setLastSavedAt(new Date());
+                  }
+                  
+                  // Clear the URL parameter to prevent re-importing on reload
+                  const newUrl = new URL(window.location.href);
+                  newUrl.searchParams.delete('config');
+                  window.history.replaceState({}, document.title, newUrl.toString());
                 } catch (e) {
                   console.error('Failed to save imported project:', e);
                 }
@@ -1389,10 +1421,34 @@ export default function RoomSimulator() {
     }
   };
 
-  const handleCopy = (text, type) => {
-      navigator.clipboard.writeText(text);
-      setCopyFeedback(type);
-      setTimeout(() => setCopyFeedback(null), 2000);
+  const handleCopy = async (text, type) => {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          setCopyFeedback(type);
+          setTimeout(() => setCopyFeedback(null), 2000);
+        } else {
+          // Fallback for browsers that don't support clipboard API
+          const textArea = document.createElement('textarea');
+          textArea.value = text;
+          textArea.style.position = 'fixed';
+          textArea.style.left = '-999999px';
+          document.body.appendChild(textArea);
+          textArea.select();
+          try {
+            document.execCommand('copy');
+            setCopyFeedback(type);
+            setTimeout(() => setCopyFeedback(null), 2000);
+          } catch (err) {
+            console.error('Failed to copy:', err);
+            alert('Failed to copy to clipboard');
+          }
+          document.body.removeChild(textArea);
+        }
+      } catch (err) {
+        console.error('Failed to copy:', err);
+        alert('Failed to copy to clipboard');
+      }
   };
 
   const handleImport = () => {

@@ -1,9 +1,18 @@
-# 🏠 Room Planner
+<div align="center">
 
-A powerful, intuitive room planning tool for designing and visualizing room layouts. Built with React, Vite, and Tailwind CSS.
+<img src="public/favicon.svg" width="150" height="150" alt="Room Planner Logo">
 
-![Room Planner](https://img.shields.io/badge/version-1.0.0-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
+# Room Planner
+
+**Design and visualize your perfect room layout**
+
+A powerful, intuitive tool for planning room layouts with furniture, doors, and windows. Drag, drop, and arrange items to create your ideal space.
+
+**[🚀 Try Room Planner Now →](https://roomplanner.andrechek.com/)**
+
+</div>
+
+---
 
 ## ✨ Features
 
@@ -112,7 +121,7 @@ Switch between measurement systems anytime:
 
 ---
 
-## 🚀 Development
+## 🚀 For Developers
 
 ### Prerequisites
 
@@ -235,7 +244,8 @@ Contributions are welcome! Here's how to get started:
 - [ ] Accessibility improvements (ARIA, keyboard nav)
 - [ ] Export to CAD formats (DXF, SVG)
 - [ ] Reusable furniture library
-- [ ] Reloading the page with a shared link causes a duplicate floor plan to be added with the same name
+- [x] Reloading the page with a shared link causes a duplicate floor plan to be added with the same name
+- [ ] Refactor `App.jsx` into smaller components for maintainability...
 
 ---
 
