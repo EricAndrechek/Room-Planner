@@ -3,6 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "description": "A visual room planning tool for designing and visualizing room layouts",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
