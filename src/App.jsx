@@ -1,13 +1,45 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Move, RotateCw, Lock, Unlock, Settings, RotateCcw, Info, ArrowLeftRight, ArrowUpDown, ChevronLeft, ChevronRight, Share2, X, Copy, Check, Download, Upload, Plus, Trash2, Eye, EyeOff, Undo2, Redo2, Maximize2, Palette, ZoomIn, ZoomOut } from 'lucide-react';
+import ReactDOM from 'react-dom';
+import { Move, RotateCw, Lock, Unlock, Settings, RotateCcw, Info, ArrowLeftRight, ArrowUpDown, ChevronLeft, ChevronRight, Share2, X, Copy, Check, Download, Upload, Plus, Trash2, Eye, EyeOff, Undo2, Redo2, Maximize2, Palette, ZoomIn, ZoomOut, Home, Sofa, ArrowRight, ChevronDown, ChevronUp, FolderOpen, FileText, Edit3, Copy as CopyIcon, MoreVertical, CheckSquare, Square, FileDown, FileUp } from 'lucide-react';
 import Knob from './Knob';
 
 // Constants
 const PIXELS_PER_UNIT = 40;
-const STORAGE_PREFIX = 'room-sim-v2-'; 
+const STORAGE_PREFIX = 'room-sim-v3-';
+const PROJECTS_STORAGE_KEY = 'room-planner-projects'; 
 
 const INITIAL_ROOM = { width: 12, height: 12 };
-const INITIAL_DOOR = { width: 3, position: 6, wall: 'bottom', hinge: 'left', open: 'in' };
+
+// Door types: 'swing-in', 'swing-out', 'sliding'
+const INITIAL_DOORS = [
+  { id: 1, width: 3, position: 6, wall: 'bottom', hinge: 'left', type: 'swing-in' }
+];
+
+const INITIAL_WINDOWS = [
+  { id: 1, width: 4, position: 4, wall: 'top' }
+];
+
+const WALL_OPTIONS = ['top', 'right', 'bottom', 'left'];
+const DOOR_TYPES = [
+  { value: 'swing-in', label: 'Swing In' },
+  { value: 'swing-out', label: 'Swing Out' },
+  { value: 'sliding', label: 'Sliding' }
+];
+
+// Unit system - internal storage is always in feet
+const UNIT_SYSTEMS = [
+  { value: 'ft-in', label: "Feet & Inches (6'3\")" },
+  { value: 'ft', label: 'Decimal Feet (6.25 ft)' },
+  { value: 'in', label: 'Inches (75 in)' },
+  { value: 'm', label: 'Meters (1.9 m)' },
+  { value: 'cm', label: 'Centimeters (190 cm)' },
+];
+
+// Conversion factors (to feet)
+const FEET_PER_METER = 3.28084;
+const FEET_PER_CM = 0.0328084;
+const FEET_PER_INCH = 1/12;
+
 const INITIAL_ITEMS = [
   { id: 1, label: 'Bed', width: 6, height: 4, x: 2, y: 2, rotation: 0, color: 'bg-blue-200 border-blue-400', visible: true },
   { id: 2, label: 'Desk', width: 4, height: 2, x: 9, y: 2, rotation: 0, color: 'bg-emerald-200 border-emerald-400', visible: true },
@@ -30,11 +62,20 @@ const COLORS = [
 
 const MAX_HISTORY = 50;
 
+// Design modes
+const DESIGN_MODES = {
+  ROOM_SETUP: 'room-setup',
+  FURNITURE: 'furniture'
+};
+
 // --- Helpers ---
 
-const parseToFeet = (input) => {
+// Parse any input to feet (internal unit)
+const parseToFeet = (input, unitSystem = 'ft-in') => {
   if (!input && input !== 0) return 0;
   const str = String(input).trim().toLowerCase();
+  
+  // Handle explicit unit markers first (these override the unitSystem)
   if (str.includes("'") || (str.includes('ft') && !str.endsWith('ft'))) {
     const parts = str.split(/['|ft]/);
     const feet = parseFloat(parts[0]) || 0;
@@ -48,7 +89,60 @@ const parseToFeet = (input) => {
   if (str.includes('"') || str.endsWith('in') || str.endsWith('inch')) {
     return parseFloat(str.replace(/["|in|inch\s]/g, '')) / 12;
   }
-  return parseFloat(str) || 0;
+  if (str.endsWith('m') && !str.endsWith('cm')) {
+    return parseFloat(str.replace(/m/g, '')) * FEET_PER_METER;
+  }
+  if (str.endsWith('cm')) {
+    return parseFloat(str.replace(/cm/g, '')) * FEET_PER_CM;
+  }
+  
+  // Plain number - interpret based on current unit system
+  const num = parseFloat(str) || 0;
+  switch (unitSystem) {
+    case 'ft-in':
+    case 'ft':
+      return num;
+    case 'in':
+      return num * FEET_PER_INCH;
+    case 'm':
+      return num * FEET_PER_METER;
+    case 'cm':
+      return num * FEET_PER_CM;
+    default:
+      return num;
+  }
+};
+
+// Convert feet to display value based on unit system
+const feetToDisplay = (feet, unitSystem = 'ft-in') => {
+  if (!feet && feet !== 0) return '0';
+  
+  switch (unitSystem) {
+    case 'ft-in': {
+      const wholeFeet = Math.floor(feet);
+      const inches = Math.round((feet - wholeFeet) * 12);
+      if (inches === 12) return `${wholeFeet + 1}'`;
+      if (inches === 0) return `${wholeFeet}'`;
+      if (wholeFeet === 0) return `${inches}"`;
+      return `${wholeFeet}'${inches}"`;
+    }
+    case 'ft':
+      return `${roundNum(feet, 2)} ft`;
+    case 'in':
+      return `${roundNum(feet * 12, 1)} in`;
+    case 'm':
+      return `${roundNum(feet / FEET_PER_METER, 2)} m`;
+    case 'cm':
+      return `${roundNum(feet / FEET_PER_CM, 1)} cm`;
+    default:
+      return `${roundNum(feet, 2)}'`;
+  }
+};
+
+// Round a number to specified decimal places
+const roundNum = (num, decimals = 2) => {
+  const factor = Math.pow(10, decimals);
+  return Math.round(num * factor) / factor;
 };
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -79,6 +173,19 @@ const isItemInBounds = (item, roomDims) => {
          item.y + item.height <= roomDims.height;
 };
 
+// Format time ago string
+const formatTimeAgo = (date) => {
+  if (!date) return '';
+  const seconds = Math.floor((new Date() - date) / 1000);
+  if (seconds < 5) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return date.toLocaleDateString();
+};
+
 // Encoding helpers for URL
 const encodeConfig = (config) => {
     try {
@@ -94,58 +201,102 @@ const decodeConfig = (str) => {
 
 // --- Components ---
 
-const DimensionInput = ({ value, onChange, className, placeholder, min = 0, max = 1000, label }) => {
+const DimensionInput = ({ value, onChange, className, placeholder, min = 0, max = 1000, label, unitSystem = 'ft-in' }) => {
   const [localVal, setLocalVal] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (!isFocused && typeof value === 'number') {
-      const currentParsed = parseToFeet(localVal);
-      if (Math.abs(currentParsed - value) > 0.01 || localVal === '') {
-         setLocalVal(Number.isInteger(value) ? value.toString() : value.toFixed(2));
-      }
+      // Always update display when value or unitSystem changes
+      setLocalVal(getDisplayValue(value, unitSystem));
     }
-  }, [value, isFocused]);
+  }, [value, isFocused, unitSystem]);
+
+  const getDisplayValue = (feet, unit) => {
+    switch (unit) {
+      case 'ft-in': {
+        const wholeFeet = Math.floor(feet);
+        const inches = Math.round((feet - wholeFeet) * 12);
+        if (inches === 12) return `${wholeFeet + 1}'`;
+        if (inches === 0) return `${wholeFeet}'`;
+        if (wholeFeet === 0) return `${inches}"`;
+        return `${wholeFeet}'${inches}"`;
+      }
+      case 'ft':
+        return roundNum(feet, 2).toString();
+      case 'in':
+        return roundNum(feet * 12, 1).toString();
+      case 'm':
+        return roundNum(feet / FEET_PER_METER, 2).toString();
+      case 'cm':
+        return roundNum(feet / FEET_PER_CM, 1).toString();
+      default:
+        return roundNum(feet, 2).toString();
+    }
+  };
 
   const commitValue = () => {
     setIsFocused(false);
-    const feet = parseToFeet(localVal);
+    const feet = parseToFeet(localVal, unitSystem);
     
     if (feet < min) {
-      setError(`Minimum value is ${min}'`);
-      setLocalVal(min.toString());
+      setError(`Min: ${feetToDisplay(min, unitSystem)}`);
+      setLocalVal(getDisplayValue(min, unitSystem));
       onChange(min);
       setTimeout(() => setError(''), 3000);
       return;
     }
     
     if (feet > max) {
-      setError(`Maximum value is ${max}'`);
-      setLocalVal(max.toString());
+      setError(`Max: ${feetToDisplay(max, unitSystem)}`);
+      setLocalVal(getDisplayValue(max, unitSystem));
       onChange(max);
       setTimeout(() => setError(''), 3000);
       return;
     }
     
     setError('');
+    // Always update display to show converted value in current unit system
+    setLocalVal(getDisplayValue(feet, unitSystem));
     onChange(feet);
   };
 
+  // Get unit suffix for display (only for units that need it)
+  const getUnitSuffix = () => {
+    switch (unitSystem) {
+      case 'ft-in': return null; // Already shown in value like 6'3"
+      case 'ft': return 'ft';
+      case 'in': return 'in';
+      case 'm': return 'm';
+      case 'cm': return 'cm';
+      default: return null;
+    }
+  };
+  
+  const unitSuffix = getUnitSuffix();
+
   return (
     <div className="relative w-full">
+      <div className="relative flex items-center">
         <input
-        type="text"
-        value={localVal}
-        onChange={(e) => setLocalVal(e.target.value)}
-        onFocus={() => setIsFocused(true)}
-        onBlur={commitValue}
-        onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
-        className={`${className} ${error ? 'border-red-400 focus:ring-red-500' : ''}`}
-        placeholder={placeholder}
-        aria-label={label || placeholder}
+          type="text"
+          value={localVal}
+          onChange={(e) => setLocalVal(e.target.value)}
+          onFocus={() => setIsFocused(true)}
+          onBlur={commitValue}
+          onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
+          className={`${className} ${error ? 'border-red-400 focus:ring-red-500' : ''} ${unitSuffix ? 'pr-7' : ''} flex-1`}
+          placeholder={placeholder}
+          aria-label={label || placeholder}
         />
-        {error && <p className="absolute -bottom-5 left-0 text-[10px] text-red-500">{error}</p>}
+        {unitSuffix && (
+          <span className="absolute right-1.5 text-[10px] text-slate-400 pointer-events-none select-none bg-white px-0.5">
+            {unitSuffix}
+          </span>
+        )}
+      </div>
+      {error && <p className="absolute -bottom-5 left-0 text-[10px] text-red-500">{error}</p>}
     </div>
   );
 };
@@ -263,113 +414,78 @@ const ColorPicker = ({ currentColor, onChange, onClose, isMobile = false }) => {
   );
 };
 
-const Tooltip = ({ children, text, position = 'auto' }) => {
+const Tooltip = ({ children, text }) => {
   const [show, setShow] = useState(false);
-  const [actualPosition, setActualPosition] = useState('bottom');
   const [tooltipStyle, setTooltipStyle] = useState({});
   const [arrowStyle, setArrowStyle] = useState({});
-  const tooltipRef = useRef(null);
-  const containerRef = useRef(null);
+  const [position, setPosition] = useState('top');
+  const triggerRef = useRef(null);
   
-  useEffect(() => {
-    if (show && containerRef.current) {
-      const containerRect = containerRef.current.getBoundingClientRect();
+  const handleMouseEnter = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      const tooltipHeight = 32;
+      const tooltipWidth = text.length * 7 + 16; // Rough estimate
+      const padding = 8;
       
-      // Calculate initial tooltip position
-      const updatePosition = () => {
-        if (!tooltipRef.current) return;
-        
-        const tooltipRect = tooltipRef.current.getBoundingClientRect();
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-        const padding = 8;
-        const arrowSize = 8;
-        
-        // Determine vertical position
-        let vertical = 'bottom';
-        if (position === 'auto') {
-          const spaceAbove = containerRect.top;
-          const spaceBelow = viewportHeight - containerRect.bottom;
-          const tooltipHeight = tooltipRect.height + arrowSize + 8;
-          
-          if (spaceBelow >= tooltipHeight) {
-            vertical = 'bottom';
-          } else if (spaceAbove >= tooltipHeight) {
-            vertical = 'top';
-          } else {
-            vertical = spaceBelow > spaceAbove ? 'bottom' : 'top';
-          }
-        } else {
-          vertical = position;
-        }
-        setActualPosition(vertical);
-        
-        // Calculate horizontal position
-        const containerCenterX = containerRect.left + containerRect.width / 2;
-        let tooltipLeft = containerCenterX - tooltipRect.width / 2;
-        
-        // Adjust for horizontal overflow
-        if (tooltipLeft < padding) {
-          tooltipLeft = padding;
-        } else if (tooltipLeft + tooltipRect.width > viewportWidth - padding) {
-          tooltipLeft = viewportWidth - padding - tooltipRect.width;
-        }
-        
-        // Calculate vertical position
-        let tooltipTop;
-        if (vertical === 'bottom') {
-          tooltipTop = containerRect.bottom + arrowSize;
-        } else {
-          tooltipTop = containerRect.top - tooltipRect.height - arrowSize;
-        }
-        
-        setTooltipStyle({
-          position: 'fixed',
-          left: `${tooltipLeft}px`,
-          top: `${tooltipTop}px`,
-        });
-        
-        // Position arrow to point at container center
-        const arrowLeft = containerCenterX - tooltipLeft;
-        setArrowStyle({
-          left: `${arrowLeft}px`,
-        });
-      };
+      // Determine vertical position
+      let vertPos = 'top';
+      if (rect.top < tooltipHeight + padding) {
+        vertPos = 'bottom';
+      }
+      setPosition(vertPos);
       
-      // Initial position calculation
-      requestAnimationFrame(updatePosition);
+      // Calculate tooltip position
+      let top = vertPos === 'top' 
+        ? rect.top - tooltipHeight - padding 
+        : rect.bottom + padding;
+      let left = rect.left + rect.width / 2 - tooltipWidth / 2;
+      
+      // Clamp horizontal position to viewport
+      const minLeft = padding;
+      const maxLeft = window.innerWidth - tooltipWidth - padding;
+      left = Math.max(minLeft, Math.min(maxLeft, left));
+      
+      // Calculate arrow offset (how much the tooltip shifted)
+      const centerX = rect.left + rect.width / 2;
+      const arrowLeft = centerX - left;
+      
+      setTooltipStyle({
+        position: 'fixed',
+        top: `${top}px`,
+        left: `${left}px`,
+        zIndex: 999999,
+      });
+      
+      setArrowStyle({
+        left: `${arrowLeft}px`,
+      });
     }
-  }, [show, position, text]);
-  
-  const isBottom = actualPosition === 'bottom';
+    setShow(true);
+  };
   
   return (
     <div 
-      ref={containerRef}
-      className="relative" 
-      onMouseEnter={() => setShow(true)} 
+      ref={triggerRef}
+      className="relative inline-flex" 
+      onMouseEnter={handleMouseEnter} 
       onMouseLeave={() => setShow(false)}
     >
       {children}
-      {show && (
+      {show && ReactDOM.createPortal(
         <div 
-          ref={tooltipRef}
-          className="px-2 py-1 bg-slate-800 text-white text-xs rounded whitespace-nowrap z-[9999] pointer-events-none"
+          className="px-2 py-1 bg-slate-800 text-white text-xs rounded whitespace-nowrap pointer-events-none"
           style={tooltipStyle}
         >
           {text}
           <div 
-            className={`absolute border-4 border-transparent ${
-              isBottom 
-                ? 'bottom-full -mb-px border-b-slate-800' 
-                : 'top-full -mt-px border-t-slate-800'
+            className={`absolute border-4 border-transparent -translate-x-1/2 ${
+              position === 'top' ? 'top-full border-t-slate-800' : 'bottom-full border-b-slate-800'
             }`}
-            style={{
-              ...arrowStyle,
-              transform: 'translateX(-50%)'
-            }}
+            style={arrowStyle}
           />
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -384,6 +500,68 @@ export default function RoomSimulator() {
   const [showColorPicker, setShowColorPicker] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [unitSystem, setUnitSystem] = useState(() => {
+    try {
+      return localStorage.getItem(STORAGE_PREFIX + 'units') || 'ft-in';
+    } catch (e) { return 'ft-in'; }
+  });
+  
+  // Design mode: 'room-setup' or 'furniture'
+  const [designMode, setDesignMode] = useState(() => {
+    try {
+      return localStorage.getItem(STORAGE_PREFIX + 'mode') || DESIGN_MODES.ROOM_SETUP;
+    } catch (e) { return DESIGN_MODES.ROOM_SETUP; }
+  });
+  
+  // Track if sections are expanded when locked (for optional viewing)
+  const [roomSetupExpanded, setRoomSetupExpanded] = useState(false);
+  const [furnitureExpanded, setFurnitureExpanded] = useState(false);
+  
+  // File browser state
+  const [fileBrowserOpen, setFileBrowserOpen] = useState(false);
+  const [savedProjects, setSavedProjects] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(PROJECTS_STORAGE_KEY) || '[]');
+    } catch (e) { return []; }
+  });
+  const [currentProjectId, setCurrentProjectId] = useState(() => {
+    try {
+      return localStorage.getItem(STORAGE_PREFIX + 'currentProject') || null;
+    } catch (e) { return null; }
+  });
+  const [selectedProjects, setSelectedProjects] = useState([]);
+  const [editingProjectId, setEditingProjectId] = useState(null);
+  const [editingName, setEditingName] = useState('');
+  const [fileImportText, setFileImportText] = useState('');
+  const [fileImportError, setFileImportError] = useState('');
+  const [lastSavedAt, setLastSavedAt] = useState(() => {
+    // If there's a current project, show as already saved
+    try {
+      const projectId = localStorage.getItem(STORAGE_PREFIX + 'currentProject');
+      if (projectId) {
+        const projects = JSON.parse(localStorage.getItem(PROJECTS_STORAGE_KEY) || '[]');
+        const project = projects.find(p => p.id === projectId);
+        if (project?.updatedAt) return new Date(project.updatedAt);
+      }
+    } catch (e) {}
+    return null;
+  });
+  const [saveStatus, setSaveStatus] = useState(() => {
+    // If there's a current project, start as saved
+    try {
+      return localStorage.getItem(STORAGE_PREFIX + 'currentProject') ? 'saved' : 'unsaved';
+    } catch (e) { return 'unsaved'; }
+  });
+
+  // Save unit preference
+  useEffect(() => {
+    localStorage.setItem(STORAGE_PREFIX + 'units', unitSystem);
+  }, [unitSystem]);
+  
+  // Save design mode preference
+  useEffect(() => {
+    localStorage.setItem(STORAGE_PREFIX + 'mode', designMode);
+  }, [designMode]);
 
   // Detect mobile screen size and set initial sidebar state
   useEffect(() => {
@@ -431,7 +609,8 @@ export default function RoomSimulator() {
   };
 
   const [roomDims, setRoomDims] = useState(() => getInitialState('dims', INITIAL_ROOM));
-  const [door, setDoor] = useState(() => getInitialState('door', INITIAL_DOOR));
+  const [doors, setDoors] = useState(() => getInitialState('doors', INITIAL_DOORS));
+  const [windows, setWindows] = useState(() => getInitialState('windows', INITIAL_WINDOWS));
   const [items, setItems] = useState(() => getInitialState('items', INITIAL_ITEMS));
   
   // History for undo/redo
@@ -442,7 +621,7 @@ export default function RoomSimulator() {
   
   // Save state to history for undo/redo
   const saveToHistory = useCallback(() => {
-    const newState = { roomDims, door, items };
+    const newState = { roomDims, doors, windows, items };
     const newHistory = history.slice(0, historyIndex + 1);
     newHistory.push(newState);
     
@@ -453,13 +632,14 @@ export default function RoomSimulator() {
     }
     
     setHistory(newHistory);
-  }, [roomDims, door, items, history, historyIndex]);
+  }, [roomDims, doors, windows, items, history, historyIndex]);
   
   const undo = useCallback(() => {
     if (historyIndex > 0) {
       const prevState = history[historyIndex - 1];
       setRoomDims(prevState.roomDims);
-      setDoor(prevState.door);
+      setDoors(prevState.doors || INITIAL_DOORS);
+      setWindows(prevState.windows || INITIAL_WINDOWS);
       setItems(prevState.items);
       setHistoryIndex(historyIndex - 1);
     }
@@ -469,7 +649,8 @@ export default function RoomSimulator() {
     if (historyIndex < history.length - 1) {
       const nextState = history[historyIndex + 1];
       setRoomDims(nextState.roomDims);
-      setDoor(nextState.door);
+      setDoors(nextState.doors || INITIAL_DOORS);
+      setWindows(nextState.windows || INITIAL_WINDOWS);
       setItems(nextState.items);
       setHistoryIndex(historyIndex + 1);
     }
@@ -483,7 +664,9 @@ export default function RoomSimulator() {
           const parsed = decodeConfig(configStr);
           if (parsed) {
               if (parsed.roomDims) setRoomDims(parsed.roomDims);
-              if (parsed.door) setDoor(parsed.door);
+              if (parsed.doors) setDoors(parsed.doors);
+              else if (parsed.door) setDoors([{ ...parsed.door, id: 1, type: parsed.door.open === 'in' ? 'swing-in' : 'swing-out' }]);
+              if (parsed.windows) setWindows(parsed.windows);
               if (parsed.items) setItems(parsed.items);
           }
       }
@@ -492,12 +675,73 @@ export default function RoomSimulator() {
   // 2. Save to LocalStorage ONLY (Removed automatic URL replacement to avoid SecurityError)
   useEffect(() => {
       localStorage.setItem(STORAGE_PREFIX + 'dims', JSON.stringify(roomDims));
-      localStorage.setItem(STORAGE_PREFIX + 'door', JSON.stringify(door));
+      localStorage.setItem(STORAGE_PREFIX + 'doors', JSON.stringify(doors));
+      localStorage.setItem(STORAGE_PREFIX + 'windows', JSON.stringify(windows));
       localStorage.setItem(STORAGE_PREFIX + 'items', JSON.stringify(items));
-  }, [roomDims, door, items]);
+      // Mark as unsaved when data changes
+      setSaveStatus('unsaved');
+  }, [roomDims, doors, windows, items]);
+
+  // 3. Autosave to projects every 500ms when there are unsaved changes
+  useEffect(() => {
+    if (saveStatus !== 'unsaved') return;
+    
+    const autosaveTimer = setTimeout(() => {
+      setSaveStatus('saving');
+      
+      const now = new Date().toISOString();
+      const data = { roomDims, doors, windows, items, designMode, unitSystem };
+      
+      if (currentProjectId) {
+        // Update existing project
+        const updated = savedProjects.map(p => 
+          p.id === currentProjectId 
+            ? { ...p, data, updatedAt: now }
+            : p
+        );
+        try {
+          localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(updated));
+          setSavedProjects(updated);
+        } catch (e) {
+          console.error('Autosave failed:', e);
+        }
+      } else {
+        // Create new project with default name
+        const newProject = {
+          id: `project-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          name: `Floor Plan - ${new Date().toLocaleDateString()}`,
+          data,
+          createdAt: now,
+          updatedAt: now
+        };
+        try {
+          const newProjects = [...savedProjects, newProject];
+          localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(newProjects));
+          setSavedProjects(newProjects);
+          setCurrentProjectId(newProject.id);
+          localStorage.setItem(STORAGE_PREFIX + 'currentProject', newProject.id);
+        } catch (e) {
+          console.error('Autosave failed:', e);
+        }
+      }
+      
+      setLastSavedAt(new Date());
+      setSaveStatus('saved');
+    }, 500);
+    
+    return () => clearTimeout(autosaveTimer);
+  }, [saveStatus, roomDims, doors, windows, items, designMode, unitSystem, currentProjectId, savedProjects]);
+
+  // 4. Refresh "time ago" display every 10 seconds
+  const [, setTimeRefresh] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setTimeRefresh(t => t + 1), 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   // --- Interaction State ---
   const [activeId, setActiveId] = useState(null);
+  const [activeType, setActiveType] = useState(null); // 'item', 'door', or 'window'
   const [isDragging, setIsDragging] = useState(false);
   const [isRotating, setIsRotating] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -505,11 +749,21 @@ export default function RoomSimulator() {
   const knobInstanceRef = useRef(null);
   const containerRef = useRef(null);
   const itemsRef = useRef(items);
+  const doorsRef = useRef(doors);
+  const windowsRef = useRef(windows);
 
-  // Keep itemsRef in sync with items state
+  // Keep refs in sync with state
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
+
+  useEffect(() => {
+    doorsRef.current = doors;
+  }, [doors]);
+
+  useEffect(() => {
+    windowsRef.current = windows;
+  }, [windows]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -638,19 +892,71 @@ export default function RoomSimulator() {
     saveToHistory();
   };
   
-  const updateDoor = (newDoor) => {
-    const validDoor = {
-      ...newDoor,
-      width: clamp(newDoor.width, 1, roomDims.width),
-      position: clamp(newDoor.position, 0, Math.max(0, roomDims.width - newDoor.width))
+  // Door management
+  const getWallLength = (wall) => {
+    return (wall === 'top' || wall === 'bottom') ? roomDims.width : roomDims.height;
+  };
+  
+  const addDoor = () => {
+    const newDoor = {
+      id: Date.now(),
+      width: 3,
+      position: 2,
+      wall: 'bottom',
+      hinge: 'left',
+      type: 'swing-in'
     };
-    setDoor(validDoor);
+    setDoors([...doors, newDoor]);
+    saveToHistory();
+  };
+  
+  const updateDoor = (id, updates) => {
+    setDoors(doors.map(d => {
+      if (d.id !== id) return d;
+      const wallLen = getWallLength(updates.wall || d.wall);
+      const newWidth = clamp(updates.width ?? d.width, 1, wallLen);
+      const newPosition = clamp(updates.position ?? d.position, 0, Math.max(0, wallLen - newWidth));
+      return { ...d, ...updates, width: newWidth, position: newPosition };
+    }));
+    saveToHistory();
+  };
+  
+  const deleteDoor = (id) => {
+    setDoors(doors.filter(d => d.id !== id));
+    saveToHistory();
+  };
+  
+  // Window management
+  const addWindow = () => {
+    const newWindow = {
+      id: Date.now(),
+      width: 3,
+      position: 2,
+      wall: 'top'
+    };
+    setWindows([...windows, newWindow]);
+    saveToHistory();
+  };
+  
+  const updateWindow = (id, updates) => {
+    setWindows(windows.map(w => {
+      if (w.id !== id) return w;
+      const wallLen = getWallLength(updates.wall || w.wall);
+      const newWidth = clamp(updates.width ?? w.width, 1, wallLen);
+      const newPosition = clamp(updates.position ?? w.position, 0, Math.max(0, wallLen - newWidth));
+      return { ...w, ...updates, width: newWidth, position: newPosition };
+    }));
+    saveToHistory();
+  };
+  
+  const deleteWindow = (id) => {
+    setWindows(windows.filter(w => w.id !== id));
     saveToHistory();
   };
 
   const getShareUrl = () => {
     try {
-      const config = { roomDims, door, items };
+      const config = { roomDims, doors, windows, items };
       const encoded = encodeConfig(config);
       const url = new URL(window.location.href);
       url.searchParams.set('config', encoded);
@@ -672,7 +978,15 @@ export default function RoomSimulator() {
           if (!parsed.roomDims || !parsed.items) throw new Error("Invalid Config");
           
           setRoomDims(parsed.roomDims);
-          setDoor(parsed.door || INITIAL_DOOR);
+          // Handle legacy single door format
+          if (parsed.doors) {
+            setDoors(parsed.doors);
+          } else if (parsed.door) {
+            setDoors([{ ...parsed.door, id: 1, type: parsed.door.open === 'in' ? 'swing-in' : 'swing-out' }]);
+          } else {
+            setDoors(INITIAL_DOORS);
+          }
+          setWindows(parsed.windows || INITIAL_WINDOWS);
           setItems(parsed.items);
           setModalOpen(false);
           setImportText('');
@@ -682,19 +996,246 @@ export default function RoomSimulator() {
       }
   };
 
-  const handleMouseDown = (e, id, type) => {
+  // --- Project Management Functions ---
+  
+  const saveProjectsToStorage = (projects) => {
+    try {
+      localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projects));
+      setSavedProjects(projects);
+    } catch (e) {
+      console.error('Failed to save projects:', e);
+    }
+  };
+  
+  const generateProjectId = () => `project-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  
+  const getCurrentProjectData = () => ({
+    roomDims,
+    doors,
+    windows,
+    items,
+    designMode,
+    unitSystem
+  });
+  
+  const saveCurrentProject = (name = null) => {
+    const now = new Date().toISOString();
+    const data = getCurrentProjectData();
+    
+    if (currentProjectId) {
+      // Update existing project
+      const updated = savedProjects.map(p => 
+        p.id === currentProjectId 
+          ? { ...p, data, updatedAt: now, name: name || p.name }
+          : p
+      );
+      saveProjectsToStorage(updated);
+    } else {
+      // Create new project
+      const newProject = {
+        id: generateProjectId(),
+        name: name || `Floor Plan ${savedProjects.length + 1}`,
+        data,
+        createdAt: now,
+        updatedAt: now
+      };
+      saveProjectsToStorage([...savedProjects, newProject]);
+      setCurrentProjectId(newProject.id);
+      localStorage.setItem(STORAGE_PREFIX + 'currentProject', newProject.id);
+    }
+  };
+  
+  const saveAsNewProject = (name) => {
+    const now = new Date().toISOString();
+    const data = getCurrentProjectData();
+    const newProject = {
+      id: generateProjectId(),
+      name: name || `Floor Plan ${savedProjects.length + 1}`,
+      data,
+      createdAt: now,
+      updatedAt: now
+    };
+    saveProjectsToStorage([...savedProjects, newProject]);
+    setCurrentProjectId(newProject.id);
+    localStorage.setItem(STORAGE_PREFIX + 'currentProject', newProject.id);
+    return newProject;
+  };
+  
+  const loadProject = (project) => {
+    const { data } = project;
+    setRoomDims(data.roomDims || INITIAL_ROOM);
+    setDoors(data.doors || INITIAL_DOORS);
+    setWindows(data.windows || INITIAL_WINDOWS);
+    setItems(data.items || INITIAL_ITEMS);
+    if (data.designMode) setDesignMode(data.designMode);
+    if (data.unitSystem) setUnitSystem(data.unitSystem);
+    setCurrentProjectId(project.id);
+    localStorage.setItem(STORAGE_PREFIX + 'currentProject', project.id);
+    setFileBrowserOpen(false);
+    setHistory([]);
+    setHistoryIndex(-1);
+  };
+  
+  const duplicateProject = (project) => {
+    const now = new Date().toISOString();
+    const newProject = {
+      id: generateProjectId(),
+      name: `${project.name} (Copy)`,
+      data: { ...project.data },
+      createdAt: now,
+      updatedAt: now
+    };
+    saveProjectsToStorage([...savedProjects, newProject]);
+    return newProject;
+  };
+  
+  const renameProject = (projectId, newName) => {
+    const updated = savedProjects.map(p => 
+      p.id === projectId ? { ...p, name: newName, updatedAt: new Date().toISOString() } : p
+    );
+    saveProjectsToStorage(updated);
+    setEditingProjectId(null);
+    setEditingName('');
+  };
+  
+  const deleteProjects = (projectIds) => {
+    const updated = savedProjects.filter(p => !projectIds.includes(p.id));
+    saveProjectsToStorage(updated);
+    if (projectIds.includes(currentProjectId)) {
+      setCurrentProjectId(null);
+      localStorage.removeItem(STORAGE_PREFIX + 'currentProject');
+    }
+    setSelectedProjects([]);
+  };
+  
+  const exportProjects = (projectIds) => {
+    const projectsToExport = savedProjects.filter(p => projectIds.includes(p.id));
+    const exportData = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      projects: projectsToExport
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = projectsToExport.length === 1 
+      ? `${projectsToExport[0].name.replace(/[^a-z0-9]/gi, '_')}.json`
+      : `floor_plans_export_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+  
+  const importProjects = (jsonText) => {
+    try {
+      const parsed = JSON.parse(jsonText);
+      let projectsToImport = [];
+      
+      // Handle both single project and multi-project export formats
+      if (parsed.projects && Array.isArray(parsed.projects)) {
+        projectsToImport = parsed.projects;
+      } else if (parsed.roomDims && parsed.items) {
+        // Single project in old format
+        projectsToImport = [{
+          id: generateProjectId(),
+          name: `Imported Plan ${savedProjects.length + 1}`,
+          data: parsed,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }];
+      } else {
+        throw new Error('Invalid format');
+      }
+      
+      // Generate new IDs for imported projects to avoid conflicts
+      const now = new Date().toISOString();
+      const processedProjects = projectsToImport.map(p => ({
+        ...p,
+        id: generateProjectId(),
+        name: p.name || `Imported Plan`,
+        createdAt: p.createdAt || now,
+        updatedAt: now
+      }));
+      
+      saveProjectsToStorage([...savedProjects, ...processedProjects]);
+      setFileImportText('');
+      setFileImportError('');
+      return processedProjects.length;
+    } catch (e) {
+      setFileImportError('Invalid file format. Please check your JSON.');
+      return 0;
+    }
+  };
+  
+  const createNewProject = () => {
+    // Reset to defaults
+    setRoomDims(INITIAL_ROOM);
+    setDoors(INITIAL_DOORS);
+    setWindows(INITIAL_WINDOWS);
+    setItems(INITIAL_ITEMS);
+    setDesignMode(DESIGN_MODES.ROOM_SETUP);
+    setCurrentProjectId(null);
+    localStorage.removeItem(STORAGE_PREFIX + 'currentProject');
+    setFileBrowserOpen(false);
+    setHistory([]);
+    setHistoryIndex(-1);
+  };
+  
+  const getCurrentProjectName = () => {
+    if (!currentProjectId) return 'Untitled';
+    const project = savedProjects.find(p => p.id === currentProjectId);
+    return project?.name || 'Untitled';
+  };
+  
+  const toggleProjectSelection = (projectId) => {
+    setSelectedProjects(prev => 
+      prev.includes(projectId) 
+        ? prev.filter(id => id !== projectId)
+        : [...prev, projectId]
+    );
+  };
+  
+  const selectAllProjects = () => {
+    if (selectedProjects.length === savedProjects.length) {
+      setSelectedProjects([]);
+    } else {
+      setSelectedProjects(savedProjects.map(p => p.id));
+    }
+  };
+
+  const handleMouseDown = (e, id, interactionType, entityType = 'item') => {
+    // Check if this entity type is locked based on current design mode
+    const isRoomSetupMode = designMode === DESIGN_MODES.ROOM_SETUP;
+    const isFurnitureMode = designMode === DESIGN_MODES.FURNITURE;
+    
+    // In room-setup mode, furniture is locked
+    // In furniture mode, doors/windows are locked
+    if (isRoomSetupMode && entityType === 'item') {
+      // Furniture is locked during room setup - allow selection but not dragging
+      setActiveId(id);
+      setActiveType(entityType);
+      return;
+    }
+    if (isFurnitureMode && (entityType === 'door' || entityType === 'window')) {
+      // Doors/windows are locked during furniture placement
+      return;
+    }
+    
     e.stopPropagation();
     e.preventDefault();
 
     setActiveId(id);
+    setActiveType(entityType);
 
     const clientX = e.type.startsWith('touch') ? e.touches[0].clientX : e.clientX;
     const clientY = e.type.startsWith('touch') ? e.touches[0].clientY : e.clientY;
 
-    if (type === 'drag') {
+    if (interactionType === 'drag') {
       setIsDragging(true);
       setDragOffset({ x: clientX, y: clientY });
-    } else if (type === 'rotate') {
+    } else if (interactionType === 'rotate' && entityType === 'item') {
       const item = items.find(i => i.id === id);
       if (!item) return;
       
@@ -724,7 +1265,10 @@ export default function RoomSimulator() {
       const knob = new Knob(virtualInput, (knobInstance) => {
         // Negate the angle because Knob.js uses math convention (CCW positive)
         // but CSS rotation uses clockwise as positive
-        const newRotation = -knobInstance.angle();
+        let newRotation = -knobInstance.angle();
+        // Normalize to 0-360 range
+        newRotation = ((newRotation % 360) + 360) % 360;
+        
         const itemIndex = itemsRef.current.findIndex(i => i.id === id);
         if (itemIndex !== -1) {
           const newItems = [...itemsRef.current];
@@ -732,9 +1276,8 @@ export default function RoomSimulator() {
           setItems(newItems);
           
           // Visual feedback for snap zones
-          const normRot = ((newRotation % 360) + 360) % 360;
-          const nearest = Math.round(normRot / 15) * 15;
-          setIsSnapped(Math.abs(normRot - nearest) < 5);
+          const nearest = Math.round(newRotation / 15) * 15;
+          setIsSnapped(Math.abs(newRotation - nearest) < 5);
         }
       });
       
@@ -756,28 +1299,56 @@ export default function RoomSimulator() {
   };
 
   const handleMouseMove = useCallback((e) => {
-    if (!activeId) return;
-    const currentItems = itemsRef.current;
-    const itemIndex = currentItems.findIndex(i => i.id === activeId);
-    if (itemIndex === -1) return;
-    const item = currentItems[itemIndex];
-    const newItems = [...currentItems];
+    if (!activeId || !isDragging) {
+      if (isRotating && knobInstanceRef.current) {
+        const clientX = e.type.startsWith('touch') ? e.touches[0].clientX : e.clientX;
+        const clientY = e.type.startsWith('touch') ? e.touches[0].clientY : e.clientY;
+        knobInstanceRef.current.doTouchMove([{ pageX: clientX, pageY: clientY }], e.timeStamp || Date.now());
+      }
+      return;
+    }
 
     const clientX = e.type.startsWith('touch') ? e.touches[0].clientX : e.clientX;
     const clientY = e.type.startsWith('touch') ? e.touches[0].clientY : e.clientY;
+    const deltaX = (clientX - dragOffset.x) / PIXELS_PER_UNIT / zoom;
+    const deltaY = (clientY - dragOffset.y) / PIXELS_PER_UNIT / zoom;
 
-    if (isDragging) {
-      const deltaX = (clientX - dragOffset.x) / PIXELS_PER_UNIT;
-      const deltaY = (clientY - dragOffset.y) / PIXELS_PER_UNIT;
+    if (activeType === 'item') {
+      const currentItems = itemsRef.current;
+      const itemIndex = currentItems.findIndex(i => i.id === activeId);
+      if (itemIndex === -1) return;
+      const item = currentItems[itemIndex];
+      const newItems = [...currentItems];
       newItems[itemIndex] = { ...item, x: item.x + deltaX, y: item.y + deltaY };
       setItems(newItems);
-      setDragOffset({ x: clientX, y: clientY });
-    } 
-    else if (isRotating && knobInstanceRef.current) {
-      // Pass the touch move event to the knob
-      knobInstanceRef.current.doTouchMove([{ pageX: clientX, pageY: clientY }], e.timeStamp || Date.now());
+    } else if (activeType === 'door') {
+      const currentDoors = doorsRef.current;
+      const doorIndex = currentDoors.findIndex(d => d.id === activeId);
+      if (doorIndex === -1) return;
+      const door = currentDoors[doorIndex];
+      const isHorizontal = door.wall === 'top' || door.wall === 'bottom';
+      const delta = isHorizontal ? deltaX : deltaY;
+      const wallLen = isHorizontal ? roomDims.width : roomDims.height;
+      const newPosition = clamp(door.position + delta, 0, wallLen - door.width);
+      const newDoors = [...currentDoors];
+      newDoors[doorIndex] = { ...door, position: newPosition };
+      setDoors(newDoors);
+    } else if (activeType === 'window') {
+      const currentWindows = windowsRef.current;
+      const winIndex = currentWindows.findIndex(w => w.id === activeId);
+      if (winIndex === -1) return;
+      const win = currentWindows[winIndex];
+      const isHorizontal = win.wall === 'top' || win.wall === 'bottom';
+      const delta = isHorizontal ? deltaX : deltaY;
+      const wallLen = isHorizontal ? roomDims.width : roomDims.height;
+      const newPosition = clamp(win.position + delta, 0, wallLen - win.width);
+      const newWindows = [...currentWindows];
+      newWindows[winIndex] = { ...win, position: newPosition };
+      setWindows(newWindows);
     }
-  }, [activeId, isDragging, isRotating, dragOffset]);
+    
+    setDragOffset({ x: clientX, y: clientY });
+  }, [activeId, activeType, isDragging, isRotating, dragOffset, roomDims, zoom]);
 
   const handleMouseUp = useCallback(() => {
     if (isDragging || isRotating) {
@@ -785,29 +1356,30 @@ export default function RoomSimulator() {
         // End the touch on the knob
         knobInstanceRef.current.doTouchEnd(Date.now());
         
-        // Snap to nearest 15 degrees on release if close
+        // Normalize rotation to 0-360 range and snap to nearest 15 degrees if close
         const currentItems = itemsRef.current;
         const itemIndex = currentItems.findIndex(i => i.id === activeId);
         if (itemIndex !== -1) {
           const item = currentItems[itemIndex];
-          const normRot = ((item.rotation % 360) + 360) % 360;
+          // Normalize to 0-360 range
+          let normRot = ((item.rotation % 360) + 360) % 360;
           const nearest = Math.round(normRot / 15) * 15;
           
           // Snap if within 5 degrees of a 15-degree increment
           if (Math.abs(normRot - nearest) < 5) {
-            const fullRotations = Math.floor(item.rotation / 360);
-            const snappedRotation = fullRotations * 360 + nearest;
-            const newItems = [...currentItems];
-            newItems[itemIndex] = { ...item, rotation: snappedRotation };
-            setItems(newItems);
+            normRot = nearest % 360;
           }
+          
+          const newItems = [...currentItems];
+          newItems[itemIndex] = { ...item, rotation: normRot };
+          setItems(newItems);
         }
         
         knobInstanceRef.current = null;
       }
       
       // Save to history
-      const config = { roomDims, door, items: itemsRef.current };
+      const config = { roomDims, doors, windows, items: itemsRef.current };
       const newHistory = history.slice(0, historyIndex + 1);
       newHistory.push(config);
       
@@ -822,7 +1394,7 @@ export default function RoomSimulator() {
     setIsDragging(false);
     setIsRotating(false);
     setIsSnapped(false);
-  }, [isDragging, isRotating, roomDims, door, history, historyIndex, activeId]);
+  }, [isDragging, isRotating, roomDims, doors, windows, history, historyIndex, activeId]);
 
   useEffect(() => {
     if (isDragging || isRotating) {
@@ -912,50 +1484,578 @@ export default function RoomSimulator() {
       />
   );
 
-  const renderDoor = () => {
-    const doorX = Math.min(Math.max(0, door.position), roomDims.width - door.width);
+  // Render a single door based on wall, position, type, etc.
+  const renderSingleDoor = (door) => {
+    const wall = door.wall || 'bottom';
+    const isHorizontal = wall === 'top' || wall === 'bottom';
+    const wallLength = isHorizontal ? roomDims.width : roomDims.height;
+    const doorPos = clamp(door.position, 0, wallLength - door.width);
     const swingRadius = door.width * PIXELS_PER_UNIT;
     const isLeft = door.hinge === 'left';
-    const isIn = door.open === 'in';
+    const doorType = door.type || 'swing-in';
+    const isSwingIn = doorType === 'swing-in';
+    const isSwingOut = doorType === 'swing-out';
+    const isSliding = doorType === 'sliding';
 
-    const arcStyle = {
-        position: 'absolute',
-        width: swingRadius,
-        height: swingRadius,
-        border: '2px dashed #94a3b8', 
-        opacity: 0.5,
-        pointerEvents: 'none',
-        borderRadius: !isLeft ? (isIn ? '100% 0 0 0' : '0 0 0 100%') : (isIn ? '0 100% 0 0' : '0 0 100% 0'),
-        borderBottom: isIn ? '2px dashed #94a3b8' : 'none',
-        borderTop: !isIn ? '2px dashed #94a3b8' : 'none',
-        borderLeft: !isLeft ? '2px dashed #94a3b8' : 'none',
-        borderRight: isLeft ? '2px dashed #94a3b8' : 'none',
-        left: isLeft ? doorX * PIXELS_PER_UNIT : (doorX + door.width) * PIXELS_PER_UNIT - swingRadius,
-        top: isIn ? (roomDims.height - door.width) * PIXELS_PER_UNIT : roomDims.height * PIXELS_PER_UNIT,
-    };
+    // Calculate positions based on wall
+    let gapStyle = {};
+    let arcStyle = {};
+    let panelStyle = {};
+    let slidingStyle = {};
+    let jambLine1Style = {};
+    let jambLine2Style = {};
+    
+    const doorWidthPx = door.width * PIXELS_PER_UNIT;
+    const wallThickness = 4;
+    const jambLength = 12; // Length of the jamb lines perpendicular to wall
 
-    const panelStyle = {
+    if (wall === 'bottom') {
+      gapStyle = {
         position: 'absolute',
-        width: 4,
-        height: swingRadius,
-        backgroundColor: '#cbd5e1', 
-        border: '1px solid #64748b', 
-        top: isIn ? (roomDims.height - door.width) * PIXELS_PER_UNIT : roomDims.height * PIXELS_PER_UNIT,
-        left: isLeft ? doorX * PIXELS_PER_UNIT : (doorX + door.width) * PIXELS_PER_UNIT - (isLeft ? 0 : 4),
-    };
+        left: doorPos * PIXELS_PER_UNIT,
+        top: roomDims.height * PIXELS_PER_UNIT - wallThickness / 2,
+        width: doorWidthPx,
+        height: wallThickness,
+        backgroundColor: 'white',
+        zIndex: 10
+      };
+      
+      if (!isSliding) {
+        const swingInward = isSwingIn;
+        arcStyle = {
+          position: 'absolute',
+          width: swingRadius,
+          height: swingRadius,
+          border: '2px dashed #94a3b8',
+          opacity: 0.5,
+          pointerEvents: 'none',
+          borderRadius: !isLeft 
+            ? (swingInward ? '100% 0 0 0' : '0 0 0 100%') 
+            : (swingInward ? '0 100% 0 0' : '0 0 100% 0'),
+          borderBottom: swingInward ? '2px dashed #94a3b8' : 'none',
+          borderTop: !swingInward ? '2px dashed #94a3b8' : 'none',
+          borderLeft: !isLeft ? '2px dashed #94a3b8' : 'none',
+          borderRight: isLeft ? '2px dashed #94a3b8' : 'none',
+          left: isLeft ? doorPos * PIXELS_PER_UNIT : (doorPos + door.width) * PIXELS_PER_UNIT - swingRadius,
+          top: swingInward ? (roomDims.height - door.width) * PIXELS_PER_UNIT : roomDims.height * PIXELS_PER_UNIT,
+        };
+        
+        panelStyle = {
+          position: 'absolute',
+          width: 4,
+          height: swingRadius,
+          backgroundColor: '#cbd5e1',
+          border: '1px solid #64748b',
+          top: swingInward ? (roomDims.height - door.width) * PIXELS_PER_UNIT : roomDims.height * PIXELS_PER_UNIT,
+          left: isLeft ? doorPos * PIXELS_PER_UNIT : (doorPos + door.width) * PIXELS_PER_UNIT - 4,
+        };
+      } else {
+        // Sliding door indicator
+        slidingStyle = {
+          position: 'absolute',
+          left: doorPos * PIXELS_PER_UNIT,
+          top: roomDims.height * PIXELS_PER_UNIT - 8,
+          width: doorWidthPx,
+          height: 6,
+          backgroundColor: '#94a3b8',
+          borderRadius: 2,
+          opacity: 0.6
+        };
+      }
+    } else if (wall === 'top') {
+      gapStyle = {
+        position: 'absolute',
+        left: doorPos * PIXELS_PER_UNIT,
+        top: -wallThickness / 2,
+        width: doorWidthPx,
+        height: wallThickness,
+        backgroundColor: 'white',
+        zIndex: 10
+      };
+      
+      if (!isSliding) {
+        const swingInward = isSwingIn;
+        arcStyle = {
+          position: 'absolute',
+          width: swingRadius,
+          height: swingRadius,
+          border: '2px dashed #94a3b8',
+          opacity: 0.5,
+          pointerEvents: 'none',
+          borderRadius: isLeft 
+            ? (swingInward ? '0 0 100% 0' : '0 0 0 100%')
+            : (swingInward ? '0 0 0 100%' : '0 0 100% 0'),
+          borderTop: !swingInward ? '2px dashed #94a3b8' : 'none',
+          borderBottom: swingInward ? '2px dashed #94a3b8' : 'none',
+          borderLeft: isLeft ? '2px dashed #94a3b8' : 'none',
+          borderRight: !isLeft ? '2px dashed #94a3b8' : 'none',
+          left: isLeft ? doorPos * PIXELS_PER_UNIT : (doorPos + door.width) * PIXELS_PER_UNIT - swingRadius,
+          top: swingInward ? 0 : -swingRadius,
+        };
+        
+        panelStyle = {
+          position: 'absolute',
+          width: 4,
+          height: swingRadius,
+          backgroundColor: '#cbd5e1',
+          border: '1px solid #64748b',
+          top: swingInward ? 0 : -swingRadius,
+          left: isLeft ? doorPos * PIXELS_PER_UNIT : (doorPos + door.width) * PIXELS_PER_UNIT - 4,
+        };
+      } else {
+        slidingStyle = {
+          position: 'absolute',
+          left: doorPos * PIXELS_PER_UNIT,
+          top: 2,
+          width: doorWidthPx,
+          height: 6,
+          backgroundColor: '#94a3b8',
+          borderRadius: 2,
+          opacity: 0.6
+        };
+      }
+    } else if (wall === 'left') {
+      gapStyle = {
+        position: 'absolute',
+        left: -wallThickness / 2,
+        top: doorPos * PIXELS_PER_UNIT,
+        width: wallThickness,
+        height: doorWidthPx,
+        backgroundColor: 'white',
+        zIndex: 10
+      };
+      
+      if (!isSliding) {
+        const swingInward = isSwingIn;
+        arcStyle = {
+          position: 'absolute',
+          width: swingRadius,
+          height: swingRadius,
+          border: '2px dashed #94a3b8',
+          opacity: 0.5,
+          pointerEvents: 'none',
+          borderRadius: isLeft 
+            ? (swingInward ? '0 100% 0 0' : '0 0 0 100%')
+            : (swingInward ? '0 0 100% 0' : '100% 0 0 0'),
+          borderLeft: !swingInward ? '2px dashed #94a3b8' : 'none',
+          borderRight: swingInward ? '2px dashed #94a3b8' : 'none',
+          borderTop: isLeft ? '2px dashed #94a3b8' : 'none',
+          borderBottom: !isLeft ? '2px dashed #94a3b8' : 'none',
+          left: swingInward ? 0 : -swingRadius,
+          top: isLeft ? doorPos * PIXELS_PER_UNIT : (doorPos + door.width) * PIXELS_PER_UNIT - swingRadius,
+        };
+        
+        panelStyle = {
+          position: 'absolute',
+          width: swingRadius,
+          height: 4,
+          backgroundColor: '#cbd5e1',
+          border: '1px solid #64748b',
+          left: swingInward ? 0 : -swingRadius,
+          top: isLeft ? doorPos * PIXELS_PER_UNIT : (doorPos + door.width) * PIXELS_PER_UNIT - 4,
+        };
+      } else {
+        slidingStyle = {
+          position: 'absolute',
+          left: 2,
+          top: doorPos * PIXELS_PER_UNIT,
+          width: 6,
+          height: doorWidthPx,
+          backgroundColor: '#94a3b8',
+          borderRadius: 2,
+          opacity: 0.6
+        };
+      }
+    } else if (wall === 'right') {
+      gapStyle = {
+        position: 'absolute',
+        left: roomDims.width * PIXELS_PER_UNIT - wallThickness / 2,
+        top: doorPos * PIXELS_PER_UNIT,
+        width: wallThickness,
+        height: doorWidthPx,
+        backgroundColor: 'white',
+        zIndex: 10
+      };
+      
+      if (!isSliding) {
+        const swingInward = isSwingIn;
+        arcStyle = {
+          position: 'absolute',
+          width: swingRadius,
+          height: swingRadius,
+          border: '2px dashed #94a3b8',
+          opacity: 0.5,
+          pointerEvents: 'none',
+          borderRadius: !isLeft 
+            ? (swingInward ? '100% 0 0 0' : '0 0 100% 0')
+            : (swingInward ? '0 0 0 100%' : '0 100% 0 0'),
+          borderLeft: swingInward ? '2px dashed #94a3b8' : 'none',
+          borderRight: !swingInward ? '2px dashed #94a3b8' : 'none',
+          borderTop: !isLeft ? '2px dashed #94a3b8' : 'none',
+          borderBottom: isLeft ? '2px dashed #94a3b8' : 'none',
+          left: swingInward ? (roomDims.width - door.width) * PIXELS_PER_UNIT : roomDims.width * PIXELS_PER_UNIT,
+          top: isLeft ? doorPos * PIXELS_PER_UNIT : (doorPos + door.width) * PIXELS_PER_UNIT - swingRadius,
+        };
+        
+        panelStyle = {
+          position: 'absolute',
+          width: swingRadius,
+          height: 4,
+          backgroundColor: '#cbd5e1',
+          border: '1px solid #64748b',
+          left: swingInward ? (roomDims.width - door.width) * PIXELS_PER_UNIT : roomDims.width * PIXELS_PER_UNIT,
+          top: isLeft ? doorPos * PIXELS_PER_UNIT : (doorPos + door.width) * PIXELS_PER_UNIT - 4,
+        };
+      } else {
+        slidingStyle = {
+          position: 'absolute',
+          left: roomDims.width * PIXELS_PER_UNIT - 8,
+          top: doorPos * PIXELS_PER_UNIT,
+          width: 6,
+          height: doorWidthPx,
+          backgroundColor: '#94a3b8',
+          borderRadius: 2,
+          opacity: 0.6
+        };
+      }
+    }
+
+    const isActive = activeId === door.id && activeType === 'door';
+    const isLocked = designMode === DESIGN_MODES.FURNITURE;
+    
+    // Draggable handle style based on wall
+    let handleStyle = {};
+    const handleSize = 20;
+    
+    if (wall === 'bottom') {
+      handleStyle = {
+        position: 'absolute',
+        left: doorPos * PIXELS_PER_UNIT + doorWidthPx / 2 - handleSize / 2,
+        top: roomDims.height * PIXELS_PER_UNIT - handleSize / 2,
+        width: handleSize,
+        height: handleSize,
+        cursor: 'ew-resize',
+        zIndex: 20,
+      };
+    } else if (wall === 'top') {
+      handleStyle = {
+        position: 'absolute',
+        left: doorPos * PIXELS_PER_UNIT + doorWidthPx / 2 - handleSize / 2,
+        top: -handleSize / 2,
+        width: handleSize,
+        height: handleSize,
+        cursor: 'ew-resize',
+        zIndex: 20,
+      };
+    } else if (wall === 'left') {
+      handleStyle = {
+        position: 'absolute',
+        left: -handleSize / 2,
+        top: doorPos * PIXELS_PER_UNIT + doorWidthPx / 2 - handleSize / 2,
+        width: handleSize,
+        height: handleSize,
+        cursor: 'ns-resize',
+        zIndex: 20,
+      };
+    } else if (wall === 'right') {
+      handleStyle = {
+        position: 'absolute',
+        left: roomDims.width * PIXELS_PER_UNIT - handleSize / 2,
+        top: doorPos * PIXELS_PER_UNIT + doorWidthPx / 2 - handleSize / 2,
+        width: handleSize,
+        height: handleSize,
+        cursor: 'ns-resize',
+        zIndex: 20,
+      };
+    }
+
+    // Compute jamb line positions based on wall
+    const jambColor = '#334155';
+    const jambWidth = 2;
+    
+    if (isHorizontal) {
+      // Top or Bottom walls - jambs are vertical lines
+      const yBase = wall === 'top' ? -jambLength / 2 : roomDims.height * PIXELS_PER_UNIT - jambLength / 2;
+      jambLine1Style = {
+        position: 'absolute',
+        left: doorPos * PIXELS_PER_UNIT - jambWidth / 2,
+        top: yBase,
+        width: jambWidth,
+        height: jambLength,
+        backgroundColor: jambColor,
+        zIndex: 11
+      };
+      jambLine2Style = {
+        position: 'absolute',
+        left: (doorPos + door.width) * PIXELS_PER_UNIT - jambWidth / 2,
+        top: yBase,
+        width: jambWidth,
+        height: jambLength,
+        backgroundColor: jambColor,
+        zIndex: 11
+      };
+    } else {
+      // Left or Right walls - jambs are horizontal lines
+      const xBase = wall === 'left' ? -jambLength / 2 : roomDims.width * PIXELS_PER_UNIT - jambLength / 2;
+      jambLine1Style = {
+        position: 'absolute',
+        left: xBase,
+        top: doorPos * PIXELS_PER_UNIT - jambWidth / 2,
+        width: jambLength,
+        height: jambWidth,
+        backgroundColor: jambColor,
+        zIndex: 11
+      };
+      jambLine2Style = {
+        position: 'absolute',
+        left: xBase,
+        top: (doorPos + door.width) * PIXELS_PER_UNIT - jambWidth / 2,
+        width: jambLength,
+        height: jambWidth,
+        backgroundColor: jambColor,
+        zIndex: 11
+      };
+    }
 
     return (
-      <>
-        <div className="absolute bg-white z-10" style={{ left: doorX * PIXELS_PER_UNIT, top: roomDims.height * PIXELS_PER_UNIT - 2, width: door.width * PIXELS_PER_UNIT, height: 4 }} />
-        <div style={arcStyle} />
-        <div style={panelStyle} />
-      </>
+      <React.Fragment key={door.id}>
+        <div style={gapStyle} />
+        {/* Architectural jamb lines showing wall break */}
+        <div style={jambLine1Style} />
+        <div style={jambLine2Style} />
+        {!isSliding && <div style={arcStyle} />}
+        {!isSliding && <div style={panelStyle} />}
+        {isSliding && <div style={slidingStyle} />}
+        {/* Draggable handle - hidden when locked */}
+        {!isLocked && (
+          <div 
+            style={handleStyle}
+            className={`rounded-full transition-all ${isActive ? 'bg-indigo-500 ring-2 ring-indigo-300' : 'bg-slate-400 hover:bg-indigo-400'}`}
+            onMouseDown={(e) => handleMouseDown(e, door.id, 'drag', 'door')}
+            onTouchStart={(e) => handleMouseDown(e, door.id, 'drag', 'door')}
+            title="Drag to reposition door"
+          />
+        )}
+      </React.Fragment>
     );
   };
 
-  const fullConfigJson = JSON.stringify({ roomDims, door, items }, null, 2);
-  
-  const roomArea = (roomDims.width * roomDims.height).toFixed(1);
+  const renderDoors = () => doors.map(door => renderSingleDoor(door));
+
+  // Render windows
+  const renderWindows = () => {
+    const isLocked = designMode === DESIGN_MODES.FURNITURE;
+    const jambColor = '#334155';
+    const jambWidth = 2;
+    const jambLength = 12;
+    
+    return windows.map(win => {
+      const wall = win.wall || 'top';
+      const isHorizontal = wall === 'top' || wall === 'bottom';
+      const wallLength = isHorizontal ? roomDims.width : roomDims.height;
+      const winPos = clamp(win.position, 0, wallLength - win.width);
+      const winWidthPx = win.width * PIXELS_PER_UNIT;
+      const isActive = activeId === win.id && activeType === 'window';
+      
+      let style = {};
+      let gapStyle = {};
+      let handleStyle = {};
+      let jambLine1Style = {};
+      let jambLine2Style = {};
+      const handleSize = 16;
+      const wallThickness = 4;
+      
+      if (wall === 'top') {
+        gapStyle = {
+          position: 'absolute',
+          left: winPos * PIXELS_PER_UNIT,
+          top: -wallThickness / 2,
+          width: winWidthPx,
+          height: wallThickness,
+          backgroundColor: 'white',
+          zIndex: 10
+        };
+        style = {
+          position: 'absolute',
+          left: winPos * PIXELS_PER_UNIT,
+          top: -2,
+          width: winWidthPx,
+          height: 8,
+          backgroundColor: '#93c5fd',
+          border: '2px solid #3b82f6',
+          borderRadius: 2,
+          zIndex: 11,
+          cursor: 'ew-resize',
+        };
+        handleStyle = {
+          position: 'absolute',
+          left: winPos * PIXELS_PER_UNIT + winWidthPx / 2 - handleSize / 2,
+          top: -handleSize / 2 + 2,
+          width: handleSize,
+          height: handleSize,
+          cursor: 'ew-resize',
+          zIndex: 20,
+        };
+      } else if (wall === 'bottom') {
+        style = {
+          position: 'absolute',
+          left: winPos * PIXELS_PER_UNIT,
+          top: roomDims.height * PIXELS_PER_UNIT - 6,
+          width: winWidthPx,
+          height: 8,
+          backgroundColor: '#93c5fd',
+          border: '2px solid #3b82f6',
+          borderRadius: 2,
+          zIndex: 11,
+          cursor: 'ew-resize',
+        };
+        handleStyle = {
+          position: 'absolute',
+          left: winPos * PIXELS_PER_UNIT + winWidthPx / 2 - handleSize / 2,
+          top: roomDims.height * PIXELS_PER_UNIT - handleSize / 2,
+          width: handleSize,
+          height: handleSize,
+          cursor: 'ew-resize',
+          zIndex: 20,
+        };
+      } else if (wall === 'left') {
+        style = {
+          position: 'absolute',
+          left: -2,
+          top: winPos * PIXELS_PER_UNIT,
+          width: 8,
+          height: winWidthPx,
+          backgroundColor: '#93c5fd',
+          border: '2px solid #3b82f6',
+          borderRadius: 2,
+          zIndex: 11,
+          cursor: 'ns-resize',
+        };
+        handleStyle = {
+          position: 'absolute',
+          left: -handleSize / 2 + 2,
+          top: winPos * PIXELS_PER_UNIT + winWidthPx / 2 - handleSize / 2,
+          width: handleSize,
+          height: handleSize,
+          cursor: 'ns-resize',
+          zIndex: 20,
+        };
+      } else if (wall === 'right') {
+        style = {
+          position: 'absolute',
+          left: roomDims.width * PIXELS_PER_UNIT - 6,
+          top: winPos * PIXELS_PER_UNIT,
+          width: 8,
+          height: winWidthPx,
+          backgroundColor: '#93c5fd',
+          border: '2px solid #3b82f6',
+          borderRadius: 2,
+          zIndex: 11,
+          cursor: 'ns-resize',
+        };
+        handleStyle = {
+          position: 'absolute',
+          left: roomDims.width * PIXELS_PER_UNIT - handleSize / 2,
+          top: winPos * PIXELS_PER_UNIT + winWidthPx / 2 - handleSize / 2,
+          width: handleSize,
+          height: handleSize,
+          cursor: 'ns-resize',
+          zIndex: 20,
+        };
+      }
+      
+      // Compute jamb line positions for windows based on wall
+      if (isHorizontal) {
+        // Top or Bottom walls - jambs are vertical lines
+        const yBase = wall === 'top' ? -jambLength / 2 : roomDims.height * PIXELS_PER_UNIT - jambLength / 2;
+        jambLine1Style = {
+          position: 'absolute',
+          left: winPos * PIXELS_PER_UNIT - jambWidth / 2,
+          top: yBase,
+          width: jambWidth,
+          height: jambLength,
+          backgroundColor: jambColor,
+          zIndex: 11
+        };
+        jambLine2Style = {
+          position: 'absolute',
+          left: (winPos * PIXELS_PER_UNIT) + winWidthPx - jambWidth / 2,
+          top: yBase,
+          width: jambWidth,
+          height: jambLength,
+          backgroundColor: jambColor,
+          zIndex: 11
+        };
+        // Gap style for horizontal walls
+        if (!gapStyle.position) {
+          const wallY = wall === 'top' ? -wallThickness / 2 : roomDims.height * PIXELS_PER_UNIT - wallThickness / 2;
+          gapStyle = {
+            position: 'absolute',
+            left: winPos * PIXELS_PER_UNIT,
+            top: wallY,
+            width: winWidthPx,
+            height: wallThickness,
+            backgroundColor: 'white',
+            zIndex: 10
+          };
+        }
+      } else {
+        // Left or Right walls - jambs are horizontal lines
+        const xBase = wall === 'left' ? -jambLength / 2 : roomDims.width * PIXELS_PER_UNIT - jambLength / 2;
+        jambLine1Style = {
+          position: 'absolute',
+          left: xBase,
+          top: winPos * PIXELS_PER_UNIT - jambWidth / 2,
+          width: jambLength,
+          height: jambWidth,
+          backgroundColor: jambColor,
+          zIndex: 11
+        };
+        jambLine2Style = {
+          position: 'absolute',
+          left: xBase,
+          top: (winPos * PIXELS_PER_UNIT) + winWidthPx - jambWidth / 2,
+          width: jambLength,
+          height: jambWidth,
+          backgroundColor: jambColor,
+          zIndex: 11
+        };
+        // Gap style for vertical walls
+        const wallX = wall === 'left' ? -wallThickness / 2 : roomDims.width * PIXELS_PER_UNIT - wallThickness / 2;
+        gapStyle = {
+          position: 'absolute',
+          left: wallX,
+          top: winPos * PIXELS_PER_UNIT,
+          width: wallThickness,
+          height: winWidthPx,
+          backgroundColor: 'white',
+          zIndex: 10
+        };
+      }
+      
+      return (
+        <React.Fragment key={win.id}>
+          <div style={gapStyle} />
+          {/* Architectural jamb lines showing wall break */}
+          <div style={jambLine1Style} />
+          <div style={jambLine2Style} />
+          <div style={style} />
+          {/* Draggable handle - hidden when locked */}
+          {!isLocked && (
+            <div 
+              style={handleStyle}
+              className={`rounded-full transition-all ${isActive ? 'bg-blue-500 ring-2 ring-blue-300' : 'bg-blue-400 hover:bg-blue-500'}`}
+              onMouseDown={(e) => handleMouseDown(e, win.id, 'drag', 'window')}
+              onTouchStart={(e) => handleMouseDown(e, win.id, 'drag', 'window')}
+              title="Drag to reposition window"
+            />
+          )}
+        </React.Fragment>
+      );
+    });
+  };
+
+  const fullConfigJson = JSON.stringify({ roomDims, doors, windows, items }, null, 2);
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 text-slate-800 font-sans overflow-hidden">
@@ -963,29 +2063,48 @@ export default function RoomSimulator() {
       {/* Header */}
       <div className="bg-white border-b border-slate-200 px-4 py-2 flex justify-between items-center shadow-sm relative z-50 h-16">
         <div className="flex items-center gap-2">
-            <button 
-                onClick={() => {
-                  setSidebarOpen(!sidebarOpen);
-                  // Clear active item when opening sidebar on mobile to prevent overlap
-                  if (!sidebarOpen && isMobile) {
-                    setActiveId(null);
-                  }
-                }}
-                className="hidden md:flex p-2 hover:bg-slate-100 rounded-lg text-slate-500 mr-2 transition-colors"
-                aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
-            >
-                {sidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
-            </button>
+            {/* File Browser Button */}
+            <Tooltip text="My Floor Plans">
+              <button 
+                onClick={() => setFileBrowserOpen(true)}
+                className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"
+                aria-label="Open file browser"
+              >
+                <FolderOpen className="w-5 h-5" />
+              </button>
+            </Tooltip>
             
             <Settings className="w-6 h-6 text-indigo-600" />
-            <h1 className="text-lg font-bold text-slate-800 hidden sm:block">Room Planner</h1>
-            <div className="flex items-center gap-1 ml-2 text-[11px] text-slate-500 bg-slate-50 px-2 py-1 rounded">
-              <Maximize2 className="w-3 h-3" />
-              <span>{formatDimension(roomDims.width)} × {formatDimension(roomDims.height)}<span className="hidden lg:inline"> ({roomArea} sq ft)</span></span>
+            <div className="hidden sm:block">
+              <h1 className="text-sm font-bold text-slate-800 leading-tight">{getCurrentProjectName()}</h1>
+              <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                <Maximize2 className="w-3 h-3" />
+                <span>{feetToDisplay(roomDims.width, unitSystem)} × {feetToDisplay(roomDims.height, unitSystem)} ({roundNum(roomDims.width * roomDims.height, 1)} sq ft)</span>
+              </div>
             </div>
         </div>
         
-        <div className="flex items-center gap-2 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Save Status Indicator */}
+          <div className="hidden sm:flex items-center gap-1.5 text-[10px] text-slate-400">
+            {saveStatus === 'saving' ? (
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
+                Saving...
+              </span>
+            ) : saveStatus === 'saved' && lastSavedAt ? (
+              <span className="flex items-center gap-1">
+                <Check className="w-3 h-3 text-green-500" />
+                Saved {formatTimeAgo(lastSavedAt)}
+              </span>
+            ) : (
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 bg-slate-300 rounded-full" />
+                Unsaved
+              </span>
+            )}
+          </div>
+          
           {/* Undo/Redo */}
           <div className="flex items-center gap-1">
             <Tooltip text="Undo">
@@ -1080,211 +2199,603 @@ export default function RoomSimulator() {
             </button>
           </div>
 
-          <div className="bg-slate-50 p-3 text-xs text-slate-600 border-b border-slate-100 flex gap-2 items-center">
-            <Info className="w-4 h-4 shrink-0 text-slate-400" />
-            <p>Accepts feet, inches, or decimals (e.g., <strong>12'6"</strong>, <strong>150"</strong>, <strong>12.5</strong>)</p>
+          {/* Unit System Selector */}
+          <div className="bg-indigo-50 p-3 border-b border-indigo-100">
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-xs font-medium text-indigo-700">Display Units:</label>
+              <select 
+                value={unitSystem}
+                onChange={(e) => setUnitSystem(e.target.value)}
+                className="text-xs border border-indigo-200 rounded px-2 py-1.5 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+              >
+                {UNIT_SYSTEMS.map(u => (
+                  <option key={u.value} value={u.value}>{u.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          <div className="p-6 space-y-8 min-w-0 md:min-w-[20rem]">
-            <section>
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Room Dimensions</h2>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium mb-1">Width</label>
-                  <DimensionInput 
-                    value={roomDims.width} 
-                    onChange={(val) => updateRoomDims({...roomDims, width: val})}
-                    className="w-full p-2 border border-slate-200 rounded focus:ring-2 focus:ring-indigo-500 outline-none"
-                    placeholder='e.g. 12'
-                    min={1}
-                    max={100}
-                    label="Room width"
-                  />
+          {/* Design Mode Switcher */}
+          <div className="bg-white p-4 border-b border-slate-200">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Design Steps</span>
+            </div>
+            
+            {/* Step Buttons */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setDesignMode(DESIGN_MODES.ROOM_SETUP)}
+                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
+                  designMode === DESIGN_MODES.ROOM_SETUP 
+                    ? 'bg-indigo-600 text-white shadow-md' 
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <Home className="w-4 h-4" />
+                <span className="hidden sm:inline">1. Room Setup</span>
+                <span className="sm:hidden">1. Room</span>
+              </button>
+              
+              <button
+                onClick={() => setDesignMode(DESIGN_MODES.FURNITURE)}
+                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
+                  designMode === DESIGN_MODES.FURNITURE 
+                    ? 'bg-emerald-600 text-white shadow-md' 
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <Sofa className="w-4 h-4" />
+                <span className="hidden sm:inline">2. Furniture</span>
+                <span className="sm:hidden">2. Items</span>
+              </button>
+            </div>
+            
+            {/* Mode Description */}
+            <div className={`mt-3 p-2 rounded-lg text-[11px] ${
+              designMode === DESIGN_MODES.ROOM_SETUP 
+                ? 'bg-indigo-50 text-indigo-700' 
+                : 'bg-emerald-50 text-emerald-700'
+            }`}>
+              {designMode === DESIGN_MODES.ROOM_SETUP ? (
+                <div className="flex items-center gap-2">
+                  <Lock className="w-3 h-3 shrink-0" />
+                  <span>Set up your room, doors & windows. Furniture is locked.</span>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">Length</label>
-                  <DimensionInput 
-                    value={roomDims.height} 
-                    onChange={(val) => updateRoomDims({...roomDims, height: val})}
-                    className="w-full p-2 border border-slate-200 rounded focus:ring-2 focus:ring-indigo-500 outline-none"
-                    placeholder='e.g. 12'
-                    min={1}
-                    max={100}
-                    label="Room length"
-                  />
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Lock className="w-3 h-3 shrink-0" />
+                  <span>Arrange furniture. Room layout is locked.</span>
                 </div>
-              </div>
-              <div className="mt-2 text-xs text-slate-500">
-                Total area: <strong>{roomArea} sq ft</strong>
-              </div>
-            </section>
+              )}
+            </div>
+          </div>
 
-            <section>
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Door (Bottom Wall)</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-medium mb-1">Width</label>
-                  <DimensionInput 
-                    value={door.width} 
-                    onChange={(val) => updateDoor({...door, width: val})}
-                    className="w-full p-2 border border-slate-200 rounded focus:ring-2 focus:ring-indigo-500 outline-none"
-                    min={1}
-                    max={roomDims.width}
-                    label="Door width"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">Position</label>
-                  <div className="flex gap-2 items-center">
-                    <input 
-                        type="range" 
-                        min={0} 
-                        max={Math.max(0, roomDims.width - door.width)} 
-                        step={0.1}
-                        value={door.position} 
-                        onChange={(e) => updateDoor({...door, position: Number(e.target.value)})}
-                        className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
-                        aria-label="Door position"
-                    />
-                    <div className="w-16">
-                        <DimensionInput 
-                            value={door.position}
-                            onChange={(val) => updateDoor({...door, position: val})}
-                            className="w-full p-1 text-center text-xs border border-slate-200 rounded"
-                            max={Math.max(0, roomDims.width - door.width)}
-                            label="Door position value"
-                        />
-                    </div>
+          <div className="bg-slate-50 p-3 text-xs text-slate-600 border-b border-slate-100 flex gap-2 items-center">
+            <Info className="w-4 h-4 shrink-0 text-slate-400" />
+            <p>You can type values with units (e.g., <strong>12'6"</strong>, <strong>150cm</strong>, <strong>1.5m</strong>)</p>
+          </div>
+
+          <div className="p-4 space-y-4 min-w-0 md:min-w-[20rem]">
+            
+            {/* ===== ROOM SETUP GROUP ===== */}
+            <div className={`rounded-xl border-2 transition-all duration-300 ${
+              designMode === DESIGN_MODES.ROOM_SETUP 
+                ? 'border-indigo-200 bg-white shadow-sm' 
+                : 'border-slate-200 bg-slate-50'
+            }`}>
+              {/* Group Header */}
+              <button
+                onClick={() => {
+                  if (designMode === DESIGN_MODES.FURNITURE) {
+                    setRoomSetupExpanded(!roomSetupExpanded);
+                  }
+                }}
+                className={`w-full flex items-center justify-between p-3 ${
+                  designMode === DESIGN_MODES.FURNITURE ? 'cursor-pointer hover:bg-slate-100' : 'cursor-default'
+                } rounded-t-xl transition-colors`}
+              >
+                <div className="flex items-center gap-2">
+                  <div className={`p-1.5 rounded-lg ${
+                    designMode === DESIGN_MODES.ROOM_SETUP 
+                      ? 'bg-indigo-100 text-indigo-600' 
+                      : 'bg-slate-200 text-slate-500'
+                  }`}>
+                    <Home className="w-4 h-4" />
+                  </div>
+                  <div className="text-left">
+                    <span className="text-sm font-semibold text-slate-700 block">Room Setup</span>
+                    <span className="text-[10px] text-slate-500">
+                      {feetToDisplay(roomDims.width, unitSystem)} × {feetToDisplay(roomDims.height, unitSystem)} • {doors.length} door{doors.length !== 1 ? 's' : ''} • {windows.length} window{windows.length !== 1 ? 's' : ''}
+                    </span>
                   </div>
                 </div>
-                
-                <div className="flex gap-2">
-                    <Tooltip text="Switch hinge side">
-                      <button 
-                        onClick={() => updateDoor({...door, hinge: door.hinge === 'left' ? 'right' : 'left'})} 
-                        className="flex-1 py-1.5 px-2 bg-slate-100 hover:bg-slate-200 rounded text-xs font-medium text-slate-600 flex items-center justify-center gap-1 transition-colors"
-                        aria-label="Flip door hinge"
-                      >
-                          <ArrowLeftRight className="w-3 h-3" /> Flip Hinge
-                      </button>
-                    </Tooltip>
-                    <Tooltip text="Switch swing direction">
-                      <button 
-                        onClick={() => updateDoor({...door, open: door.open === 'in' ? 'out' : 'in'})} 
-                        className="flex-1 py-1.5 px-2 bg-slate-100 hover:bg-slate-200 rounded text-xs font-medium text-slate-600 flex items-center justify-center gap-1 transition-colors"
-                        aria-label="Flip door swing"
-                      >
-                          <ArrowUpDown className="w-3 h-3" /> Flip Swing
-                      </button>
-                    </Tooltip>
+                <div className="flex items-center gap-2">
+                  {designMode === DESIGN_MODES.FURNITURE && (
+                    <>
+                      <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                        <Lock className="w-3 h-3" /> Locked
+                      </span>
+                      {roomSetupExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                    </>
+                  )}
+                  {designMode === DESIGN_MODES.ROOM_SETUP && (
+                    <span className="text-[10px] text-indigo-600 font-medium px-2 py-0.5 bg-indigo-100 rounded-full">Editing</span>
+                  )}
                 </div>
-              </div>
-            </section>
-
-            <section>
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Furniture</h2>
-                <button 
-                    onClick={addItem}
-                    className="flex items-center gap-1 text-xs bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-2 py-1 rounded font-medium transition-colors"
-                    aria-label="Add new furniture item"
-                >
-                    <Plus className="w-3 h-3" /> Add Item
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                {items.map((item) => (
-                  <div key={item.id} className={`p-3 bg-slate-50 rounded-lg border transition-all duration-200 ${item.visible === false ? 'opacity-60 border-dashed' : 'border-slate-100'} ${activeId === item.id ? 'ring-2 ring-indigo-500' : ''}`}>
-                    <div className="flex justify-between items-center mb-2">
-                      <div className="flex items-center gap-2 flex-1 relative">
-                        <button
-                          onClick={() => setShowColorPicker(showColorPicker === item.id ? null : item.id)}
-                          className={`w-6 h-6 rounded-full ${item.color.split(' ')[0]} border-2 border-slate-300 hover:border-indigo-500 transition-colors cursor-pointer shrink-0`}
-                          aria-label="Change item color"
-                          data-color-button
-                        />
-                        {!isMobile && showColorPicker === item.id && (
-                          <ColorPicker
-                            currentColor={item.color}
-                            onChange={(color) => {
-                              setItems(items.map(i => i.id === item.id ? { ...i, color } : i));
-                              saveToHistory();
-                            }}
-                            onClose={() => setShowColorPicker(null)}
-                            isMobile={false}
-                          />
-                        )}
-                        <input 
-                            value={item.label}
-                            onChange={(e) => setItems(items.map(i => i.id === item.id ? { ...i, label: e.target.value } : i))}
-                            onBlur={saveToHistory}
-                            className="bg-transparent font-medium text-slate-700 border-b border-transparent hover:border-slate-300 focus:border-indigo-500 outline-none flex-1 text-sm"
-                            aria-label="Item label"
-                        />
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Tooltip text={item.visible !== false ? "Hide item" : "Show item"}>
-                          <button 
-                              onClick={() => toggleVisibility(item.id)}
-                              className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
-                          >
-                              {item.visible !== false ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                          </button>
-                        </Tooltip>
-                        <Tooltip text="Delete item (Del)">
-                          <button 
-                              onClick={() => deleteItem(item.id)}
-                              className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                          >
-                              <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </Tooltip>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
+              </button>
+              
+              {/* Unlock button when in furniture mode */}
+              {designMode === DESIGN_MODES.FURNITURE && roomSetupExpanded && (
+                <div className="px-3 pb-2">
+                  <button
+                    onClick={() => setDesignMode(DESIGN_MODES.ROOM_SETUP)}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg text-xs font-medium transition-colors"
+                  >
+                    <Unlock className="w-3 h-3" />
+                    Switch to Room Setup Mode
+                  </button>
+                </div>
+              )}
+              
+              {/* Room Setup Content */}
+              {(designMode === DESIGN_MODES.ROOM_SETUP || roomSetupExpanded) && (
+                <div className={`p-4 pt-2 space-y-6 border-t border-slate-100 ${
+                  designMode === DESIGN_MODES.FURNITURE ? 'opacity-60 pointer-events-none' : ''
+                }`}>
+                  
+                  {/* Room Dimensions */}
+                  <section>
+                    <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Room Dimensions</h2>
+                    <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="text-[10px] text-slate-500">Width</label>
+                        <label className="block text-xs font-medium mb-1">Width</label>
                         <DimensionInput 
-                          value={item.width}
-                          onChange={(val) => {
-                            setItems(items.map(i => i.id === item.id ? { ...i, width: val } : i));
-                            saveToHistory();
-                          }}
-                          className="w-full p-1 text-xs border border-slate-200 rounded"
-                          min={0.1}
-                          max={roomDims.width}
-                          label={`Width of ${item.label}`}
+                          value={roomDims.width} 
+                          onChange={(val) => updateRoomDims({...roomDims, width: val})}
+                          className="w-full p-2 border border-slate-200 rounded focus:ring-2 focus:ring-indigo-500 outline-none"
+                          placeholder='e.g. 12'
+                          min={1}
+                          max={100}
+                          label="Room width"
+                          unitSystem={unitSystem}
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] text-slate-500">Depth</label>
+                        <label className="block text-xs font-medium mb-1">Length</label>
                         <DimensionInput 
-                          value={item.height}
-                          onChange={(val) => {
-                            setItems(items.map(i => i.id === item.id ? { ...i, height: val } : i));
-                            saveToHistory();
-                          }}
-                          className="w-full p-1 text-xs border border-slate-200 rounded"
-                          min={0.1}
-                          max={roomDims.height}
-                          label={`Depth of ${item.label}`}
+                          value={roomDims.height} 
+                          onChange={(val) => updateRoomDims({...roomDims, height: val})}
+                          className="w-full p-2 border border-slate-200 rounded focus:ring-2 focus:ring-indigo-500 outline-none"
+                          placeholder='e.g. 12'
+                          min={1}
+                          max={100}
+                          label="Room length"
+                          unitSystem={unitSystem}
                         />
                       </div>
                     </div>
-                    <div className="mt-2 text-[10px] text-slate-400 flex justify-between">
-                      <span>Position: {formatDimension(item.x)}, {formatDimension(item.y)}</span>
-                      <span>Rotation: {Math.round(item.rotation)}°</span>
+                    <div className="mt-2 text-xs text-slate-500">
+                      Total area: <strong>{roundNum(roomDims.width * roomDims.height, 1)} sq ft</strong>
                     </div>
+                  </section>
+
+                  {/* Doors Section */}
+                  <section>
+                    <div className="flex justify-between items-center mb-3">
+                      <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Doors</h2>
+                      <button 
+                        onClick={addDoor}
+                        className="flex items-center gap-1 text-xs bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-2 py-1 rounded font-medium transition-colors"
+                        aria-label="Add new door"
+                      >
+                        <Plus className="w-3 h-3" /> Add Door
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      {doors.map((door, index) => {
+                        const wallLen = getWallLength(door.wall);
+                        return (
+                          <div key={door.id} className="p-3 bg-white rounded-lg border border-slate-200">
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-xs font-medium text-slate-700">Door {index + 1}</span>
+                              <button 
+                                onClick={() => deleteDoor(door.id)}
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                aria-label="Delete door"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-2 mb-2">
+                              <div>
+                                <label className="block text-[10px] text-slate-500 mb-1">Wall</label>
+                                <select 
+                                  value={door.wall}
+                                  onChange={(e) => updateDoor(door.id, { wall: e.target.value })}
+                                  className="w-full p-1.5 text-xs border border-slate-200 rounded focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                                >
+                                  {WALL_OPTIONS.map(w => (
+                                    <option key={w} value={w}>{w.charAt(0).toUpperCase() + w.slice(1)}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-[10px] text-slate-500 mb-1">Type</label>
+                                <select 
+                                  value={door.type}
+                                  onChange={(e) => updateDoor(door.id, { type: e.target.value })}
+                                  className="w-full p-1.5 text-xs border border-slate-200 rounded focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                                >
+                                  {DOOR_TYPES.map(t => (
+                                    <option key={t.value} value={t.value}>{t.label}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-2 mb-2">
+                              <div>
+                                <label className="block text-[10px] text-slate-500 mb-1">Width</label>
+                                <DimensionInput 
+                                  value={door.width}
+                                  onChange={(val) => updateDoor(door.id, { width: val })}
+                                  className="w-full p-1.5 text-xs border border-slate-200 rounded focus:ring-2 focus:ring-indigo-500 outline-none"
+                                  min={1}
+                                  max={wallLen}
+                                  label="Door width"
+                                  unitSystem={unitSystem}
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] text-slate-500 mb-1">Position</label>
+                                <DimensionInput 
+                                  value={door.position}
+                                  onChange={(val) => updateDoor(door.id, { position: val })}
+                                  className="w-full p-1.5 text-xs border border-slate-200 rounded focus:ring-2 focus:ring-indigo-500 outline-none"
+                                  min={0}
+                                  max={Math.max(0, wallLen - door.width)}
+                                  label="Door position"
+                                  unitSystem={unitSystem}
+                                />
+                              </div>
+                            </div>
+                            
+                            {door.type !== 'sliding' && (
+                              <button 
+                                onClick={() => updateDoor(door.id, { hinge: door.hinge === 'left' ? 'right' : 'left' })}
+                                className="w-full py-1.5 px-2 bg-slate-100 hover:bg-slate-200 rounded text-[10px] font-medium text-slate-600 flex items-center justify-center gap-1 transition-colors"
+                              >
+                                <ArrowLeftRight className="w-3 h-3" /> Hinge: {door.hinge === 'left' ? 'Left' : 'Right'}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                      
+                      {doors.length === 0 && (
+                        <div className="text-center py-3 text-slate-400 text-xs italic border-2 border-dashed border-slate-200 rounded-lg">
+                          No doors added yet
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
+                  {/* Windows Section */}
+                  <section>
+                    <div className="flex justify-between items-center mb-3">
+                      <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Windows</h2>
+                      <button 
+                        onClick={addWindow}
+                        className="flex items-center gap-1 text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-1 rounded font-medium transition-colors"
+                        aria-label="Add new window"
+                      >
+                        <Plus className="w-3 h-3" /> Add Window
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      {windows.map((win, index) => {
+                        const wallLen = getWallLength(win.wall);
+                        return (
+                          <div key={win.id} className="p-3 bg-blue-50/30 rounded-lg border border-blue-100">
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-xs font-medium text-slate-700">Window {index + 1}</span>
+                              <button 
+                                onClick={() => deleteWindow(win.id)}
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                aria-label="Delete window"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            
+                            <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <label className="block text-[10px] text-slate-500 mb-1">Wall</label>
+                                <select 
+                                  value={win.wall}
+                                  onChange={(e) => updateWindow(win.id, { wall: e.target.value })}
+                                  className="w-full p-1.5 text-xs border border-slate-200 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                                >
+                                  {WALL_OPTIONS.map(w => (
+                                    <option key={w} value={w}>{w.charAt(0).toUpperCase() + w.slice(1)}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-[10px] text-slate-500 mb-1">Width</label>
+                                <DimensionInput 
+                                  value={win.width}
+                                  onChange={(val) => updateWindow(win.id, { width: val })}
+                                  className="w-full p-1.5 text-xs border border-slate-200 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                  min={0.5}
+                                  max={wallLen}
+                                  label="Window width"
+                                  unitSystem={unitSystem}
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] text-slate-500 mb-1">Position</label>
+                                <DimensionInput 
+                                  value={win.position}
+                                  onChange={(val) => updateWindow(win.id, { position: val })}
+                                  className="w-full p-1.5 text-xs border border-slate-200 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                  min={0}
+                                  max={Math.max(0, wallLen - win.width)}
+                                  label="Window position"
+                                  unitSystem={unitSystem}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      
+                      {windows.length === 0 && (
+                        <div className="text-center py-3 text-slate-400 text-xs italic border-2 border-dashed border-blue-100 rounded-lg">
+                          No windows added yet
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                  
+                  {/* Continue to Furniture button */}
+                  {designMode === DESIGN_MODES.ROOM_SETUP && (
+                    <button
+                      onClick={() => setDesignMode(DESIGN_MODES.FURNITURE)}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+                    >
+                      Continue to Furniture
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            {/* ===== FURNITURE GROUP ===== */}
+            <div className={`rounded-xl border-2 transition-all duration-300 ${
+              designMode === DESIGN_MODES.FURNITURE 
+                ? 'border-emerald-200 bg-white shadow-sm' 
+                : 'border-slate-200 bg-slate-50'
+            }`}>
+              {/* Group Header */}
+              <button
+                onClick={() => {
+                  if (designMode === DESIGN_MODES.ROOM_SETUP) {
+                    setFurnitureExpanded(!furnitureExpanded);
+                  }
+                }}
+                className={`w-full flex items-center justify-between p-3 ${
+                  designMode === DESIGN_MODES.ROOM_SETUP ? 'cursor-pointer hover:bg-slate-100' : 'cursor-default'
+                } rounded-t-xl transition-colors`}
+              >
+                <div className="flex items-center gap-2">
+                  <div className={`p-1.5 rounded-lg ${
+                    designMode === DESIGN_MODES.FURNITURE 
+                      ? 'bg-emerald-100 text-emerald-600' 
+                      : 'bg-slate-200 text-slate-500'
+                  }`}>
+                    <Sofa className="w-4 h-4" />
                   </div>
-                ))}
-                {items.length === 0 && (
-                    <div className="text-center py-8 text-slate-400 text-xs italic border-2 border-dashed border-slate-100 rounded-lg">
+                  <div className="text-left">
+                    <span className="text-sm font-semibold text-slate-700 block">Furniture</span>
+                    <span className="text-[10px] text-slate-500">
+                      {items.length} item{items.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {designMode === DESIGN_MODES.ROOM_SETUP && (
+                    <>
+                      <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                        <Lock className="w-3 h-3" /> Locked
+                      </span>
+                      {furnitureExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                    </>
+                  )}
+                  {designMode === DESIGN_MODES.FURNITURE && (
+                    <span className="text-[10px] text-emerald-600 font-medium px-2 py-0.5 bg-emerald-100 rounded-full">Editing</span>
+                  )}
+                </div>
+              </button>
+              
+              {/* Unlock button when in room-setup mode */}
+              {designMode === DESIGN_MODES.ROOM_SETUP && furnitureExpanded && (
+                <div className="px-3 pb-2">
+                  <button
+                    onClick={() => setDesignMode(DESIGN_MODES.FURNITURE)}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-lg text-xs font-medium transition-colors"
+                  >
+                    <Unlock className="w-3 h-3" />
+                    Switch to Furniture Mode
+                  </button>
+                </div>
+              )}
+              
+              {/* Furniture Content */}
+              {(designMode === DESIGN_MODES.FURNITURE || furnitureExpanded) && (
+                <div className={`p-4 pt-2 space-y-4 border-t border-slate-100 ${
+                  designMode === DESIGN_MODES.ROOM_SETUP ? 'opacity-60 pointer-events-none' : ''
+                }`}>
+                  <div className="flex justify-end">
+                    <button 
+                      onClick={addItem}
+                      className="flex items-center gap-1 text-xs bg-emerald-50 text-emerald-600 hover:bg-emerald-100 px-2 py-1 rounded font-medium transition-colors"
+                      aria-label="Add new furniture item"
+                    >
+                      <Plus className="w-3 h-3" /> Add Item
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {items.map((item) => (
+                      <div key={item.id} className={`p-3 bg-white rounded-lg border transition-all duration-200 ${item.visible === false ? 'opacity-60 border-dashed' : 'border-slate-200'} ${activeId === item.id && activeType === 'item' ? 'ring-2 ring-emerald-500' : ''} overflow-hidden`}>
+                        <div className="flex justify-between items-center mb-3 gap-2">
+                          <div className="flex items-center gap-2 flex-1 min-w-0 relative">
+                            <button
+                              onClick={() => setShowColorPicker(showColorPicker === item.id ? null : item.id)}
+                              className={`w-6 h-6 rounded-full ${item.color.split(' ')[0]} border-2 border-slate-300 hover:border-emerald-500 transition-colors cursor-pointer shrink-0`}
+                              aria-label="Change item color"
+                              data-color-button
+                            />
+                            {!isMobile && showColorPicker === item.id && (
+                              <ColorPicker
+                                currentColor={item.color}
+                                onChange={(color) => {
+                                  setItems(items.map(i => i.id === item.id ? { ...i, color } : i));
+                                  saveToHistory();
+                                }}
+                                onClose={() => setShowColorPicker(null)}
+                                isMobile={false}
+                              />
+                            )}
+                            <input 
+                              value={item.label}
+                              onChange={(e) => setItems(items.map(i => i.id === item.id ? { ...i, label: e.target.value } : i))}
+                              onBlur={saveToHistory}
+                              className="bg-transparent font-medium text-slate-700 border-b border-transparent hover:border-slate-300 focus:border-emerald-500 outline-none min-w-0 flex-1 text-sm truncate"
+                              aria-label="Item label"
+                            />
+                          </div>
+                          <div className="flex items-center shrink-0">
+                            <Tooltip text={item.visible !== false ? "Hide" : "Show"}>
+                              <button 
+                                onClick={() => toggleVisibility(item.id)}
+                                className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+                              >
+                                {item.visible !== false ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                              </button>
+                            </Tooltip>
+                            <Tooltip text="Delete">
+                              <button 
+                                onClick={() => deleteItem(item.id)}
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </Tooltip>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-slate-500">Width</label>
+                            <DimensionInput 
+                              value={item.width}
+                              onChange={(val) => {
+                                setItems(items.map(i => i.id === item.id ? { ...i, width: val } : i));
+                                saveToHistory();
+                              }}
+                              className="w-full p-1.5 text-xs border border-slate-200 rounded"
+                              min={0.1}
+                              max={roomDims.width}
+                              label={`Width of ${item.label}`}
+                              unitSystem={unitSystem}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-slate-500">Depth</label>
+                            <DimensionInput 
+                              value={item.height}
+                              onChange={(val) => {
+                                setItems(items.map(i => i.id === item.id ? { ...i, height: val } : i));
+                                saveToHistory();
+                              }}
+                              className="w-full p-1.5 text-xs border border-slate-200 rounded"
+                              min={0.1}
+                              max={roomDims.height}
+                              label={`Depth of ${item.label}`}
+                              unitSystem={unitSystem}
+                            />
+                          </div>
+                        </div>
+                        
+                        {/* Position inputs */}
+                        <div className="grid grid-cols-3 gap-2 mt-3">
+                          <div>
+                            <label className="text-[10px] text-slate-500">X Position</label>
+                            <DimensionInput 
+                              value={item.x}
+                              onChange={(val) => {
+                                const clampedX = clamp(val, 0, roomDims.width - item.width);
+                                setItems(items.map(i => i.id === item.id ? { ...i, x: clampedX } : i));
+                                saveToHistory();
+                              }}
+                              className="w-full p-1.5 text-xs border border-slate-200 rounded"
+                              min={0}
+                              max={roomDims.width - item.width}
+                              label={`X position of ${item.label}`}
+                              unitSystem={unitSystem}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-slate-500">Y Position</label>
+                            <DimensionInput 
+                              value={item.y}
+                              onChange={(val) => {
+                                const clampedY = clamp(val, 0, roomDims.height - item.height);
+                                setItems(items.map(i => i.id === item.id ? { ...i, y: clampedY } : i));
+                                saveToHistory();
+                              }}
+                              className="w-full p-1.5 text-xs border border-slate-200 rounded"
+                              min={0}
+                              max={roomDims.height - item.height}
+                              label={`Y position of ${item.label}`}
+                              unitSystem={unitSystem}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-slate-500">Rotation °</label>
+                            <input 
+                              type="number"
+                              value={Math.round(((item.rotation % 360) + 360) % 360)}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                setItems(items.map(i => i.id === item.id ? { ...i, rotation: val } : i));
+                              }}
+                              onBlur={saveToHistory}
+                              className="w-full p-1.5 text-xs border border-slate-200 rounded focus:ring-2 focus:ring-emerald-500 outline-none"
+                              min={0}
+                              max={360}
+                              step={1}
+                              aria-label={`Rotation of ${item.label}`}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {items.length === 0 && (
+                      <div className="text-center py-6 text-slate-400 text-xs italic border-2 border-dashed border-slate-200 rounded-lg">
                         No furniture added. Click "Add Item" to start.
-                    </div>
-                )}
-              </div>
-            </section>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
           </div>
         </div>
 
@@ -1307,11 +2818,24 @@ export default function RoomSimulator() {
           className="flex-1 bg-slate-100 overflow-auto flex items-center justify-center p-4 md:p-8 relative w-full"
           ref={containerRef}
         >
-          {/* Instruction badge - subtle hint that fades out */}
+          {/* Mode indicator badge */}
           {!(isMobile && sidebarOpen) && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-800/80 text-white px-4 py-2 rounded-full shadow-lg text-xs z-20 pointer-events-none animate-fade-in backdrop-blur-sm">
-              <span className="hidden sm:inline">Drag items to move • Use handle to rotate</span>
-              <span className="sm:hidden">Drag to move • Tap to select</span>
+            <div className={`absolute top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full shadow-lg text-xs z-20 pointer-events-none animate-fade-in backdrop-blur-sm ${
+              designMode === DESIGN_MODES.ROOM_SETUP 
+                ? 'bg-indigo-600/90 text-white' 
+                : 'bg-emerald-600/90 text-white'
+            }`}>
+              {designMode === DESIGN_MODES.ROOM_SETUP ? (
+                <>
+                  <span className="hidden sm:inline"><Home className="w-3 h-3 inline mr-1 -mt-0.5" /> Room Setup Mode • Drag door/window handles to reposition</span>
+                  <span className="sm:hidden"><Home className="w-3 h-3 inline mr-1 -mt-0.5" /> Room Setup</span>
+                </>
+              ) : (
+                <>
+                  <span className="hidden sm:inline"><Sofa className="w-3 h-3 inline mr-1 -mt-0.5" /> Furniture Mode • Drag to move • Handle to rotate</span>
+                  <span className="sm:hidden"><Sofa className="w-3 h-3 inline mr-1 -mt-0.5" /> Furniture Mode</span>
+                </>
+              )}
             </div>
           )}
 
@@ -1326,48 +2850,62 @@ export default function RoomSimulator() {
             }}
           >
             {renderGrid()}
-            {renderDoor()}
+            {renderDoors()}
+            {renderWindows()}
 
             {items.filter(i => i.visible !== false).map((item) => {
-              const isActive = activeId === item.id;
+              const isActive = activeId === item.id && activeType === 'item';
+              const isFurnitureLocked = designMode === DESIGN_MODES.ROOM_SETUP;
               
               return (
                 <div
                   key={item.id}
-                  onMouseDown={(e) => handleMouseDown(e, item.id, 'drag')}
-                  onTouchStart={(e) => handleMouseDown(e, item.id, 'drag')}
-                  onClick={() => setActiveId(item.id)}
-                  className={`absolute flex items-center justify-center text-xs font-bold text-slate-700 select-none cursor-grab active:cursor-grabbing transition-shadow ${item.color}`}
+                  onMouseDown={(e) => handleMouseDown(e, item.id, 'drag', 'item')}
+                  onTouchStart={(e) => handleMouseDown(e, item.id, 'drag', 'item')}
+                  onClick={() => { setActiveId(item.id); setActiveType('item'); }}
+                  className={`absolute flex items-center justify-center text-xs font-bold text-slate-700 select-none transition-shadow ${item.color} ${
+                    isFurnitureLocked 
+                      ? 'cursor-not-allowed opacity-50' 
+                      : 'cursor-grab active:cursor-grabbing'
+                  }`}
                   style={{
                     width: item.width * PIXELS_PER_UNIT,
                     height: item.height * PIXELS_PER_UNIT,
                     transform: `translate(${item.x * PIXELS_PER_UNIT}px, ${item.y * PIXELS_PER_UNIT}px) rotate(${item.rotation}deg)`,
                     borderWidth: '2px',
                     zIndex: isActive ? 50 : 10,
-                    boxShadow: isActive ? '0 8px 20px -4px rgba(0, 0, 0, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.08)',
+                    boxShadow: isActive && !isFurnitureLocked ? '0 8px 20px -4px rgba(0, 0, 0, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.08)',
                     touchAction: 'none'
                   }}
                   role="button"
                   tabIndex={0}
-                  aria-label={`${item.label}, ${formatDimension(item.width)} by ${formatDimension(item.height)}`}
+                  aria-label={`${item.label}, ${feetToDisplay(item.width, unitSystem)} by ${feetToDisplay(item.height, unitSystem)}${isFurnitureLocked ? ' (locked)' : ''}`}
                 >
                   <span className="truncate px-1">{item.label}</span>
-                  {isActive && (
-                    <div 
-                       onMouseDown={(e) => handleMouseDown(e, item.id, 'rotate')}
-                       onTouchStart={(e) => handleMouseDown(e, item.id, 'rotate')}
-                       className={`absolute -top-8 left-1/2 -translate-x-1/2 w-8 h-8 md:w-6 md:h-6 bg-white border-2 rounded-full flex items-center justify-center cursor-crosshair hover:scale-110 transition-all z-50 shadow-md
-                       ${isRotating && isSnapped ? 'border-emerald-500' : 'border-indigo-500'}`}
-                       style={{ touchAction: 'none' }}
-                       aria-label="Rotate handle"
-                    >
-                       <RotateCw className={`w-4 h-4 md:w-3 md:h-3 ${isRotating && isSnapped ? 'text-emerald-600' : 'text-indigo-500'}`} />
+                  
+                  {/* Lock indicator when furniture is locked */}
+                  {isFurnitureLocked && (
+                    <div className="absolute -top-2 -right-2 w-5 h-5 bg-slate-600 rounded-full flex items-center justify-center shadow-md">
+                      <Lock className="w-3 h-3 text-white" />
                     </div>
                   )}
                   
-                  {isActive && (
+                  {isActive && !isFurnitureLocked && (
+                    <div 
+                       onMouseDown={(e) => handleMouseDown(e, item.id, 'rotate', 'item')}
+                       onTouchStart={(e) => handleMouseDown(e, item.id, 'rotate', 'item')}
+                       className={`absolute -top-8 left-1/2 -translate-x-1/2 w-8 h-8 md:w-6 md:h-6 bg-white border-2 rounded-full flex items-center justify-center cursor-crosshair hover:scale-110 transition-all z-50 shadow-md
+                       ${isRotating && isSnapped ? 'border-emerald-500' : 'border-emerald-500'}`}
+                       style={{ touchAction: 'none' }}
+                       aria-label="Rotate handle"
+                    >
+                       <RotateCw className={`w-4 h-4 md:w-3 md:h-3 ${isRotating && isSnapped ? 'text-emerald-600' : 'text-emerald-500'}`} />
+                    </div>
+                  )}
+                  
+                  {isActive && !isFurnitureLocked && (
                       <div className={`absolute -top-8 left-1/2 h-8 w-0.5 -z-10 origin-bottom transition-colors
-                      ${isRotating && isSnapped ? 'bg-emerald-500' : 'bg-indigo-500'}`}></div>
+                      ${isRotating && isSnapped ? 'bg-emerald-500' : 'bg-emerald-500'}`}></div>
                   )}
                 </div>
               );
@@ -1383,8 +2921,11 @@ export default function RoomSimulator() {
               {/* URL Share Section */}
               <div>
                   <label className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
-                      <Share2 className="w-4 h-4" /> Direct Link
+                      <Share2 className="w-4 h-4" /> Direct Link (Snapshot)
                   </label>
+                  <p className="text-[10px] text-slate-500 mb-2">
+                    This link captures your current layout. Any changes you make after sharing won't be reflected — it's a snapshot, not a live link.
+                  </p>
                   <div className="flex gap-2">
                       <input 
                         readOnly 
@@ -1451,6 +2992,241 @@ export default function RoomSimulator() {
               </div>
 
           </div>
+      </Modal>
+
+      {/* File Browser Modal */}
+      <Modal isOpen={fileBrowserOpen} onClose={() => { setFileBrowserOpen(false); setSelectedProjects([]); setEditingProjectId(null); }} title="My Floor Plans">
+        <div className="space-y-4">
+          {/* Action Bar */}
+          <div className="flex flex-wrap gap-2 pb-3 border-b border-slate-200">
+            <button
+              onClick={createNewProject}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" /> New
+            </button>
+            <button
+              onClick={() => {
+                if (selectedProjects.length > 0) {
+                  exportProjects(selectedProjects);
+                } else if (currentProjectId) {
+                  exportProjects([currentProjectId]);
+                }
+              }}
+              disabled={selectedProjects.length === 0 && !currentProjectId}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <FileDown className="w-3.5 h-3.5" /> Export {selectedProjects.length > 0 ? `(${selectedProjects.length})` : ''}
+            </button>
+            {selectedProjects.length > 0 && (
+              <>
+                <button
+                  onClick={() => selectedProjects.forEach(id => {
+                    const project = savedProjects.find(p => p.id === id);
+                    if (project) duplicateProject(project);
+                  })}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-medium transition-colors"
+                >
+                  <CopyIcon className="w-3.5 h-3.5" /> Duplicate ({selectedProjects.length})
+                </button>
+                <button
+                  onClick={() => {
+                    if (confirm(`Delete ${selectedProjects.length} project(s)?`)) {
+                      deleteProjects(selectedProjects);
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 border border-red-200 hover:bg-red-100 text-red-600 rounded-lg text-xs font-medium transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Delete ({selectedProjects.length})
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Select All / Deselect All */}
+          {savedProjects.length > 0 && (
+            <div className="flex items-center justify-between">
+              <button
+                onClick={selectAllProjects}
+                className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700"
+              >
+                {selectedProjects.length === savedProjects.length ? (
+                  <><CheckSquare className="w-3.5 h-3.5" /> Deselect All</>
+                ) : (
+                  <><Square className="w-3.5 h-3.5" /> Select All</>
+                )}
+              </button>
+              <span className="text-xs text-slate-400">{savedProjects.length} plan{savedProjects.length !== 1 ? 's' : ''}</span>
+            </div>
+          )}
+
+          {/* Project List */}
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {savedProjects.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <FileText className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No saved floor plans yet</p>
+                <p className="text-xs mt-1">Save your current plan or create a new one</p>
+              </div>
+            ) : (
+              savedProjects.map(project => (
+                <div
+                  key={project.id}
+                  className={`flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer ${
+                    project.id === currentProjectId 
+                      ? 'border-indigo-300 bg-indigo-50' 
+                      : selectedProjects.includes(project.id)
+                        ? 'border-slate-300 bg-slate-50'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                  }`}
+                  onClick={() => {
+                    if (editingProjectId !== project.id) {
+                      toggleProjectSelection(project.id);
+                    }
+                  }}
+                >
+                  {/* Selection Checkbox */}
+                  <div className="flex-shrink-0">
+                    {selectedProjects.includes(project.id) ? (
+                      <CheckSquare className="w-4 h-4 text-indigo-600" />
+                    ) : (
+                      <Square className="w-4 h-4 text-slate-400" />
+                    )}
+                  </div>
+                  
+                  {/* Project Info */}
+                  <div className="flex-1 min-w-0">
+                    {editingProjectId === project.id ? (
+                      <input
+                        type="text"
+                        value={editingName}
+                        onChange={(e) => setEditingName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            renameProject(project.id, editingName);
+                          } else if (e.key === 'Escape') {
+                            setEditingProjectId(null);
+                            setEditingName('');
+                          }
+                        }}
+                        onBlur={() => {
+                          if (editingName.trim()) {
+                            renameProject(project.id, editingName);
+                          } else {
+                            setEditingProjectId(null);
+                            setEditingName('');
+                          }
+                        }}
+                        className="w-full px-2 py-1 text-sm border border-indigo-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        autoFocus
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-slate-800 truncate">{project.name}</span>
+                          {project.id === currentProjectId && (
+                            <span className="text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-medium">Active</span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          {project.data?.roomDims && (
+                            <span>{feetToDisplay(project.data.roomDims.width, unitSystem)} × {feetToDisplay(project.data.roomDims.height, unitSystem)}</span>
+                          )}
+                          <span className="mx-1">•</span>
+                          <span>{new Date(project.updatedAt).toLocaleDateString()}</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <Tooltip text="Open">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); loadProject(project); }}
+                        className="p-1.5 hover:bg-slate-100 rounded text-slate-500 hover:text-indigo-600 transition-colors"
+                      >
+                        <FolderOpen className="w-4 h-4" />
+                      </button>
+                    </Tooltip>
+                    <Tooltip text="Rename">
+                      <button
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          setEditingProjectId(project.id); 
+                          setEditingName(project.name); 
+                        }}
+                        className="p-1.5 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-700 transition-colors"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                    </Tooltip>
+                    <Tooltip text="Duplicate">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); duplicateProject(project); }}
+                        className="p-1.5 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-700 transition-colors"
+                      >
+                        <CopyIcon className="w-4 h-4" />
+                      </button>
+                    </Tooltip>
+                    <Tooltip text="Delete">
+                      <button
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          if (confirm(`Delete "${project.name}"?`)) {
+                            deleteProjects([project.id]);
+                          }
+                        }}
+                        className="p-1.5 hover:bg-red-50 rounded text-slate-500 hover:text-red-600 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </Tooltip>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Import Section */}
+          <div className="pt-3 border-t border-slate-200">
+            <label className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+              <FileUp className="w-4 h-4" /> Import Floor Plan(s)
+            </label>
+            <textarea
+              placeholder="Paste exported JSON here to import floor plan(s)..."
+              value={fileImportText}
+              onChange={(e) => { setFileImportText(e.target.value); setFileImportError(''); }}
+              className="w-full h-20 bg-white border border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 rounded-lg p-2 text-xs font-mono mb-2 outline-none resize-none"
+            />
+            {fileImportError && <p className="text-xs text-red-500 mb-2">{fileImportError}</p>}
+            <button
+              onClick={() => {
+                const count = importProjects(fileImportText);
+                if (count > 0) {
+                  setFileImportText('');
+                }
+              }}
+              disabled={!fileImportText.trim()}
+              className="w-full py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Import
+            </button>
+          </div>
+
+          {/* Save Current */}
+          {currentProjectId && (
+            <div className="pt-3 border-t border-slate-200">
+              <button
+                onClick={() => { saveCurrentProject(); setFileBrowserOpen(false); }}
+                className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                Save Current Plan
+              </button>
+            </div>
+          )}
+        </div>
       </Modal>
 
       {/* Color Picker Modal - Rendered at root level for mobile only */}
