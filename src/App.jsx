@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import { Move, RotateCw, Lock, Unlock, RotateCcw, Info, ArrowLeftRight, ArrowUpDown, ChevronLeft, ChevronRight, Share2, X, Copy, Check, Download, Upload, Plus, Trash2, Eye, EyeOff, Undo2, Redo2, Maximize2, Palette, ZoomIn, ZoomOut, Home, Sofa, ArrowRight, ChevronDown, ChevronUp, FolderOpen, FileText, Edit3, Copy as CopyIcon, MoreVertical, CheckSquare, Square, FileDown, FileUp, AlertTriangle } from 'lucide-react';
+import { Move, RotateCw, Lock, Unlock, RotateCcw, Info, ArrowLeftRight, ArrowUpDown, ChevronLeft, ChevronRight, Share2, X, Copy, Check, Download, Upload, Plus, Trash2, Eye, EyeOff, Undo2, Redo2, Maximize2, Palette, ZoomIn, ZoomOut, Home, Sofa, ArrowRight, ChevronDown, ChevronUp, FolderOpen, FileText, Edit3, Copy as CopyIcon, MoreVertical, CheckSquare, Square, FileDown, FileUp, AlertTriangle, Scan } from 'lucide-react';
 import Knob from './Knob';
 
 // Constants
@@ -702,6 +702,7 @@ export default function RoomSimulator() {
   const [showColorPicker, setShowColorPicker] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [unitSystem, setUnitSystem] = useState(() => {
     try {
       return localStorage.getItem(STORAGE_PREFIX + 'units') || 'ft-in';
@@ -1032,9 +1033,79 @@ export default function RoomSimulator() {
   const [isSnapped, setIsSnapped] = useState(false);
   const knobInstanceRef = useRef(null);
   const containerRef = useRef(null);
+  const hasAutoFitRun = useRef(false);
   const itemsRef = useRef(items);
   const doorsRef = useRef(doors);
   const windowsRef = useRef(windows);
+
+  // Calculate the zoom level needed to fit the room in the container
+  const calculateFitZoom = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return 1;
+    
+    // Get container dimensions (minus padding)
+    const containerRect = container.getBoundingClientRect();
+    const padding = isMobile ? 32 : 64; // p-4 = 16px*2, p-8 = 32px*2
+    const availableWidth = containerRect.width - padding;
+    const availableHeight = containerRect.height - padding;
+    
+    // Room dimensions in pixels
+    const roomWidthPx = roomDims.width * PIXELS_PER_UNIT;
+    const roomHeightPx = roomDims.height * PIXELS_PER_UNIT;
+    
+    // Calculate zoom to fit both dimensions
+    const zoomX = availableWidth / roomWidthPx;
+    const zoomY = availableHeight / roomHeightPx;
+    
+    // Use the smaller zoom to ensure it fits, clamped between 0.25 and 2
+    const fitZoom = Math.min(zoomX, zoomY);
+    return Math.max(0.25, Math.min(2, fitZoom));
+  }, [roomDims.width, roomDims.height, isMobile]);
+
+  // Fit the room to the view
+  const fitToView = useCallback(() => {
+    const newZoom = calculateFitZoom();
+    setZoom(newZoom);
+    setPanOffset({ x: 0, y: 0 });
+  }, [calculateFitZoom]);
+
+  // Auto-fit the room to the view on initial load (especially important for mobile/shared links)
+  useEffect(() => {
+    // Only run once after the container is mounted and we have room dimensions
+    if (hasAutoFitRun.current) return;
+    
+    const container = containerRef.current;
+    if (!container) return;
+    
+    // Longer delay to ensure the container has proper dimensions after layout settles
+    // (sidebar animation is 300ms, plus buffer for rendering)
+    const timer = setTimeout(() => {
+      if (!hasAutoFitRun.current) {
+        hasAutoFitRun.current = true;
+        fitToView();
+      }
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [fitToView]);
+
+  // Re-fit on window resize (debounced)
+  useEffect(() => {
+    let resizeTimer = null;
+    
+    const handleResize = () => {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        fitToView();
+      }, 300);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (resizeTimer) clearTimeout(resizeTimer);
+    };
+  }, [fitToView]);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -1806,12 +1877,23 @@ export default function RoomSimulator() {
     };
   }, [isDragging, isRotating, handleMouseMove, handleMouseUp]);
 
-  // Pinch-to-zoom support
+  // Pinch-to-zoom and pan support
+  // Use a ref to track zoom for event handlers to avoid re-running effect on zoom change
+  const zoomRef = useRef(zoom);
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
+    // Use refs to persist state across the gesture without re-running the effect
     let lastTouchDistance = null;
+    let lastTouchCenter = null;
+    let isPinching = false;
+    let lastSingleTouch = null;
+    let isSingleFingerPanning = false;
 
     const handleWheel = (e) => {
       // Check if this is a pinch gesture (ctrlKey is set for trackpad pinch on Mac)
@@ -1819,8 +1901,15 @@ export default function RoomSimulator() {
         e.preventDefault();
         const delta = -e.deltaY;
         const zoomSpeed = 0.01;
-        const newZoom = Math.max(0.5, Math.min(3, zoom + delta * zoomSpeed));
+        const newZoom = Math.max(0.25, Math.min(3, zoomRef.current + delta * zoomSpeed));
         setZoom(newZoom);
+      } else {
+        // Regular two-finger scroll = pan
+        e.preventDefault();
+        setPanOffset(prev => ({
+          x: prev.x - e.deltaX,
+          y: prev.y - e.deltaY
+        }));
       }
     };
 
@@ -1830,27 +1919,88 @@ export default function RoomSimulator() {
       return Math.sqrt(dx * dx + dy * dy);
     };
 
+    const getTouchCenter = (touches) => ({
+      x: (touches[0].clientX + touches[1].clientX) / 2,
+      y: (touches[0].clientY + touches[1].clientY) / 2
+    });
+
     const handleTouchStart = (e) => {
       if (e.touches.length === 2) {
+        // Two finger gesture - pinch/pan - always allow this
+        isPinching = true;
+        isSingleFingerPanning = false;
         lastTouchDistance = getTouchDistance(e.touches);
+        lastTouchCenter = getTouchCenter(e.touches);
+        e.preventDefault();
+      } else if (e.touches.length === 1) {
+        // Check if touch started on a draggable item (furniture, door handle, window handle)
+        const target = e.target;
+        const isDraggableItem = target.closest('[role="button"]') || 
+                               target.closest('.cursor-grab') ||
+                               target.closest('.cursor-crosshair');
+        
+        // Allow single finger pan on anything that's not a draggable item
+        if (!isDraggableItem) {
+          isSingleFingerPanning = true;
+          lastSingleTouch = {
+            x: e.touches[0].clientX,
+            y: e.touches[0].clientY
+          };
+        }
       }
     };
 
     const handleTouchMove = (e) => {
-      if (e.touches.length === 2 && lastTouchDistance) {
+      if (e.touches.length === 2 && isPinching) {
         e.preventDefault();
+        
+        // Handle zoom
         const currentDistance = getTouchDistance(e.touches);
-        const delta = currentDistance - lastTouchDistance;
-        const zoomSpeed = 0.005;
-        const newZoom = Math.max(0.5, Math.min(3, zoom + delta * zoomSpeed));
-        setZoom(newZoom);
+        if (lastTouchDistance !== null) {
+          const delta = currentDistance - lastTouchDistance;
+          const zoomSpeed = 0.008;
+          const newZoom = Math.max(0.25, Math.min(3, zoomRef.current + delta * zoomSpeed));
+          setZoom(newZoom);
+        }
         lastTouchDistance = currentDistance;
+        
+        // Handle pan
+        const currentCenter = getTouchCenter(e.touches);
+        if (lastTouchCenter !== null) {
+          const deltaX = currentCenter.x - lastTouchCenter.x;
+          const deltaY = currentCenter.y - lastTouchCenter.y;
+          setPanOffset(prev => ({
+            x: prev.x + deltaX,
+            y: prev.y + deltaY
+          }));
+        }
+        lastTouchCenter = currentCenter;
+      } else if (e.touches.length === 1 && isSingleFingerPanning && lastSingleTouch) {
+        // Single finger pan on background
+        e.preventDefault();
+        const currentTouch = {
+          x: e.touches[0].clientX,
+          y: e.touches[0].clientY
+        };
+        const deltaX = currentTouch.x - lastSingleTouch.x;
+        const deltaY = currentTouch.y - lastSingleTouch.y;
+        setPanOffset(prev => ({
+          x: prev.x + deltaX,
+          y: prev.y + deltaY
+        }));
+        lastSingleTouch = currentTouch;
       }
     };
 
     const handleTouchEnd = (e) => {
       if (e.touches.length < 2) {
+        isPinching = false;
         lastTouchDistance = null;
+        lastTouchCenter = null;
+      }
+      if (e.touches.length === 0) {
+        isSingleFingerPanning = false;
+        lastSingleTouch = null;
       }
     };
 
@@ -1866,7 +2016,7 @@ export default function RoomSimulator() {
       container.removeEventListener('touchmove', handleTouchMove);
       container.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [zoom]);
+  }, []); // No dependencies - effect runs once, uses refs for current values
 
   // --- Render Helpers ---
 
@@ -2456,20 +2606,20 @@ export default function RoomSimulator() {
     <div className="flex flex-col h-screen bg-slate-50 text-slate-800 font-sans overflow-hidden">
       
       {/* Header */}
-      <div className="bg-white border-b border-slate-200 px-4 py-2 flex justify-between items-center shadow-sm relative z-50 h-16">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
+      <div className="bg-white border-b border-slate-200 px-3 sm:px-4 py-2 flex justify-between items-center shadow-sm relative z-50 h-12 sm:h-16" style={{ paddingTop: 'max(0.5rem, env(safe-area-inset-top))' }}>
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
             {/* File Browser Button */}
             <Tooltip text="My Floor Plans">
               <button 
                 onClick={() => setFileBrowserOpen(true)}
-                className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors shrink-0"
+                className="p-1.5 sm:p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors shrink-0 flex items-center justify-center"
                 aria-label="Open file browser"
               >
-                <FolderOpen className="w-5 h-5" />
+                <FolderOpen className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             </Tooltip>
             
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 max-w-[200px] sm:max-w-none">
               {editingProjectId === 'header' ? (
                 <input
                   type="text"
@@ -2504,7 +2654,6 @@ export default function RoomSimulator() {
                       setEditingProjectId('header');
                       setEditingName(getCurrentProjectName());
                     } else {
-                      // Auto-save as new project first
                       const newProject = saveCurrentAsProject('Untitled');
                       if (newProject) {
                         setEditingProjectId('header');
@@ -2512,7 +2661,7 @@ export default function RoomSimulator() {
                       }
                     }
                   }}
-                  className="text-left group hover:bg-slate-50 rounded px-1 -mx-1 transition-colors"
+                  className="text-left group hover:bg-slate-50 rounded px-1 -mx-1 transition-colors flex items-center justify-center"
                   title="Click to rename"
                 >
                   <h1 className="text-sm font-bold text-slate-800 leading-tight truncate group-hover:text-indigo-600 transition-colors">
@@ -2521,14 +2670,15 @@ export default function RoomSimulator() {
                   </h1>
                 </button>
               )}
-              <div className="flex items-center gap-1 text-[10px] text-slate-500">
+              {/* Dimensions - hidden on mobile, shown on sm+ */}
+              <div className="hidden sm:flex items-center gap-1 text-[10px] text-slate-500 -mt-0.5">
                 <Maximize2 className="w-3 h-3 shrink-0" />
                 <span className="truncate">{feetToDisplay(roomDims.width, unitSystem)} × {feetToDisplay(roomDims.height, unitSystem)} ({roundNum(roomDims.width * roomDims.height, 1)} sq ft)</span>
               </div>
             </div>
         </div>
         
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1 sm:gap-2">
           {/* Save Status Indicator */}
           <div className="hidden sm:flex items-center gap-1.5 text-[10px] text-slate-400">
             {saveStatus === 'saving' ? (
@@ -2550,12 +2700,12 @@ export default function RoomSimulator() {
           </div>
           
           {/* Undo/Redo */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center">
             <Tooltip text="Undo">
               <button 
                 onClick={undo}
                 disabled={historyIndex <= 0}
-                className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="p-1.5 sm:p-2 hover:bg-slate-100 rounded-lg text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
                 aria-label="Undo"
               >
                 <Undo2 className="w-4 h-4" />
@@ -2565,7 +2715,7 @@ export default function RoomSimulator() {
               <button 
                 onClick={redo}
                 disabled={historyIndex >= history.length - 1}
-                className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="p-1.5 sm:p-2 hover:bg-slate-100 rounded-lg text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
                 aria-label="Redo"
               >
                 <Redo2 className="w-4 h-4" />
@@ -2573,13 +2723,13 @@ export default function RoomSimulator() {
             </Tooltip>
           </div>
 
-          {/* Zoom Controls */}
-          <div className="hidden sm:flex items-center gap-1 bg-slate-50 rounded-lg px-2 py-1">
+          {/* Zoom Controls - only show in header on md+ when sidebar is side-by-side */}
+          <div className="hidden md:flex items-center gap-1 bg-slate-50 rounded-lg px-2 py-1">
             <Tooltip text="Zoom out">
               <button 
-                onClick={() => setZoom(Math.max(0.5, zoom - 0.25))}
-                disabled={zoom <= 0.5}
-                className="p-1.5 hover:bg-slate-200 rounded text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                onClick={() => setZoom(Math.max(0.25, zoom - 0.25))}
+                disabled={zoom <= 0.25}
+                className="p-1.5 hover:bg-slate-200 rounded text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
                 aria-label="Zoom out"
               >
                 <ZoomOut className="w-4 h-4" />
@@ -2590,20 +2740,30 @@ export default function RoomSimulator() {
               <button 
                 onClick={() => setZoom(Math.min(3, zoom + 0.25))}
                 disabled={zoom >= 3}
-                className="p-1.5 hover:bg-slate-200 rounded text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="p-1.5 hover:bg-slate-200 rounded text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
                 aria-label="Zoom in"
               >
                 <ZoomIn className="w-4 h-4" />
+              </button>
+            </Tooltip>
+            <div className="w-px h-4 bg-slate-300 mx-1" />
+            <Tooltip text="Fit to view">
+              <button 
+                onClick={fitToView}
+                className="p-1.5 hover:bg-slate-200 rounded text-slate-600 transition-colors flex items-center justify-center"
+                aria-label="Fit to view"
+              >
+                <Scan className="w-4 h-4" />
               </button>
             </Tooltip>
           </div>
 
           <button 
             onClick={() => setModalOpen(true)}
-            className="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs sm:text-sm font-medium transition-colors shadow-sm"
+            className="flex items-center justify-center gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs sm:text-sm font-medium transition-colors shadow-sm"
             aria-label="Share and save layout"
           >
-            <Share2 className="w-4 h-4" />
+            <Share2 className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Share / Save</span>
           </button>
         </div>
@@ -2614,7 +2774,7 @@ export default function RoomSimulator() {
         {/* Mobile backdrop overlay */}
         {sidebarOpen && (
           <div 
-            className="fixed top-16 bottom-0 left-0 right-0 bg-slate-900/50 z-40 md:hidden animate-fade-in"
+            className="fixed top-12 sm:top-16 bottom-0 left-0 right-0 bg-slate-900/50 z-40 md:hidden animate-fade-in"
             onClick={() => setSidebarOpen(false)}
             aria-hidden="true"
           />
@@ -2622,7 +2782,7 @@ export default function RoomSimulator() {
 
         {/* Sidebar - Full screen on mobile, side panel on desktop */}
         <div 
-            className={`fixed md:relative top-16 md:top-auto bottom-0 md:bottom-auto left-0 right-0 md:inset-auto z-[45] bg-white md:border-r border-slate-200 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent hover:scrollbar-thumb-slate-400 transition-all duration-300 flex flex-col shadow-xl md:shadow-none
+            className={`fixed md:relative top-12 sm:top-16 md:top-auto bottom-0 md:bottom-auto left-0 right-0 md:inset-auto z-[45] bg-white md:border-r border-slate-200 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent hover:scrollbar-thumb-slate-400 transition-all duration-300 flex flex-col shadow-xl md:shadow-none
             ${sidebarOpen ? 'md:w-80 translate-x-0' : 'md:w-0 -translate-x-full md:opacity-0 md:overflow-hidden'}`}
         >
           {/* Mobile header for sidebar */}
@@ -2865,7 +3025,7 @@ export default function RoomSimulator() {
                               <span className="text-xs font-medium text-slate-700">Door {index + 1}</span>
                               <button 
                                 onClick={() => deleteDoor(door.id)}
-                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors flex items-center justify-center"
                                 aria-label="Delete door"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -2968,7 +3128,7 @@ export default function RoomSimulator() {
                               <span className="text-xs font-medium text-slate-700">Window {index + 1}</span>
                               <button 
                                 onClick={() => deleteWindow(win.id)}
-                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors flex items-center justify-center"
                                 aria-label="Delete window"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -3187,7 +3347,7 @@ export default function RoomSimulator() {
                             <Tooltip text={isItemLocked ? "Unlock" : "Lock"}>
                               <button 
                                 onClick={(e) => { e.stopPropagation(); toggleLock(item.id); }}
-                                className={`p-1.5 rounded transition-colors ${isItemLocked ? 'text-amber-600 bg-amber-50 hover:bg-amber-100' : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'}`}
+                                className={`p-1.5 rounded transition-colors flex items-center justify-center ${isItemLocked ? 'text-amber-600 bg-amber-50 hover:bg-amber-100' : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'}`}
                               >
                                 {isItemLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
                               </button>
@@ -3195,7 +3355,7 @@ export default function RoomSimulator() {
                             <Tooltip text={item.visible !== false ? "Hide" : "Show"}>
                               <button 
                                 onClick={(e) => { e.stopPropagation(); toggleVisibility(item.id); }}
-                                className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+                                className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors flex items-center justify-center"
                               >
                                 {item.visible !== false ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
                               </button>
@@ -3203,7 +3363,7 @@ export default function RoomSimulator() {
                             <Tooltip text="Delete">
                               <button 
                                 onClick={(e) => { e.stopPropagation(); deleteItem(item.id); }}
-                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors flex items-center justify-center"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -3354,10 +3514,42 @@ export default function RoomSimulator() {
           </button>
         )}
 
+        {/* Floating Zoom Controls - show on smaller screens when sidebar isn't covering canvas */}
+        {!sidebarOpen && (
+          <div className="fixed bottom-6 left-4 z-40 flex md:hidden items-center gap-1 bg-white/95 backdrop-blur-sm rounded-full shadow-lg px-2 py-1.5 animate-fade-in" style={{ paddingBottom: 'max(0.375rem, env(safe-area-inset-bottom))' }}>
+            <button 
+              onClick={() => setZoom(Math.max(0.25, zoom - 0.25))}
+              disabled={zoom <= 0.25}
+              className="p-2 hover:bg-slate-100 rounded-full text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+              aria-label="Zoom out"
+            >
+              <ZoomOut className="w-5 h-5" />
+            </button>
+            <span className="text-xs font-medium text-slate-600 min-w-[3rem] text-center">{Math.round(zoom * 100)}%</span>
+            <button 
+              onClick={() => setZoom(Math.min(3, zoom + 0.25))}
+              disabled={zoom >= 3}
+              className="p-2 hover:bg-slate-100 rounded-full text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+              aria-label="Zoom in"
+            >
+              <ZoomIn className="w-5 h-5" />
+            </button>
+            <div className="w-px h-5 bg-slate-300 mx-1" />
+            <button 
+              onClick={fitToView}
+              className="p-2 hover:bg-slate-100 rounded-full text-slate-600 transition-colors flex items-center justify-center"
+              aria-label="Fit to view"
+            >
+              <Scan className="w-5 h-5" />
+            </button>
+          </div>
+        )}
+
         {/* Canvas */}
         <div 
-          className="flex-1 bg-slate-100 overflow-auto flex items-center justify-center p-4 md:p-8 relative w-full"
+          className="flex-1 bg-slate-100 overflow-hidden relative w-full"
           ref={containerRef}
+          data-pan-area
         >
           {/* Mode indicator badge */}
           {!(isMobile && sidebarOpen) && (
@@ -3382,16 +3574,24 @@ export default function RoomSimulator() {
             </div>
           )}
 
+          {/* Room - centered with transform, supports pan and zoom */}
           <div 
-            className="bg-white shadow-2xl relative transition-all duration-500 ease-in-out"
+            className="absolute inset-0 flex items-center justify-center"
             style={{
-              width: roomDims.width * PIXELS_PER_UNIT,
-              height: roomDims.height * PIXELS_PER_UNIT,
-              border: '4px solid #334155',
-              transform: `scale(${zoom})`,
-              transformOrigin: 'center'
+              transform: `translate(${panOffset.x}px, ${panOffset.y}px)`
             }}
+            data-pan-area
           >
+            <div 
+              className="bg-white shadow-2xl relative flex-shrink-0"
+              style={{
+                width: roomDims.width * PIXELS_PER_UNIT,
+                height: roomDims.height * PIXELS_PER_UNIT,
+                border: '4px solid #334155',
+                transform: `scale(${zoom})`,
+                transformOrigin: 'center'
+              }}
+            >
             {renderGrid()}
             {renderDoors()}
             {renderWindows()}
@@ -3498,6 +3698,7 @@ export default function RoomSimulator() {
                 </div>
               );
             })}
+          </div>
           </div>
         </div>
       </div>

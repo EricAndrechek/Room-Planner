@@ -44,7 +44,7 @@ A powerful, intuitive room planning tool for designing and visualizing room layo
 
 ---
 
-## � How to Use
+## How to Use
 
 ### Two-Step Design Process
 
@@ -223,15 +223,19 @@ Contributions are welcome! Here's how to get started:
 4. **Push** to the branch (`git push origin feature/amazing-feature`)
 5. **Open** a Pull Request
 
-### Ideas for Contributions
+### Ideas for Contributions / TODOs
 
-- [ ] Furniture presets library (common furniture sizes)
-- [ ] Room templates (bedroom, living room, office)
 - [ ] Export to image/PDF
 - [ ] Measurement tool (click to measure distances)
 - [ ] 3D view / isometric preview
 - [ ] Multi-room floor plans
+- [ ] Non-rectangular room shapes
 - [ ] Furniture snapping/alignment guides
+- [ ] Collaborative editing (real-time multi-user) (while keeping no backend?)
+- [ ] Accessibility improvements (ARIA, keyboard nav)
+- [ ] Export to CAD formats (DXF, SVG)
+- [ ] Reusable furniture library
+- [ ] Reloading the page with a shared link causes a duplicate floor plan to be added with the same name
 
 ---
 

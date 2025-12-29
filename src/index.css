@@ -2,6 +2,29 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Safari iOS button fix - ensure consistent icon centering */
+@layer base {
+  button {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  
+  /* Prevent iOS Safari from scrolling the entire page */
+  html, body {
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Ensure safe area padding for iOS */
+  html {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+}
+
 @layer utilities {
   @keyframes fade-in {
     from {
