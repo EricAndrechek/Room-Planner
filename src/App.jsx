@@ -41,24 +41,59 @@ const FEET_PER_CM = 0.0328084;
 const FEET_PER_INCH = 1/12;
 
 const INITIAL_ITEMS = [
-  { id: 1, label: 'Bed', width: 6, height: 4, x: 2, y: 2, rotation: 0, color: 'bg-blue-200 border-blue-400', visible: true },
-  { id: 2, label: 'Desk', width: 4, height: 2, x: 9, y: 2, rotation: 0, color: 'bg-emerald-200 border-emerald-400', visible: true },
-  { id: 3, label: 'Wardrobe', width: 3, height: 2, x: 2, y: 8, rotation: 0, color: 'bg-amber-200 border-amber-400', visible: true },
-  { id: 4, label: 'Rug', width: 5, height: 8, x: 6, y: 5, rotation: 0, color: 'bg-rose-100 border-rose-300', visible: true },
+  { id: 1, label: 'Bed', width: 6, height: 4, x: 2, y: 2, rotation: 0, color: '#93c5fd', visible: true },
+  { id: 2, label: 'Desk', width: 4, height: 2, x: 9, y: 2, rotation: 0, color: '#6ee7b7', visible: true },
+  { id: 3, label: 'Wardrobe', width: 3, height: 2, x: 2, y: 8, rotation: 0, color: '#fcd34d', visible: true },
+  { id: 4, label: 'Rug', width: 5, height: 8, x: 6, y: 5, rotation: 0, color: '#fecaca', visible: true },
 ];
 
-const COLORS = [
-    'bg-blue-200 border-blue-400', 
-    'bg-emerald-200 border-emerald-400',
-    'bg-amber-200 border-amber-400', 
-    'bg-rose-200 border-rose-400',
-    'bg-indigo-200 border-indigo-400',
-    'bg-cyan-200 border-cyan-400',
-    'bg-purple-200 border-purple-400',
-    'bg-orange-200 border-orange-400',
-    'bg-lime-200 border-lime-400',
-    'bg-fuchsia-200 border-fuchsia-400'
+// Color presets - stored as hex for standardized sharing
+const COLOR_PRESETS = [
+  { name: 'Blue', hex: '#93c5fd', border: '#3b82f6' },
+  { name: 'Green', hex: '#6ee7b7', border: '#10b981' },
+  { name: 'Yellow', hex: '#fcd34d', border: '#f59e0b' },
+  { name: 'Red', hex: '#fecaca', border: '#ef4444' },
+  { name: 'Indigo', hex: '#a5b4fc', border: '#6366f1' },
+  { name: 'Cyan', hex: '#67e8f9', border: '#06b6d4' },
+  { name: 'Purple', hex: '#d8b4fe', border: '#a855f7' },
+  { name: 'Orange', hex: '#fdba74', border: '#f97316' },
+  { name: 'Lime', hex: '#bef264', border: '#84cc16' },
+  { name: 'Pink', hex: '#f9a8d4', border: '#ec4899' },
 ];
+
+// Helper to get border color from a hex (darken it)
+const getBorderColor = (hex) => {
+  // Check if it's a preset
+  const preset = COLOR_PRESETS.find(p => p.hex === hex);
+  if (preset) return preset.border;
+  
+  // For custom colors, darken by 20%
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const darken = (v) => Math.max(0, Math.floor(v * 0.7));
+  return `#${darken(r).toString(16).padStart(2, '0')}${darken(g).toString(16).padStart(2, '0')}${darken(b).toString(16).padStart(2, '0')}`;
+};
+
+// Legacy color migration - convert old Tailwind classes to hex
+const migrateColor = (color) => {
+  if (color.startsWith('#')) return color;
+  // Map old Tailwind classes to hex
+  const legacyMap = {
+    'bg-blue-200 border-blue-400': '#93c5fd',
+    'bg-emerald-200 border-emerald-400': '#6ee7b7',
+    'bg-amber-200 border-amber-400': '#fcd34d',
+    'bg-rose-200 border-rose-400': '#fecaca',
+    'bg-rose-100 border-rose-300': '#fecaca',
+    'bg-indigo-200 border-indigo-400': '#a5b4fc',
+    'bg-cyan-200 border-cyan-400': '#67e8f9',
+    'bg-purple-200 border-purple-400': '#d8b4fe',
+    'bg-orange-200 border-orange-400': '#fdba74',
+    'bg-lime-200 border-lime-400': '#bef264',
+    'bg-fuchsia-200 border-fuchsia-400': '#f9a8d4',
+  };
+  return legacyMap[color] || '#93c5fd';
+};
 
 const MAX_HISTORY = 50;
 
@@ -136,6 +171,44 @@ const feetToDisplay = (feet, unitSystem = 'ft-in') => {
       return `${roundNum(feet / FEET_PER_CM, 1)} cm`;
     default:
       return `${roundNum(feet, 2)}'`;
+  }
+};
+
+// Convert feet to raw numeric value in target unit system (for export)
+const feetToUnitValue = (feet, unitSystem = 'ft-in') => {
+  if (!feet && feet !== 0) return 0;
+  
+  switch (unitSystem) {
+    case 'ft-in': // Store as decimal feet for ft-in to preserve precision
+    case 'ft':
+      return roundNum(feet, 6);
+    case 'in':
+      return roundNum(feet * 12, 4);
+    case 'm':
+      return roundNum(feet / FEET_PER_METER, 6);
+    case 'cm':
+      return roundNum(feet / FEET_PER_CM, 4);
+    default:
+      return roundNum(feet, 6);
+  }
+};
+
+// Convert raw numeric value from source unit system to feet (for import)
+const unitValueToFeet = (value, unitSystem = 'ft-in') => {
+  if (!value && value !== 0) return 0;
+  
+  switch (unitSystem) {
+    case 'ft-in':
+    case 'ft':
+      return value;
+    case 'in':
+      return value / 12;
+    case 'm':
+      return value * FEET_PER_METER;
+    case 'cm':
+      return value * FEET_PER_CM;
+    default:
+      return value;
   }
 };
 
@@ -350,7 +423,167 @@ const Modal = ({ isOpen, onClose, title, children }) => {
     );
 };
 
-const ColorPicker = ({ currentColor, onChange, onClose, isMobile = false }) => {
+const ColorPicker = ({ currentColor, onChange, onClose, isMobile = false, triggerRef }) => {
+  const [showCustom, setShowCustom] = useState(false);
+  const [customHex, setCustomHex] = useState(currentColor.startsWith('#') ? currentColor : '#93c5fd');
+  const [hexError, setHexError] = useState('');
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const pickerRef = useRef(null);
+  
+  const isValidHex = (hex) => /^#[0-9A-Fa-f]{6}$/.test(hex);
+  
+  // Position the picker relative to the trigger button
+  useEffect(() => {
+    if (!isMobile && triggerRef?.current) {
+      const updatePosition = () => {
+        const rect = triggerRef.current.getBoundingClientRect();
+        const pickerWidth = 220;
+        const pickerHeight = 280;
+        
+        let top = rect.bottom + 4;
+        let left = rect.left;
+        
+        // Ensure it doesn't go off the right edge
+        if (left + pickerWidth > window.innerWidth - 8) {
+          left = window.innerWidth - pickerWidth - 8;
+        }
+        
+        // Ensure it doesn't go off the bottom edge
+        if (top + pickerHeight > window.innerHeight - 8) {
+          top = rect.top - pickerHeight - 4;
+        }
+        
+        // Ensure it doesn't go off the left edge
+        if (left < 8) left = 8;
+        
+        setPosition({ top, left });
+      };
+      
+      updatePosition();
+      window.addEventListener('scroll', updatePosition, true);
+      window.addEventListener('resize', updatePosition);
+      
+      return () => {
+        window.removeEventListener('scroll', updatePosition, true);
+        window.removeEventListener('resize', updatePosition);
+      };
+    }
+  }, [isMobile, triggerRef]);
+  
+  const handleCustomSubmit = () => {
+    if (isValidHex(customHex)) {
+      onChange(customHex);
+      onClose();
+    } else {
+      setHexError('Invalid hex code');
+      setTimeout(() => setHexError(''), 2000);
+    }
+  };
+  
+  const isCurrentPreset = COLOR_PRESETS.some(p => p.hex === currentColor);
+  
+  const content = (
+    <>
+      <div className="flex justify-between items-center mb-3">
+        <h3 className="font-semibold text-slate-800 text-sm">Choose Color</h3>
+        {isMobile && (
+          <button 
+            onClick={onClose}
+            className="p-1 hover:bg-slate-100 rounded-full transition-colors"
+            aria-label="Close color picker"
+          >
+            <X className="w-5 h-5 text-slate-500" />
+          </button>
+        )}
+      </div>
+      
+      {/* Preset Colors */}
+      <div className="grid grid-cols-5 gap-2 mb-3">
+        {COLOR_PRESETS.map((preset) => (
+          <button
+            key={preset.hex}
+            onClick={() => {
+              onChange(preset.hex);
+              onClose();
+            }}
+            className={`${isMobile ? 'w-10 h-10' : 'w-7 h-7'} rounded-full border-2 transition-all hover:scale-110 active:scale-95`}
+            style={{ 
+              backgroundColor: preset.hex, 
+              borderColor: preset.border 
+            }}
+            title={preset.name}
+            aria-label={`Select ${preset.name}`}
+          >
+            {currentColor === preset.hex && (
+              <Check className={`${isMobile ? 'w-5 h-5' : 'w-4 h-4'} mx-auto text-slate-700`} />
+            )}
+          </button>
+        ))}
+      </div>
+      
+      {/* Custom Color Section */}
+      <div className="border-t border-slate-200 pt-3">
+        {!showCustom ? (
+          <button
+            onClick={() => setShowCustom(true)}
+            className="w-full flex items-center justify-center gap-2 py-2 text-xs text-slate-600 hover:text-slate-800 hover:bg-slate-50 rounded transition-colors"
+          >
+            <Palette className="w-3.5 h-3.5" />
+            Custom Color {!isCurrentPreset && currentColor.startsWith('#') && `(${currentColor})`}
+          </button>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <label 
+                className="w-8 h-8 rounded-lg border-2 border-slate-300 shrink-0 cursor-pointer shadow-sm hover:border-slate-400 hover:shadow transition-all relative overflow-hidden"
+                style={{ backgroundColor: isValidHex(customHex) ? customHex : '#fff' }}
+                title="Click to open color picker"
+              >
+                <input
+                  type="color"
+                  value={isValidHex(customHex) ? customHex : '#93c5fd'}
+                  onChange={(e) => {
+                    setCustomHex(e.target.value);
+                    setHexError('');
+                  }}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                />
+              </label>
+              <input
+                type="text"
+                value={customHex}
+                onChange={(e) => {
+                  let val = e.target.value;
+                  if (!val.startsWith('#')) val = '#' + val;
+                  setCustomHex(val.slice(0, 7));
+                  setHexError('');
+                }}
+                onKeyDown={(e) => e.key === 'Enter' && handleCustomSubmit()}
+                placeholder="#93c5fd"
+                className={`flex-1 px-2 py-1 text-xs font-mono border rounded ${hexError ? 'border-red-400' : 'border-slate-200'} focus:outline-none focus:ring-1 focus:ring-indigo-500`}
+              />
+            </div>
+            {hexError && <p className="text-[10px] text-red-500">{hexError}</p>}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowCustom(false)}
+                className="flex-1 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCustomSubmit}
+                className="flex-1 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded transition-colors"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
   if (isMobile) {
     return (
       <div 
@@ -358,59 +591,28 @@ const ColorPicker = ({ currentColor, onChange, onClose, isMobile = false }) => {
         onClick={onClose}
       >
         <div 
-          className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:w-auto sm:min-w-[280px] p-6 animate-slide-up"
+          className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:w-auto sm:min-w-[280px] p-4 animate-slide-up"
           onClick={(e) => e.stopPropagation()}
           data-color-picker
         >
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-semibold text-slate-800">Choose Color</h3>
-            <button 
-              onClick={onClose}
-              className="p-1 hover:bg-slate-100 rounded-full transition-colors"
-              aria-label="Close color picker"
-            >
-              <X className="w-5 h-5 text-slate-500" />
-            </button>
-          </div>
-          <div className="grid grid-cols-5 gap-3">
-            {COLORS.map((color) => (
-              <button
-                key={color}
-                onClick={() => {
-                  onChange(color);
-                  onClose();
-                }}
-                className={`w-12 h-12 rounded-full border-2 transition-all active:scale-95 ${color.split(' ')[0]} ${
-                  currentColor === color ? 'ring-2 ring-indigo-500 ring-offset-2 scale-110' : 'border-slate-300'
-                }`}
-                aria-label={`Select color ${color}`}
-              />
-            ))}
-          </div>
+          {content}
         </div>
       </div>
     );
   }
 
-  return (
+  // Desktop: render via portal to avoid z-index/overflow issues
+  return ReactDOM.createPortal(
     <div 
-      className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-xl border border-slate-200 p-3 z-50 grid grid-cols-5 gap-2"
+      ref={pickerRef}
+      className="fixed bg-white rounded-lg shadow-xl border border-slate-200 p-3 z-[9999] min-w-[200px] animate-fade-in"
+      style={{ top: position.top, left: position.left }}
       data-color-picker
+      onClick={(e) => e.stopPropagation()}
     >
-      {COLORS.map((color) => (
-        <button
-          key={color}
-          onClick={() => {
-            onChange(color);
-            onClose();
-          }}
-          className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 active:scale-95 ${color.split(' ')[0]} ${
-            currentColor === color ? 'ring-2 ring-indigo-500 ring-offset-2' : 'border-slate-300'
-          }`}
-          aria-label={`Select color ${color}`}
-        />
-      ))}
-    </div>
+      {content}
+    </div>,
+    document.body
   );
 };
 
@@ -662,12 +864,48 @@ export default function RoomSimulator() {
       const configStr = params.get('config');
       if (configStr) {
           const parsed = decodeConfig(configStr);
-          if (parsed) {
-              if (parsed.roomDims) setRoomDims(parsed.roomDims);
-              if (parsed.doors) setDoors(parsed.doors);
-              else if (parsed.door) setDoors([{ ...parsed.door, id: 1, type: parsed.door.open === 'in' ? 'swing-in' : 'swing-out' }]);
-              if (parsed.windows) setWindows(parsed.windows);
-              if (parsed.items) setItems(parsed.items);
+          if (parsed && parsed.roomDims && parsed.items) {
+              // Convert from source unit system to internal feet storage
+              const sourceUnitSystem = parsed.unitSystem || 'ft';
+              const convertLength = (value) => unitValueToFeet(value, sourceUnitSystem);
+              
+              setRoomDims({
+                width: convertLength(parsed.roomDims.width),
+                height: convertLength(parsed.roomDims.height)
+              });
+              
+              if (parsed.doors) {
+                setDoors(parsed.doors.map(d => ({
+                  ...d,
+                  width: convertLength(d.width),
+                  position: convertLength(d.position)
+                })));
+              } else if (parsed.door) {
+                setDoors([{ 
+                  ...parsed.door, 
+                  id: 1, 
+                  type: parsed.door.open === 'in' ? 'swing-in' : 'swing-out',
+                  width: convertLength(parsed.door.width),
+                  position: convertLength(parsed.door.position)
+                }]);
+              }
+              
+              if (parsed.windows) {
+                setWindows(parsed.windows.map(w => ({
+                  ...w,
+                  width: convertLength(w.width),
+                  position: convertLength(w.position)
+                })));
+              }
+              
+              setItems(parsed.items.map(i => ({
+                ...i,
+                x: convertLength(i.x),
+                y: convertLength(i.y),
+                width: convertLength(i.width),
+                height: convertLength(i.height),
+                color: migrateColor(i.color)
+              })));
           }
       }
   }, []);
@@ -954,9 +1192,71 @@ export default function RoomSimulator() {
     saveToHistory();
   };
 
+  // Convert config values to specified unit system for export (preserves precision)
+  const exportConfigInUnits = (targetUnitSystem) => {
+    const convertLength = (feet) => feetToUnitValue(feet, targetUnitSystem);
+    
+    return {
+      unitSystem: targetUnitSystem,
+      roomDims: {
+        width: convertLength(roomDims.width),
+        height: convertLength(roomDims.height)
+      },
+      doors: doors.map(d => ({
+        ...d,
+        width: convertLength(d.width),
+        position: convertLength(d.position)
+      })),
+      windows: windows.map(w => ({
+        ...w,
+        width: convertLength(w.width),
+        position: convertLength(w.position)
+      })),
+      items: items.map(i => ({
+        ...i,
+        x: convertLength(i.x),
+        y: convertLength(i.y),
+        width: convertLength(i.width),
+        height: convertLength(i.height),
+        color: migrateColor(i.color) // Ensure colors are hex for sharing
+      }))
+    };
+  };
+
+  // Import config and convert from source unit system to feet (internal storage)
+  const importConfigFromUnits = (config) => {
+    const sourceUnitSystem = config.unitSystem || 'ft'; // Legacy configs are in feet
+    const convertLength = (value) => unitValueToFeet(value, sourceUnitSystem);
+    
+    return {
+      roomDims: {
+        width: convertLength(config.roomDims.width),
+        height: convertLength(config.roomDims.height)
+      },
+      doors: (config.doors || []).map(d => ({
+        ...d,
+        width: convertLength(d.width),
+        position: convertLength(d.position)
+      })),
+      windows: (config.windows || []).map(w => ({
+        ...w,
+        width: convertLength(w.width),
+        position: convertLength(w.position)
+      })),
+      items: (config.items || []).map(i => ({
+        ...i,
+        x: convertLength(i.x),
+        y: convertLength(i.y),
+        width: convertLength(i.width),
+        height: convertLength(i.height),
+        color: migrateColor(i.color) // Ensure colors are migrated
+      }))
+    };
+  };
+
   const getShareUrl = () => {
     try {
-      const config = { roomDims, doors, windows, items };
+      const config = exportConfigInUnits(unitSystem);
       const encoded = encodeConfig(config);
       const url = new URL(window.location.href);
       url.searchParams.set('config', encoded);
@@ -977,17 +1277,26 @@ export default function RoomSimulator() {
           const parsed = JSON.parse(importText);
           if (!parsed.roomDims || !parsed.items) throw new Error("Invalid Config");
           
-          setRoomDims(parsed.roomDims);
+          const converted = importConfigFromUnits(parsed);
+          
+          setRoomDims(converted.roomDims);
           // Handle legacy single door format
           if (parsed.doors) {
-            setDoors(parsed.doors);
+            setDoors(converted.doors);
           } else if (parsed.door) {
-            setDoors([{ ...parsed.door, id: 1, type: parsed.door.open === 'in' ? 'swing-in' : 'swing-out' }]);
+            const sourceUnitSystem = parsed.unitSystem || 'ft';
+            setDoors([{ 
+              ...parsed.door, 
+              id: 1, 
+              type: parsed.door.open === 'in' ? 'swing-in' : 'swing-out',
+              width: unitValueToFeet(parsed.door.width, sourceUnitSystem),
+              position: unitValueToFeet(parsed.door.position, sourceUnitSystem)
+            }]);
           } else {
             setDoors(INITIAL_DOORS);
           }
-          setWindows(parsed.windows || INITIAL_WINDOWS);
-          setItems(parsed.items);
+          setWindows(converted.windows.length > 0 ? converted.windows : INITIAL_WINDOWS);
+          setItems(converted.items);
           setModalOpen(false);
           setImportText('');
           setImportError(null);
@@ -2055,7 +2364,7 @@ export default function RoomSimulator() {
     });
   };
 
-  const fullConfigJson = JSON.stringify({ roomDims, doors, windows, items }, null, 2);
+  const fullConfigJson = JSON.stringify(exportConfigInUnits(unitSystem), null, 2);
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 text-slate-800 font-sans overflow-hidden">
@@ -2651,31 +2960,42 @@ export default function RoomSimulator() {
                   </div>
 
                   <div className="space-y-3">
-                    {items.map((item) => (
-                      <div key={item.id} className={`p-3 bg-white rounded-lg border transition-all duration-200 ${item.visible === false ? 'opacity-60 border-dashed' : 'border-slate-200'} ${activeId === item.id && activeType === 'item' ? 'ring-2 ring-emerald-500' : ''} overflow-hidden`}>
+                    {items.map((item) => {
+                      const colorButtonRef = React.createRef();
+                      const isSelected = activeId === item.id && activeType === 'item';
+                      return (
+                      <div 
+                        key={item.id} 
+                        className={`p-3 bg-white rounded-lg border transition-all duration-200 cursor-pointer hover:border-emerald-300 ${item.visible === false ? 'opacity-60 border-dashed' : 'border-slate-200'} ${isSelected ? 'ring-2 ring-emerald-500' : ''} overflow-hidden`}
+                        onClick={() => { setActiveId(item.id); setActiveType('item'); }}
+                      >
                         <div className="flex justify-between items-center mb-3 gap-2">
                           <div className="flex items-center gap-2 flex-1 min-w-0 relative">
                             <button
-                              onClick={() => setShowColorPicker(showColorPicker === item.id ? null : item.id)}
-                              className={`w-6 h-6 rounded-full ${item.color.split(' ')[0]} border-2 border-slate-300 hover:border-emerald-500 transition-colors cursor-pointer shrink-0`}
+                              ref={colorButtonRef}
+                              onClick={(e) => { e.stopPropagation(); setShowColorPicker(showColorPicker === item.id ? null : item.id); }}
+                              className="w-6 h-6 rounded-full border-2 border-slate-300 hover:border-emerald-500 transition-colors cursor-pointer shrink-0"
+                              style={{ backgroundColor: migrateColor(item.color) }}
                               aria-label="Change item color"
                               data-color-button
                             />
                             {!isMobile && showColorPicker === item.id && (
                               <ColorPicker
-                                currentColor={item.color}
+                                currentColor={migrateColor(item.color)}
                                 onChange={(color) => {
                                   setItems(items.map(i => i.id === item.id ? { ...i, color } : i));
                                   saveToHistory();
                                 }}
                                 onClose={() => setShowColorPicker(null)}
                                 isMobile={false}
+                                triggerRef={colorButtonRef}
                               />
                             )}
                             <input 
                               value={item.label}
                               onChange={(e) => setItems(items.map(i => i.id === item.id ? { ...i, label: e.target.value } : i))}
                               onBlur={saveToHistory}
+                              onClick={(e) => e.stopPropagation()}
                               className="bg-transparent font-medium text-slate-700 border-b border-transparent hover:border-slate-300 focus:border-emerald-500 outline-none min-w-0 flex-1 text-sm truncate"
                               aria-label="Item label"
                             />
@@ -2683,7 +3003,7 @@ export default function RoomSimulator() {
                           <div className="flex items-center shrink-0">
                             <Tooltip text={item.visible !== false ? "Hide" : "Show"}>
                               <button 
-                                onClick={() => toggleVisibility(item.id)}
+                                onClick={(e) => { e.stopPropagation(); toggleVisibility(item.id); }}
                                 className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
                               >
                                 {item.visible !== false ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
@@ -2691,7 +3011,7 @@ export default function RoomSimulator() {
                             </Tooltip>
                             <Tooltip text="Delete">
                               <button 
-                                onClick={() => deleteItem(item.id)}
+                                onClick={(e) => { e.stopPropagation(); deleteItem(item.id); }}
                                 className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -2785,7 +3105,7 @@ export default function RoomSimulator() {
                           </div>
                         </div>
                       </div>
-                    ))}
+                    )})}
                     {items.length === 0 && (
                       <div className="text-center py-6 text-slate-400 text-xs italic border-2 border-dashed border-slate-200 rounded-lg">
                         No furniture added. Click "Add Item" to start.
@@ -2856,6 +3176,7 @@ export default function RoomSimulator() {
             {items.filter(i => i.visible !== false).map((item) => {
               const isActive = activeId === item.id && activeType === 'item';
               const isFurnitureLocked = designMode === DESIGN_MODES.ROOM_SETUP;
+              const itemColor = migrateColor(item.color);
               
               return (
                 <div
@@ -2863,7 +3184,7 @@ export default function RoomSimulator() {
                   onMouseDown={(e) => handleMouseDown(e, item.id, 'drag', 'item')}
                   onTouchStart={(e) => handleMouseDown(e, item.id, 'drag', 'item')}
                   onClick={() => { setActiveId(item.id); setActiveType('item'); }}
-                  className={`absolute flex items-center justify-center text-xs font-bold text-slate-700 select-none transition-shadow ${item.color} ${
+                  className={`absolute flex items-center justify-center text-xs font-bold text-slate-700 select-none transition-shadow rounded-md ${
                     isFurnitureLocked 
                       ? 'cursor-not-allowed opacity-50' 
                       : 'cursor-grab active:cursor-grabbing'
@@ -2872,6 +3193,8 @@ export default function RoomSimulator() {
                     width: item.width * PIXELS_PER_UNIT,
                     height: item.height * PIXELS_PER_UNIT,
                     transform: `translate(${item.x * PIXELS_PER_UNIT}px, ${item.y * PIXELS_PER_UNIT}px) rotate(${item.rotation}deg)`,
+                    backgroundColor: itemColor,
+                    borderColor: getBorderColor(itemColor),
                     borderWidth: '2px',
                     zIndex: isActive ? 50 : 10,
                     boxShadow: isActive && !isFurnitureLocked ? '0 8px 20px -4px rgba(0, 0, 0, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.08)',
@@ -3235,7 +3558,7 @@ export default function RoomSimulator() {
         if (!currentItem) return null;
         return (
           <ColorPicker
-            currentColor={currentItem.color}
+            currentColor={migrateColor(currentItem.color)}
             onChange={(color) => {
               setItems(items.map(i => i.id === showColorPicker ? { ...i, color } : i));
               saveToHistory();
