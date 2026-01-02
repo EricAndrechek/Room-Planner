@@ -231,19 +231,107 @@ const formatDimension = (feet) => {
   return `${wholeFeet}'${inches}"`;
 };
 
-const checkItemsCollision = (item1, item2) => {
-  // Simple AABB collision (ignoring rotation for simplicity)
-  return !(item1.x + item1.width < item2.x ||
-           item2.x + item2.width < item1.x ||
-           item1.y + item1.height < item2.y ||
-           item2.y + item2.height < item1.y);
+// --- Rotation-aware collision detection helpers ---
+
+// Get the four corners of a rotated rectangle
+// CSS transform: translate(x, y) rotate(deg) with default transform-origin (center)
+// This means: first rotate around element's center, then translate to position
+const getRotatedCorners = (item) => {
+  const { x, y, width, height, rotation = 0 } = item;
+  const rad = (rotation * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  
+  // The center of the rectangle after translation
+  const centerX = x + width / 2;
+  const centerY = y + height / 2;
+  
+  // Define corners relative to center (before rotation)
+  const corners = [
+    { dx: -width / 2, dy: -height / 2 },   // top-left
+    { dx: width / 2, dy: -height / 2 },    // top-right
+    { dx: width / 2, dy: height / 2 },     // bottom-right
+    { dx: -width / 2, dy: height / 2 },    // bottom-left
+  ];
+  
+  // Rotate each corner around center
+  return corners.map(({ dx, dy }) => ({
+    x: centerX + dx * cos - dy * sin,
+    y: centerY + dx * sin + dy * cos,
+  }));
 };
 
+// Get the axes to test for SAT (Separating Axis Theorem)
+// For two rectangles, we need to test the 4 edge normals (2 per rectangle)
+const getAxes = (corners) => {
+  const axes = [];
+  for (let i = 0; i < corners.length; i++) {
+    const p1 = corners[i];
+    const p2 = corners[(i + 1) % corners.length];
+    // Edge vector
+    const edge = { x: p2.x - p1.x, y: p2.y - p1.y };
+    // Normal (perpendicular) - we only need 2 unique axes per rectangle
+    const normal = { x: -edge.y, y: edge.x };
+    // Normalize
+    const len = Math.sqrt(normal.x * normal.x + normal.y * normal.y);
+    if (len > 0) {
+      axes.push({ x: normal.x / len, y: normal.y / len });
+    }
+  }
+  // Only return 2 unique axes (opposite edges are parallel)
+  return [axes[0], axes[1]];
+};
+
+// Project corners onto an axis and return min/max
+const projectOntoAxis = (corners, axis) => {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const corner of corners) {
+    const proj = corner.x * axis.x + corner.y * axis.y;
+    min = Math.min(min, proj);
+    max = Math.max(max, proj);
+  }
+  return { min, max };
+};
+
+// Check if two projections overlap
+const projectionsOverlap = (p1, p2) => {
+  return p1.max >= p2.min && p2.max >= p1.min;
+};
+
+// Check collision between two rotated rectangles using SAT
+const checkItemsCollision = (item1, item2) => {
+  const corners1 = getRotatedCorners(item1);
+  const corners2 = getRotatedCorners(item2);
+  
+  // Get axes from both rectangles
+  const axes1 = getAxes(corners1);
+  const axes2 = getAxes(corners2);
+  const allAxes = [...axes1, ...axes2];
+  
+  // If we find a separating axis, the rectangles don't collide
+  for (const axis of allAxes) {
+    const proj1 = projectOntoAxis(corners1, axis);
+    const proj2 = projectOntoAxis(corners2, axis);
+    if (!projectionsOverlap(proj1, proj2)) {
+      return false; // Found a separating axis, no collision
+    }
+  }
+  
+  return true; // No separating axis found, collision detected
+};
+
+// Check if all corners of a rotated item are within room bounds
 const isItemInBounds = (item, roomDims) => {
-  return item.x >= 0 && 
-         item.y >= 0 && 
-         item.x + item.width <= roomDims.width && 
-         item.y + item.height <= roomDims.height;
+  const corners = getRotatedCorners(item);
+  // Small epsilon for floating point tolerance
+  const epsilon = 0.001;
+  return corners.every(corner => 
+    corner.x >= -epsilon && 
+    corner.y >= -epsilon && 
+    corner.x <= roomDims.width + epsilon && 
+    corner.y <= roomDims.height + epsilon
+  );
 };
 
 // Format time ago string
@@ -1197,10 +1285,9 @@ export default function RoomSimulator() {
         if (e.key === 'ArrowUp') newY -= step;
         if (e.key === 'ArrowDown') newY += step;
         
-        // Constrain to room bounds
-        newX = clamp(newX, 0, roomDims.width - item.width);
-        newY = clamp(newY, 0, roomDims.height - item.height);
-        
+        // Note: We don't clamp to room bounds here because items can be rotated,
+        // making simple bounds clamping incorrect. The visual warning indicators
+        // will show when items are out of bounds.
         const newItems = [...items];
         newItems[itemIndex] = { ...item, x: newX, y: newY };
         setItems(newItems);
