@@ -1,11 +1,9 @@
-interface ImportMetaEnv {
-  /** PostHog project token (public). Unset = analytics disabled. */
-  readonly PUBLIC_POSTHOG_KEY?: string;
-  /** PostHog API host; defaults to the same-origin `/ingest` proxy. */
-  readonly PUBLIC_POSTHOG_HOST?: string;
-  /** `production` (default) | `preview`. */
-  readonly PUBLIC_DEPLOY_ENV?: string;
+/** The PostHog web snippet (src/components/PostHog.astro) installs `window.posthog`. */
+interface Window {
+  posthog?: {
+    capture(event: string, props?: Record<string, unknown>): void;
+    captureException(error: unknown, props?: Record<string, unknown>): void;
+    opt_in_capturing(): void;
+    opt_out_capturing(): void;
+  };
 }
-
-/** Injected at build time (astro.config.mjs `vite.define`). */
-declare const __APP_VERSION__: string;
