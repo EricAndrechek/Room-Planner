@@ -185,16 +185,29 @@ const onWall = (o: { position: number; width: number }, room: RoomDims, wall: Wa
 // Bezier handle length for a quarter circle.
 const KAPPA = 0.5522847498;
 
+/** The wall gap for a door (drawn with the walls, under the furniture). */
+const doorCutNode = (door: Door, room: RoomDims, s: number, T: number): GroupNode => {
+  const wall = door.wall || 'bottom';
+  const pt = wallFrame(wall, room, s);
+  const w = Math.min(door.width, wallLength(room, wall)) * s;
+  const p = onWall(door, room, wall) * s;
+  return {
+    kind: 'group',
+    role: 'door-opening',
+    attrs: { wall },
+    // Slightly over-drawn so no hairline of wall remains.
+    children: [{ kind: 'path', d: quad(pt, p, p + w, 0.6, -T - 0.6), fill: '#ffffff' }],
+  };
+};
+
+/** The door itself: leaf and swing arc, or sliding panels (drawn over the furniture). */
 const doorNode = (door: Door, room: RoomDims, s: number, T: number): GroupNode => {
   const wall = door.wall || 'bottom';
   const type = door.type || 'swing-in';
   const pt = wallFrame(wall, room, s);
   const w = Math.min(door.width, wallLength(room, wall)) * s;
   const p = onWall(door, room, wall) * s;
-  const children: SceneNode[] = [
-    // The opening: cut the wall (slightly over-drawn so no hairline of wall remains).
-    { kind: 'path', d: quad(pt, p, p + w, 0.6, -T - 0.6), fill: '#ffffff' },
-  ];
+  const children: SceneNode[] = [];
   if (type === 'sliding') {
     const t = Math.max(1.5, T * 0.24);
     const panel = (a0: number, a1: number, dc: number): PathNode => ({
@@ -553,10 +566,11 @@ export const buildPlanScene = (input: PlanInput): Scene => {
         : []),
     ],
   });
-  for (const item of items) planNodes.push(itemNode(item, unitSystem, s));
-  // Openings go over the furniture (as the editor's jambs do), so a rug or bed
-  // never hides a door swing - the clearance it needs stays visible.
   for (const win of layout.windows) planNodes.push(windowNode(win, room, s, T));
+  for (const door of layout.doors) planNodes.push(doorCutNode(door, room, s, T));
+  for (const item of items) planNodes.push(itemNode(item, unitSystem, s));
+  // Door leaves and swings go over the furniture, so a rug or bed never hides
+  // the clearance a door needs.
   for (const door of layout.doors) planNodes.push(doorNode(door, room, s, T));
   planNodes.push(
     dimension(0, W, dimTop, -T - 3, feetToDisplay(room.width, unitSystem), false),

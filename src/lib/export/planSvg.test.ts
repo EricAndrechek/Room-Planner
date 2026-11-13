@@ -192,6 +192,15 @@ describe('planSvg', () => {
     expect(Math.min(...ys)).toBeCloseTo(room.y + 9 * s, 1);
   });
 
+  it('cuts door openings under the furniture but draws door swings over it', () => {
+    const scene = buildPlanScene(input(sample));
+    const roles = scene.nodes.flatMap((n) => (n.kind === 'group' ? [n.role] : []));
+    const first = (role: string) => roles.indexOf(role);
+    expect(first('room')).toBeLessThan(first('door-opening'));
+    expect(first('door-opening')).toBeLessThan(first('item'));
+    expect(roles.lastIndexOf('item')).toBeLessThan(first('door'));
+  });
+
   it('annotates dimensions in the chosen unit system', () => {
     const layout: Layout = {
       ...sample,
