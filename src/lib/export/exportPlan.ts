@@ -51,11 +51,11 @@ const isIOS = (): boolean =>
 /**
  * Hand a generated file to the user. On iOS this opens the share sheet (Save Image, Save to Files,
  * AirDrop, Print): a blob `<a download>` there only lands in Files > Downloads behind a confirmation,
- * and does nothing useful in a home-screen (standalone) web app. Everywhere else, and whenever
+ * and is unreliable in a home-screen (standalone) web app. Everywhere else, and whenever
  * sharing is unavailable or refused (e.g. the click's user activation expired during rendering),
  * it is a regular download.
  */
-export const saveFile = async (blob: Blob, filename: string): Promise<void> => {
+const saveFile = async (blob: Blob, filename: string): Promise<void> => {
   if (isIOS() && typeof navigator.canShare === 'function') {
     const file = new File([blob], filename, { type: blob.type });
     if (navigator.canShare({ files: [file] })) {
