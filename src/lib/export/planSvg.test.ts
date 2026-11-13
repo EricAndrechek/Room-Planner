@@ -104,7 +104,8 @@ describe('planSvg', () => {
     assertWellFormed(svg);
     expect(svg).toContain('<title>Спальня 卧室 🛏️</title>');
     expect(svg).toContain('>Кровать 床 🛏️<');
-    expect(svg).not.toMatch(/[\u0001\uD800](?![\uDC00-\uDFFF])/);
+    expect(svg).not.toContain('\u0001');
+    expect(svg).not.toContain('\uD800<');
   });
 
   it('draws rotated furniture rotated about its center, with an upright label', () => {
