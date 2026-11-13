@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = Number(process.env.E2E_PORT ?? 4329);
+const PORT = Number(process.env.E2E_PORT ?? 43291);
 // Set E2E_BASE_URL to test an already-running server (e.g. `wrangler dev`); no webServer is started.
 const EXTERNAL_BASE_URL = process.env.E2E_BASE_URL;
 
@@ -26,7 +26,8 @@ export default defineConfig({
         // Builds first so the spec always runs against the current static output.
         command: `pnpm run build && pnpm exec astro preview --ignore-lock --port ${PORT} --host localhost`,
         url: `http://localhost:${PORT}/`,
-        reuseExistingServer: !process.env.CI,
+        // Never reuse: a leftover server on this port could silently serve a stale dist.
+        reuseExistingServer: false,
         timeout: 120_000,
       },
 });
