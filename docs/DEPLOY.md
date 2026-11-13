@@ -1,9 +1,9 @@
 # Deploying Room Planner (Cloudflare Workers)
 
-Hosting is two Cloudflare Workers. The app is a Worker with static assets (`wrangler.jsonc`, served
+Hosting is one Cloudflare Worker. The app is a Worker with static assets (`wrangler.jsonc`, served
 at `room-planner.andrechek.com`): `dist/` is served by the assets layer. It is an assets-only Worker (no `main`, no Worker code, no invocations or Worker
-limits). The second Worker, `room-planner-legacy` (`legacy/`), serves the old hostname
-`roomplanner.andrechek.com` (section 5). PostHog analytics go directly from the browser to PostHog US cloud; there is no proxy.
+limits). The old hostname `roomplanner.andrechek.com` is a Cloudflare redirect rule, not a Worker
+(section 5). PostHog analytics go directly from the browser to PostHog US cloud; there is no proxy.
 
 The `andrechek.com` zone lives in the maintainer's Cloudflare account.
 
@@ -13,12 +13,12 @@ Cloudflare builds from GitHub on push; there are no GitHub Actions deploy jobs a
 secrets. (`.github/workflows/ci.yml` only runs the tests on PRs.)
 
 - **Production**: a push to `main` builds and deploys the Worker.
-  Build command `pnpm build:ci`, deploy command `pnpm run deploy` (the repo script deploys both
-  Workers; the legacy one needs no build output).
-  **Gotcha:** Workers Builds sets `WRANGLER_CI_OVERRIDE_NAME` (and `WRANGLER_CI_MATCH_TAG`) for the
-  connected Worker, and Wrangler applies them to _every_ deploy in the build, so a second
-  `wrangler deploy -c legacy/...` silently uploads the legacy code **as `room-planner`** and steals its
-  custom domain. `deploy:legacy` clears both variables (`env -u ...`) for that reason; keep it.
+  Build command `pnpm build:ci`, deploy command `pnpm run deploy` (`wrangler deploy`).
+  **Gotcha (only relevant if a second Worker is ever deployed from this repo):** Workers Builds
+  sets `WRANGLER_CI_OVERRIDE_NAME` (and `WRANGLER_CI_MATCH_TAG`) for the connected Worker, and
+  Wrangler applies them to _every_ deploy in the build, so a second `wrangler deploy -c other/...`
+  silently uploads that code **as `room-planner`** and steals its custom domain. Clear both
+  variables for the second deploy (`env -u WRANGLER_CI_OVERRIDE_NAME -u WRANGLER_CI_MATCH_TAG wrangler deploy -c ...`).
 - **Previews**: pushes to other branches (and PRs) run `npx wrangler preview` as the
   non-production branch deploy command. The preview URL
   (`<alias>-room-planner.<subdomain>.workers.dev`) shows in the Cloudflare dashboard (Workers >
@@ -40,33 +40,28 @@ public site.
 
 ## 2. Cutover to `room-planner.andrechek.com`
 
-A Workers custom domain cannot be attached while a DNS record already exists for that hostname. Both
-hostnames are in the `andrechek.com` zone (Universal SSL wildcard covers them), so each Worker serves
-HTTPS as soon as its record exists. The main Worker owns `room-planner.andrechek.com`; the legacy
-Worker owns `roomplanner.andrechek.com`.
+A Workers custom domain cannot be attached while a DNS record already exists for that hostname. The
+main Worker owns `room-planner.andrechek.com` (Universal SSL covers it).
 
-1. **Prepare**: update the Workers Builds deploy command (section 1) so both Workers deploy.
-2. **New domain first**: nothing else uses `room-planner`, so merge to `main` and let the build deploy.
-   The main Worker attaches `room-planner.andrechek.com`. Verify it before touching the old name.
-3. **Move the old hostname**: in the Cloudflare dashboard, remove the old `roomplanner.andrechek.com`
+1. **New domain first**: merge to `main` and let the build deploy. The Worker attaches
+   `room-planner.andrechek.com`. Verify it before touching the old name.
+2. **Move the old hostname**: in the Cloudflare dashboard, remove the old `roomplanner.andrechek.com`
    custom domain from the `room-planner` Worker (Settings > Domains & Routes), delete any left-over
-   DNS record for it, and deploy the legacy Worker (`pnpm deploy:legacy` or retry the build). Its
-   `custom_domain` route recreates the record. Do these back to back; downtime is about a minute.
-4. **Verify** (see section 5), and that PostHog sees `environment: production` on the new host.
-5. **Disable GitHub Pages** if it is still enabled:
+   DNS record for it, then create the redirect described in section 5.
+3. **Verify** (see section 5), and that PostHog sees `environment: production` on the new host.
+4. **Disable GitHub Pages** if it is still enabled:
    `gh api -X DELETE repos/EricAndrechek/Room-Planner/pages`.
 
 Owner TODO: in Google Search Console add the new domain as a property and use **Settings > Change of
-address** from the old property to the new one (the legacy Worker already answers crawlers with `301`s
-to the same path, which is what Change of address requires). Update any external links you control.
+address** from the old property to the new one (the redirect answers every request with a `301` to
+the same path, which is what Change of address requires). Update any external links you control.
 
 ### Rollback
 
 - Bad release: `pnpm exec wrangler rollback` (or dashboard > Workers > room-planner > Deployments >
   rollback), or revert the commit and push.
-- The bridge misbehaves: the data is never deleted from the old origin (the bridge only reads it), so a
-  fix can be redeployed any time. To fall back to a plain redirect, ship a legacy Worker that always
-  returns `301` (`redirectTo` in `legacy/lib.ts`); visitors who already migrated keep their data.
+- The old-hostname redirect misbehaves: disable or edit the Single Redirect rule in the Cloudflare
+  dashboard; nothing in this repo is involved.
 
 ## 3. Local development
 
@@ -83,50 +78,23 @@ pnpm exec wrangler deploy --dry-run --outdir /tmp/out   # validate config, no up
 `src/components/PostHog.astro` initialises PostHog with `api_host: "https://us.i.posthog.com"`; the CSP must allow `https://*.posthog.com`.
 The CSP lives in `public/_headers` (rationale in the comment there).
 
-## 5. The legacy hostname (`roomplanner.andrechek.com`)
+## 5. The old hostname (`roomplanner.andrechek.com`)
 
-`legacy/` is a separate Worker (`legacy/wrangler.jsonc`, name `room-planner-legacy`, `TARGET_ORIGIN`
-var). The logic is in `legacy/lib.ts`, the entry in `legacy/index.ts`. Deploy: `pnpm deploy:legacy`;
-it is also part of the Workers Builds deploy command.
+`roomplanner.andrechek.com` is a Cloudflare **Single Redirect rule** on the `andrechek.com` zone,
+managed in the Cloudflare dashboard/API, not in this repo:
 
-| Request                                                                                                                                                                  | Response                                                                                                                                                                                                                                                                                             |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /sw.js`                                                                                                                                                             | Kill-switch service worker (`Cache-Control: no-store`): skips waiting, deletes all caches, unregisters itself and reloads every controlled tab. Visitors who installed the old PWA keep a service worker serving the cached old app; browsers re-fetch `/sw.js` on navigation, so they pick this up. |
-| Crawlers (Googlebot, bingbot, `bot`/`crawler`/`spider`/`preview` UAs), assets (`/_astro/*`, icons, manifest, og-image...) and anything that is not a document navigation | `301` to `TARGET_ORIGIN + path + search` (`308` for non-GET)                                                                                                                                                                                                                                         |
-| Browser navigations                                                                                                                                                      | Bridge HTML: `no-store`, `noindex`, canonical link, `<noscript>` meta refresh, CSP allowing only its own inline script/style by hash                                                                                                                                                                 |
+- Match: hostname equals `roomplanner.andrechek.com`.
+- Action: dynamic redirect, status `301`, target
+  `concat("https://room-planner.andrechek.com", http.request.uri.path)` with **Preserve query
+  string** on.
+- The rule only fires for proxied hostnames, so the zone needs a proxied placeholder DNS record:
+  `AAAA roomplanner 100::` (proxied, orange cloud).
 
-The bridge script retires any service worker and caches (best effort, at most ~1 s), collects every
-`localStorage` key starting with `room-planner-`, `room-sim-v<n>-` or `rp:`, and redirects to
-`TARGET_ORIGIN + path + search + '#rp-migrate=' + payload`, where the payload is
-`base64url(deflate-raw(JSON))` of `{ v: 1, keys: {...}, path, search, hash }`
-(`#rp-migrate-j=` is the uncompressed variant for browsers without `CompressionStream`; `hash` is the
-original fragment, e.g. a `#s=` share link). With no app data it redirects to the plain URL. If the URL
-would exceed ~1.5 MB it offers a downloadable backup (the app's own "projects" export format, for
-Import) and a Continue link instead. The old origin's data is never deleted.
+Projects saved in the browser on the old origin are **not migrated** (owner's decision; `localStorage`
+is per-origin). `#s=` share links survive because browsers keep the URL fragment across redirects.
 
-On arrival, `src/lib/migrate.ts` (before anything reads storage) decodes the payload and merges it:
-
-- Target has no `room-planner-projects` or layout keys: every carried key is written verbatim.
-- Otherwise `room-planner-projects` is merged by project id (the copy with the newer `updatedAt`
-  wins; ties and missing timestamps keep the existing copy; new ids are appended) and every other key
-  is written only if absent.
-- A corrupt payload is ignored (error captured), the URL is cleaned, boot continues. The URL is then
-  restored to the original path, query and fragment. Event: `domain_migration_imported`.
-
-Verify after cutover:
+Verify:
 
 ```sh
-curl -sI -A Googlebot https://roomplanner.andrechek.com/help/    # 301 -> https://room-planner.andrechek.com/help/
-curl -s https://roomplanner.andrechek.com/sw.js | head -3        # kill switch
-curl -sI -H 'Sec-Fetch-Dest: document' -H 'Accept: text/html' https://roomplanner.andrechek.com/   # 200 bridge, no-store
-```
-
-Local end-to-end test (`e2e/migrate.spec.ts`; skipped unless both URLs are set):
-
-```sh
-pnpm build
-pnpm exec wrangler dev --port 8787 --inspector-port 9331 &
-pnpm exec wrangler dev -c legacy/wrangler.jsonc --port 8788 --inspector-port 9332 \
-  --var TARGET_ORIGIN:http://localhost:8787 &
-E2E_BASE_URL=http://localhost:8787 E2E_LEGACY_URL=http://127.0.0.1:8788 pnpm exec playwright test migrate
+curl -sI https://roomplanner.andrechek.com/help/?x=1    # 301, location: https://room-planner.andrechek.com/help/?x=1
 ```

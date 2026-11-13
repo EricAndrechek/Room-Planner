@@ -152,22 +152,20 @@ Open [http://localhost:4321](http://localhost:4321) in your browser.
 
 ### Scripts
 
-| Command              | What it does                                                                                           |
-| -------------------- | ------------------------------------------------------------------------------------------------------ |
-| `pnpm dev`           | Astro dev server                                                                                       |
-| `pnpm build`         | Static build into `dist/` (also generates the service worker and manifest)                             |
-| `pnpm preview`       | Serve `dist/` locally                                                                                  |
-| `pnpm check`         | Type-check (`astro check` plus `legacy/`, TypeScript strict)                                           |
-| `pnpm lint`          | ESLint (typescript-eslint + react-hooks)                                                               |
-| `pnpm format`        | Prettier (with `prettier-plugin-astro`)                                                                |
-| `pnpm test`          | Vitest unit tests (app and `legacy/` Worker)                                                           |
-| `pnpm test:e2e`      | Playwright specs (Chromium) against a fresh build on port 43291                                        |
-| `pnpm assets`        | Regenerate icons and social images from `brand/`                                                       |
-| `pnpm screenshots`   | Regenerate the PWA manifest screenshots (needs a running preview server)                               |
-| `pnpm dev:worker`    | Build, then serve `dist/` locally with `wrangler dev`                                                  |
-| `pnpm dev:legacy`    | Run the legacy redirect Worker locally on port 8788 (see below)                                        |
-| `pnpm deploy`        | Deploy both Workers (normally done by Cloudflare Workers Builds; see [docs/DEPLOY.md](docs/DEPLOY.md)) |
-| `pnpm deploy:legacy` | Deploy only the legacy redirect Worker                                                                 |
+| Command            | What it does                                                                                         |
+| ------------------ | ---------------------------------------------------------------------------------------------------- |
+| `pnpm dev`         | Astro dev server                                                                                     |
+| `pnpm build`       | Static build into `dist/` (also generates the service worker and manifest)                           |
+| `pnpm preview`     | Serve `dist/` locally                                                                                |
+| `pnpm check`       | Type-check (`astro check`, TypeScript strict)                                                        |
+| `pnpm lint`        | ESLint (typescript-eslint + react-hooks)                                                             |
+| `pnpm format`      | Prettier (with `prettier-plugin-astro`)                                                              |
+| `pnpm test`        | Vitest unit tests                                                                                    |
+| `pnpm test:e2e`    | Playwright specs (Chromium) against a fresh build on port 43291                                      |
+| `pnpm assets`      | Regenerate icons and social images from `brand/`                                                     |
+| `pnpm screenshots` | Regenerate the PWA manifest screenshots (needs a running preview server)                             |
+| `pnpm dev:worker`  | Build, then serve `dist/` locally with `wrangler dev`                                                |
+| `pnpm deploy`      | Deploy the Worker (normally done by Cloudflare Workers Builds; see [docs/DEPLOY.md](docs/DEPLOY.md)) |
 
 To run the e2e suite against an already-running server (for example `wrangler dev`
 on port 8787, which also exercises the CSP headers), set `E2E_BASE_URL`:
@@ -179,19 +177,12 @@ The public site URL used for canonical links, Open Graph tags, the sitemap and
 
 ### The old domain (`roomplanner.andrechek.com`)
 
-The app moved from `roomplanner.andrechek.com`. Saved projects live in `localStorage`, which is
-per-origin, so a plain redirect would strand them. The old hostname is therefore served by a
-second, tiny Worker in [`legacy/`](legacy/) (`room-planner-legacy`):
-
-- Browsers get a bridge page that packs the old origin's app keys into the URL fragment
-  (`#rp-migrate=<base64url(deflate-raw(JSON))>`, never sent to a server) and redirects to the new
-  origin. `src/lib/migrate.ts` imports them before boot (merging by project id, newer `updatedAt`
-  wins) and restores the originally requested URL, so `#s=` and `?config=` share links still work.
-- Crawlers, assets and non-navigation requests get a plain `301` to the same path.
-- `/sw.js` is a kill-switch service worker that retires the old PWA's cache for returning visitors.
-
-Run `pnpm dev:legacy` (with `--var TARGET_ORIGIN:http://localhost:8787`) to try it locally; the
-end-to-end test is `e2e/migrate.spec.ts` (see its header). Details: [docs/DEPLOY.md](docs/DEPLOY.md).
+The app moved from `roomplanner.andrechek.com`. The old hostname is a Cloudflare **Single Redirect
+rule** on the `andrechek.com` zone (301 to `https://room-planner.andrechek.com` plus the path, query
+preserved), managed in the Cloudflare dashboard/API, not in this repo. Projects saved in the
+browser on the old origin are not migrated (owner's decision; `localStorage` is per-origin). `#s=`
+share links keep working because browsers carry the fragment across redirects. Details:
+[docs/DEPLOY.md](docs/DEPLOY.md).
 
 ### Analytics
 
