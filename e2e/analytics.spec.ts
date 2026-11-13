@@ -2,10 +2,10 @@ import { expect, test } from '@playwright/test';
 
 // Playwright sets navigator.webdriver, so analytics must stay fully off (no SDK, no network)
 // regardless of host.
-test('analytics stays off under automation: no /rpq requests', async ({ page }) => {
+test('analytics stays off under automation: no PostHog requests', async ({ page }) => {
   const hits: string[] = [];
   page.on('request', (r) => {
-    if (r.url().includes('/rpq')) hits.push(r.url());
+    if (new URL(r.url()).hostname.endsWith('posthog.com')) hits.push(r.url());
   });
   for (const path of ['/', '/help/']) {
     await page.goto(path);

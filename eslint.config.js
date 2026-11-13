@@ -8,7 +8,6 @@ import tseslint from 'typescript-eslint';
 export default defineConfig(
   {
     ignores: [
-      'worker/worker-configuration.d.ts',
       'dist/',
       '.astro/',
       'node_modules/',
@@ -31,7 +30,7 @@ export default defineConfig(
     },
   },
   {
-    files: ['*.{js,mjs,ts}', 'e2e/**/*.ts', 'brand/**/*.mjs', 'worker/**/*.ts'],
+    files: ['*.{js,mjs,ts}', 'e2e/**/*.ts', 'brand/**/*.mjs'],
     languageOptions: { globals: { ...globals.node } },
   },
 );

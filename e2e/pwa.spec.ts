@@ -86,7 +86,7 @@ test('the whole app works offline', async ({ page, context }) => {
   expect(shareUrl).toMatch(/#s=/);
   await page.getByLabel('Close modal').click();
 
-  // The service worker never caches or intercepts the analytics proxy.
+  // The service worker never precaches PostHog (cross-origin, no runtimeCaching).
   const cached = await page.evaluate(async () => {
     const urls: string[] = [];
     for (const name of await caches.keys())
@@ -95,7 +95,6 @@ test('the whole app works offline', async ({ page, context }) => {
     return urls;
   });
   expect(cached.length).toBeGreaterThan(8);
-  expect(cached.filter((u) => u.startsWith('/rpq'))).toEqual([]);
   expect(cached.filter((u) => /og-image|screenshots|\.map$/.test(u))).toEqual([]);
   expect(cached).toEqual(expect.arrayContaining(['/', '/help/', '/manifest.webmanifest']));
 

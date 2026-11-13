@@ -32,8 +32,7 @@ const appVersion = sha ? `${pkg.version}+${sha.trim().slice(0, 7)}` : pkg.versio
   // Off under automation (tests) and on localhost, unless opted in for manual debugging.
   if (debug || (!navigator.webdriver && !local)) {
     posthog.init('phc_ykKVRqy82jxfkj4MNtEUhTRZKSLUQ2sDtUXizUoWQ77r', {
-      api_host: '/rpq', // same-origin reverse proxy (worker/proxy.ts); the path is deliberately not obvious
-      ui_host: 'https://us.posthog.com',
+      api_host: 'https://us.i.posthog.com',
       defaults: '2026-08-30',
       person_profiles: 'identified_only',
       capture_exceptions: true,

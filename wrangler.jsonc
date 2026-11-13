@@ -1,17 +1,13 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "room-planner",
-  "main": "worker/index.ts",
   "compatibility_date": "2026-11-13",
   // No account_id here on purpose: it comes from CLOUDFLARE_ACCOUNT_ID (CI secret / local env).
+  // Assets-only Worker: no `main`, so no Worker code ever runs; the assets layer serves everything.
   "assets": {
     "directory": "./dist",
-    "binding": "ASSETS",
     // Astro emits dist/404.html; serve it (with a 404 status) for unknown paths.
     "not_found_handling": "404-page",
-    // Static requests are served by the assets layer without invoking the Worker (free, no CPU).
-    // Only the PostHog reverse proxy runs Worker code.
-    "run_worker_first": ["/rpq/*"],
   },
   // Custom domain. Cloudflare creates the DNS record itself, so any existing
   // `roomplanner` CNAME must be deleted first (see docs/DEPLOY.md).

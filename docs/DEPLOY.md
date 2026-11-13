@@ -1,8 +1,8 @@
 # Deploying Room Planner (Cloudflare Workers)
 
 Hosting is a Cloudflare Worker with static assets (`wrangler.jsonc`): `dist/` is served by the
-assets layer (no Worker invocation), and `worker/index.ts` only handles `/rpq/*`, a reverse
-proxy to PostHog US cloud so ad blockers do not drop events.
+assets layer. It is an assets-only Worker (no `main`, no Worker code, no invocations or Worker
+limits). PostHog analytics go directly from the browser to PostHog US cloud; there is no proxy.
 
 The `andrechek.com` zone lives in the maintainer's Cloudflare account.
 
@@ -46,7 +46,7 @@ downtime is about a minute. Do steps 2 and 3 back to back.
    after `pnpm exec wrangler login` to the account that owns the zone: `pnpm build && pnpm deploy`.
    The custom domain in `wrangler.jsonc` recreates the DNS record.
 4. **Verify** `https://roomplanner.andrechek.com`: app loads, headers (`curl -I`), a missing path
-   shows the 404 page, `/rpq/static/array.js` returns JS, events arrive in PostHog, service
+   shows the 404 page, the `_headers` CSP applies, events arrive in PostHog, service
    worker registers, no CSP violations in the console.
 5. **Disable GitHub Pages**: `gh api -X DELETE repos/EricAndrechek/Room-Planner/pages`.
 
@@ -64,14 +64,13 @@ downtime is about a minute. Do steps 2 and 3 back to back.
 
 ```sh
 pnpm build
-pnpm dev:worker         # serves dist/ + the /rpq proxy on http://localhost:8787
+pnpm dev:worker         # serves dist/ (assets only) on http://localhost:8787
 pnpm exec wrangler deploy --dry-run --outdir /tmp/out   # validate config, no upload
 ```
 
-`_headers` (from `public/`, copied into `dist/`) applies in `wrangler dev`. Regenerate Worker types
-after changing `wrangler.jsonc`: `pnpm exec wrangler types worker/worker-configuration.d.ts`.
+`_headers` (from `public/`, copied into `dist/`) applies in `wrangler dev`.
 
 ## 4. App requirements
 
-`src/components/PostHog.astro` initialises PostHog with `api_host: "/rpq"` and `ui_host: "https://us.posthog.com"`; the proxy path must stay in sync with `worker/proxy.ts`, `wrangler.jsonc` and `pwa-options.mjs`.
+`src/components/PostHog.astro` initialises PostHog with `api_host: "https://us.i.posthog.com"`; the CSP must allow `https://*.posthog.com`.
 The CSP lives in `public/_headers` (rationale in the comment there).

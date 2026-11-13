@@ -73,9 +73,9 @@ export const pwaOptions = {
     // from it; /help/ and 404 are precached pages of their own; unknown paths go to the network (404).
     navigateFallback: '/',
     // Only `/` may fall back to the app shell (so unknown URLs still get the real 404 online);
-    // the denylist is belt and braces for the analytics proxy and /help/.
+    // the denylist is belt and braces for /help/.
     navigateFallbackAllowlist: [/^\/(\?.*)?$/],
-    navigateFallbackDenylist: [/^\/rpq\//, /^\/help\//],
+    navigateFallbackDenylist: [/^\/help\//],
     // `/?config=...` (legacy share links) and tracking params must hit the precached `/`.
     ignoreURLParametersMatching: [/.*/],
     cleanupOutdatedCaches: true,
@@ -83,7 +83,7 @@ export const pwaOptions = {
     // skipWaiting is deliberately off: with registerType 'prompt' the update toast posts
     // SKIP_WAITING (updateSW(true)) so the swap happens when the user clicks Reload.
     skipWaiting: false,
-    // No runtimeCaching at all: /rpq/* is never intercepted or cached.
+    // No runtimeCaching at all: cross-origin PostHog requests are never intercepted or cached.
     runtimeCaching: [],
   },
   devOptions: { enabled: false },

@@ -164,7 +164,7 @@ Open [http://localhost:4321](http://localhost:4321) in your browser.
 | `pnpm test:e2e`    | Playwright specs (Chromium) against a fresh build on port 43291                                      |
 | `pnpm assets`      | Regenerate icons and social images from `brand/`                                                     |
 | `pnpm screenshots` | Regenerate the PWA manifest screenshots (needs a running preview server)                             |
-| `pnpm dev:worker`  | Build, then run the Cloudflare Worker locally with `wrangler dev`                                    |
+| `pnpm dev:worker`  | Build, then serve `dist/` locally with `wrangler dev`                                                |
 | `pnpm deploy`      | `wrangler deploy` (normally done by Cloudflare Workers Builds; see [docs/DEPLOY.md](docs/DEPLOY.md)) |
 
 To run the e2e suite against an already-running server (for example `wrangler dev`
@@ -178,13 +178,12 @@ The public site URL used for canonical links, Open Graph tags, the sitemap and
 ### Analytics
 
 Anonymous, cookieless analytics and error tracking come from PostHog's web snippet
-(`src/components/PostHog.astro`), sent through the same-origin `/rpq` reverse proxy
-(`worker/proxy.ts`). There is no build-time configuration: the project token is a public
+(`src/components/PostHog.astro`), sent straight to PostHog US cloud
+(`us.i.posthog.com`); ad blockers may block it, which is accepted. There is no build-time configuration: the project token is a public
 client token, and the `environment` property (`production` / `preview` / `development`) is
 derived from the hostname at runtime. Analytics is off under automation (`navigator.webdriver`)
 and on `localhost`. To debug it, run `localStorage['rp:analytics-debug']='1'` in the browser
-console and reload (works on localhost too; enables `debug` logging). In `pnpm dev`, `/rpq` is
-proxied to PostHog; with `wrangler dev` the Worker does it.
+console and reload (works on localhost too; enables `debug` logging).
 
 Deployment and the domain cutover are documented in [docs/DEPLOY.md](docs/DEPLOY.md).
 
