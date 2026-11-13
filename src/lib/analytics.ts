@@ -12,6 +12,7 @@ export type AnalyticsEvent =
   | 'project_deleted'
   | 'furniture_added'
   | 'furniture_removed'
+  | 'room_cleared'
   | 'door_added'
   | 'window_added'
   | 'share_link_created'
