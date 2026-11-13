@@ -76,7 +76,7 @@ describe('planSvg', () => {
     expect(svg.match(/data-role="item"/g)).toHaveLength(INITIAL_ITEMS.length);
     expect(svg.match(/data-role="door"/g)).toHaveLength(1);
     expect(svg.match(/data-role="window"/g)).toHaveLength(1);
-    for (const name of ['Bed', 'Desk', 'Wardrobe', 'Rug']) expect(svg).toContain(`>${name}<`);
+    for (const name of ['Bed', 'Desk', 'Dresser', 'Chair']) expect(svg).toContain(`>${name}<`);
   });
 
   it('escapes labels and titles', () => {
@@ -215,7 +215,7 @@ describe('planSvg', () => {
       buildPlanScene(input({ ...sample, roomDims: { width: 12.5, height: 10 } })).nodes,
     );
     expect(imperial).toEqual(
-      expect.arrayContaining([`12'6"`, `10'`, `12'6" × 10' · 125 sq ft`, `6' × 4'`]),
+      expect.arrayContaining([`12'6"`, `10'`, `12'6" × 10' · 125 sq ft`, `5' × 6'6"`]),
     );
     expect(texts(buildPlanScene(input(sample, { unitSystem: 'in' })).nodes)).toContain('144 in');
   });
