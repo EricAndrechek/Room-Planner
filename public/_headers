@@ -20,6 +20,9 @@
 #        from subdomains that change over time, so its docs recommend the wildcard
 #        (https://posthog.com/docs/advanced/content-security-policy). Toolbar/surveys are not used,
 #        so no extra img-src/style-src/frame-src entries.
+#  - Cloudflare Web Analytics: the andrechek.com zone auto-injects its RUM beacon
+#        (static.cloudflareinsights.com script, reports to cloudflareinsights.com), so both are
+#        allowed in script-src / connect-src. Drop them if that zone setting is turned off.
 #  - worker-src 'self' blob: data:      service worker (/sw.js) and PostHog replay web worker.
 #  - manifest-src 'self'
 #  - object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'.
@@ -31,7 +34,7 @@
   X-Frame-Options: DENY
   Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), interest-cohort=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://*.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://*.posthog.com; worker-src 'self' blob: data:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://*.posthog.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://*.posthog.com https://cloudflareinsights.com; worker-src 'self' blob: data:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
 
 # Hashed build output: cache forever.
 /_astro/*

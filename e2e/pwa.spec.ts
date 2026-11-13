@@ -82,8 +82,9 @@ test('the whole app works offline', async ({ page, context }) => {
   await page.getByLabel('Floor plan name').fill('Offline plan');
   await page.getByLabel('Floor plan name').press('Enter');
   await page.getByRole('button', { name: 'Share and save layout' }).click();
+  // The link is compressed asynchronously; wait for it before reading.
+  await expect(page.locator('#share-url')).toHaveValue(/#s=/);
   const shareUrl = await page.locator('#share-url').inputValue();
-  expect(shareUrl).toMatch(/#s=/);
   await page.getByLabel('Close modal').click();
 
   // The service worker never precaches PostHog (cross-origin, no runtimeCaching).
