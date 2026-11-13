@@ -23,6 +23,12 @@ const shortcuts = [
   { keys: ['Arrow keys'], action: 'Move the selected item by 3 inches (0.25 ft)' },
   { keys: ['Shift', 'Arrow keys'], action: 'Move the selected item by 1 foot' },
   { keys: ['R'], action: 'Rotate the selected item by 90°' },
+  { keys: ['Shift', 'R'], action: 'Rotate the selected item by 90° the other way' },
+  {
+    keys: ['Tab'],
+    action:
+      'Move between furniture pieces (or door and window handles in Room Setup); focusing one selects it, so the keys above work without a mouse',
+  },
 ];
 
 const sections = [
@@ -58,7 +64,11 @@ const sections = [
     </div>
   </header>
 
-  <main class="max-w-3xl mx-auto px-4 py-10 text-slate-700 leading-relaxed">
+  <main
+    id="main"
+    tabindex="-1"
+    class="outline-hidden max-w-3xl mx-auto px-4 py-10 text-slate-700 leading-relaxed"
+  >
     <h1 class="text-3xl font-bold text-slate-900 mb-3">Help &amp; FAQ</h1>
     <p class="text-lg text-slate-600 mb-8">
       {SITE_NAME} is a free, drag-and-drop room layout tool. Draw your room to scale, add doors and
@@ -66,7 +76,7 @@ const sections = [
     </p>
 
     <nav aria-label="Contents" class="mb-10 bg-white border border-slate-200 rounded-xl p-5">
-      <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">On this page</h2>
+      <h2 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">On this page</h2>
       <ol class="grid sm:grid-cols-2 gap-x-6 gap-y-1 list-decimal list-inside text-sm">
         {sections.map((s) => (
           <li>

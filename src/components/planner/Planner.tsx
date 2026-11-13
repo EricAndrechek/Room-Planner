@@ -7,6 +7,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { Home, Sofa } from 'lucide-react';
+import { useAnnouncements } from '../../hooks/useAnnouncements';
 import { useHistory } from '../../hooks/useHistory';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
@@ -118,6 +119,7 @@ export function Planner({ storage, initial }: PlannerProps) {
     () => computeItemWarnings(layout.items, layout.roomDims),
     [layout.items, layout.roomDims],
   );
+  const live = useAnnouncements(layout, warnings, unitSystem, projects.saveStatus);
   const shareConfig = useMemo(
     () => toShareConfig(layout, projectName, unitSystem),
     [layout, projectName, unitSystem],
@@ -145,15 +147,17 @@ export function Planner({ storage, initial }: PlannerProps) {
   // --- Undo / redo -----------------------------------------------------------------
   const undo = useCallback(() => {
     if (!history.canUndo) return;
+    live.noteAction('Undo');
     history.undo();
     track('undo');
-  }, [history]);
+  }, [history, live]);
 
   const redo = useCallback(() => {
     if (!history.canRedo) return;
+    live.noteAction('Redo');
     history.redo();
     track('redo');
-  }, [history]);
+  }, [history, live]);
 
   // --- Furniture -------------------------------------------------------------------
   const selectItem = useCallback((id: Id) => setSelection({ id, type: 'item' }), []);
@@ -360,6 +364,34 @@ export function Planner({ storage, initial }: PlannerProps) {
     selection?.type === 'item' ? layout.items.find((i) => i.id === selection.id) : undefined;
   const canEditSelected = !!selectedItem && !isRoomSetup && !selectedItem.locked;
 
+  /** Return keyboard focus to the canvas (e.g. after the focused piece is deselected or removed). */
+  const focusCanvas = useCallback(() => {
+    const canvas = containerRef.current;
+    if (
+      canvas &&
+      (document.activeElement === document.body || canvas.contains(document.activeElement))
+    ) {
+      canvas.focus({ preventScroll: true });
+    }
+  }, []);
+
+  /** Slide the selected door/window along its wall (room setup only). */
+  const nudgeOpening = (dx: number, dy: number): boolean => {
+    if (!isRoomSetup || (selection?.type !== 'door' && selection?.type !== 'window')) return false;
+    const kind = selection.type === 'door' ? 'doors' : 'windows';
+    const id = selection.id;
+    applyLayout((l) => ({
+      ...l,
+      [kind]: (l[kind] as (Door | RoomWindow)[]).map((o) => {
+        if (o.id !== id) return o;
+        const len = wallLength(l.roomDims, o.wall);
+        const delta = isHorizontalWall(o.wall) ? dx : dy;
+        return { ...o, position: clamp(o.position + delta, 0, len - o.width) };
+      }),
+    }));
+    return true;
+  };
+
   useKeyboardShortcuts(
     {
       undo,
@@ -367,14 +399,16 @@ export function Planner({ storage, initial }: PlannerProps) {
       deleteSelected: () => {
         if (!selectedItem || isRoomSetup) return false;
         deleteItem(selectedItem.id);
+        requestAnimationFrame(focusCanvas);
         return true;
       },
       deselect: () => {
         setSelection(null);
         setColorPickerItemId(null);
+        focusCanvas();
       },
       nudge: (dx, dy) => {
-        if (!canEditSelected) return false;
+        if (!canEditSelected) return nudgeOpening(dx, dy);
         applyLayout((l) => ({
           ...l,
           items: l.items.map((i) =>
@@ -383,9 +417,11 @@ export function Planner({ storage, initial }: PlannerProps) {
         }));
         return true;
       },
-      rotateSelected: () => {
+      rotateSelected: (direction = 1) => {
         if (!canEditSelected) return false;
-        changeItem(selectedItem.id, { rotation: (selectedItem.rotation + 90) % 360 });
+        changeItem(selectedItem.id, {
+          rotation: (((selectedItem.rotation + 90 * direction) % 360) + 360) % 360,
+        });
         return true;
       },
     },
@@ -444,6 +480,16 @@ export function Planner({ storage, initial }: PlannerProps) {
 
   return (
     <div className="flex flex-col h-full bg-slate-50 text-slate-800 font-sans overflow-hidden relative">
+      <a
+        href="#floor-plan"
+        onClick={(e) => {
+          e.preventDefault();
+          containerRef.current?.focus();
+        }}
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[200] focus:px-3 focus:py-2 focus:bg-white focus:text-indigo-700 focus:rounded-lg focus:shadow-lg focus:font-medium"
+      >
+        Skip to floor plan
+      </a>
       <Header
         projectName={projectName}
         roomDims={layout.roomDims}
@@ -537,7 +583,7 @@ export function Planner({ storage, initial }: PlannerProps) {
             className={`fixed bottom-6 right-6 z-40 text-white rounded-full pl-4 pr-5 py-3 shadow-lg flex items-center gap-2 transition-all active:scale-95 animate-fade-in ${
               isRoomSetup
                 ? 'bg-indigo-600 hover:bg-indigo-700'
-                : 'bg-emerald-600 hover:bg-emerald-700'
+                : 'bg-emerald-700 hover:bg-emerald-800'
             }`}
             aria-label={isRoomSetup ? 'Edit room settings' : 'Edit furniture'}
           >
@@ -573,6 +619,7 @@ export function Planner({ storage, initial }: PlannerProps) {
           unitSystem={unitSystem}
           zoom={zoom}
           pan={pan}
+          onSelectOpening={(type, id) => setSelection({ id, type })}
           showModeBadge={!(isMobile && sidebarOpen)}
           onItemPointerDown={onItemPointerDown}
           onRotatePointerDown={onRotatePointerDown}
@@ -612,9 +659,15 @@ export function Planner({ storage, initial }: PlannerProps) {
         onImport={projects.importFile}
         onSaveCurrent={() => {
           projects.saveNow();
+          live.announce('Project saved');
           setFilesOpen(false);
         }}
       />
+
+      {/* Screen-reader announcements: moves, rotations, new overlaps, undo/redo, saves. */}
+      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {live.message}
+      </div>
 
       <PwaNotices />
 

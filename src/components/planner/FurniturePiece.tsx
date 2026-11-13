@@ -1,4 +1,4 @@
-import { memo, type PointerEvent as ReactPointerEvent } from 'react';
+import { memo, useId, type PointerEvent as ReactPointerEvent } from 'react';
 import { AlertTriangle, Lock, RotateCw } from 'lucide-react';
 import { getBorderColor, migrateColor } from '../../lib/colors';
 import { PIXELS_PER_UNIT } from '../../lib/constants';
@@ -29,6 +29,7 @@ export const FurniturePiece = memo(function FurniturePiece({
   onRotatePointerDown,
   onSelect,
 }: FurniturePieceProps) {
+  const descId = useId();
   const isItemLocked = !!item.locked;
   const isLocked = modeLocked || isItemLocked;
   const color = migrateColor(item.color);
@@ -70,18 +71,46 @@ export const FurniturePiece = memo(function FurniturePiece({
             : '0 1px 3px rgba(0, 0, 0, 0.08)',
         touchAction: 'none',
       }}
+      onFocus={() => {
+        if (!isActive) onSelect(item);
+      }}
+      onKeyDown={(e) => {
+        // Enter/Space "press" the piece (selecting it); arrows, R and Delete are global shortcuts.
+        if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+          e.preventDefault();
+          onSelect(item);
+        }
+      }}
       role="button"
       tabIndex={0}
+      aria-pressed={isActive}
       data-draggable
       data-item-id={item.id}
-      aria-label={`${item.label}, ${feetToDisplay(item.width, unitSystem)} by ${feetToDisplay(item.height, unitSystem)}${isLocked ? ' (locked)' : ''}${hasWarning ? ' (warning)' : ''}`}
+      aria-label={`${item.label}, ${feetToDisplay(item.width, unitSystem)} by ${feetToDisplay(item.height, unitSystem)}, at ${feetToDisplay(item.x, unitSystem)}, ${feetToDisplay(item.y, unitSystem)}, rotated ${Math.round(item.rotation)}°`}
+      aria-describedby={descId}
     >
-      <span className="truncate px-1">{item.label}</span>
+      <span id={descId} className="sr-only">
+        {[
+          modeLocked
+            ? 'Locked while editing the room.'
+            : isItemLocked
+              ? 'Locked; unlock it in the furniture list to move it.'
+              : 'Arrow keys move, R rotates, Delete removes.',
+          warning?.outOfBounds ? 'Outside the room.' : '',
+          warning?.collision ? 'Overlapping other furniture.' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      </span>
+      <span className="truncate px-1" aria-hidden="true">
+        {item.label}
+      </span>
 
       {hasWarning && (
         <div
           className="absolute -top-2 -left-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center shadow-md"
           title={warningText(warning, true)}
+          aria-hidden="true"
         >
           <AlertTriangle className="w-3 h-3 text-white" />
         </div>
@@ -89,12 +118,18 @@ export const FurniturePiece = memo(function FurniturePiece({
 
       {/* Lock badge: grey while the mode locks all furniture, amber for an individually locked item */}
       {modeLocked && (
-        <div className="absolute -top-2 -right-2 w-5 h-5 bg-slate-600 rounded-full flex items-center justify-center shadow-md">
+        <div
+          className="absolute -top-2 -right-2 w-5 h-5 bg-slate-600 rounded-full flex items-center justify-center shadow-md"
+          aria-hidden="true"
+        >
           <Lock className="w-3 h-3 text-white" />
         </div>
       )}
       {isItemLocked && !modeLocked && (
-        <div className="absolute -top-2 -right-2 w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center shadow-md">
+        <div
+          className="absolute -top-2 -right-2 w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center shadow-md"
+          aria-hidden="true"
+        >
           <Lock className="w-3 h-3 text-white" />
         </div>
       )}
@@ -105,7 +140,8 @@ export const FurniturePiece = memo(function FurniturePiece({
             onPointerDown={(e) => onRotatePointerDown(e, item)}
             className="absolute -top-8 left-1/2 -translate-x-1/2 w-8 h-8 md:w-6 md:h-6 bg-white border-2 border-emerald-500 rounded-full flex items-center justify-center cursor-crosshair hover:scale-110 transition-all z-50 shadow-md"
             style={{ touchAction: 'none' }}
-            aria-label="Rotate handle"
+            aria-hidden="true"
+            data-testid="rotate-handle"
             data-draggable
           >
             <RotateCw className="w-4 h-4 md:w-3 md:h-3 text-emerald-500" />

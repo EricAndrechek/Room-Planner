@@ -63,18 +63,18 @@ export function FurniturePanel(props: FurniturePanelProps) {
         <div className="flex items-center gap-2">
           {!isActiveMode && (
             <>
-              <span className="text-[10px] text-slate-400 flex items-center gap-1">
+              <span className="text-[10px] text-slate-500 flex items-center gap-1">
                 <Lock className="w-3 h-3" /> Locked
               </span>
               {expanded ? (
-                <ChevronUp className="w-4 h-4 text-slate-400" />
+                <ChevronUp className="w-4 h-4 text-slate-500" />
               ) : (
-                <ChevronDown className="w-4 h-4 text-slate-400" />
+                <ChevronDown className="w-4 h-4 text-slate-500" />
               )}
             </>
           )}
           {isActiveMode && (
-            <span className="text-[10px] text-emerald-600 font-medium px-2 py-0.5 bg-emerald-100 rounded-full">
+            <span className="text-[10px] text-emerald-800 font-medium px-2 py-0.5 bg-emerald-100 rounded-full">
               Editing
             </span>
           )}
@@ -86,7 +86,7 @@ export function FurniturePanel(props: FurniturePanelProps) {
           <button
             type="button"
             onClick={props.onActivate}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-lg text-xs font-medium transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg text-xs font-medium transition-colors"
           >
             <Unlock className="w-3 h-3" />
             Switch to Furniture Mode
@@ -102,7 +102,7 @@ export function FurniturePanel(props: FurniturePanelProps) {
           <div className="flex justify-end items-center gap-2">
             {confirmingClear ? (
               <>
-                <span className="text-xs text-slate-600 mr-auto">
+                <span role="alert" className="text-xs text-slate-600 mr-auto">
                   Remove all {items.length} item{items.length !== 1 ? 's' : ''}?
                 </span>
                 <button
@@ -111,7 +111,7 @@ export function FurniturePanel(props: FurniturePanelProps) {
                     props.onClearRoom();
                     setConfirmingClear(false);
                   }}
-                  className="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1 rounded-sm font-medium transition-colors"
+                  className="text-xs bg-red-50 text-red-700 hover:bg-red-100 px-2 py-1 rounded-sm font-medium transition-colors"
                 >
                   Clear all
                 </button>
@@ -138,8 +138,7 @@ export function FurniturePanel(props: FurniturePanelProps) {
                 <button
                   type="button"
                   onClick={props.onAddItem}
-                  className="flex items-center gap-1 text-xs bg-emerald-50 text-emerald-600 hover:bg-emerald-100 px-2 py-1 rounded-sm font-medium transition-colors"
-                  aria-label="Add new furniture item"
+                  className="flex items-center gap-1 text-xs bg-emerald-50 text-emerald-800 hover:bg-emerald-100 px-2 py-1 rounded-sm font-medium transition-colors"
                 >
                   <Plus className="w-3 h-3" /> Add Item
                 </button>
@@ -169,7 +168,7 @@ export function FurniturePanel(props: FurniturePanelProps) {
               />
             ))}
             {items.length === 0 && (
-              <div className="text-center py-6 text-slate-400 text-xs italic border-2 border-dashed border-slate-200 rounded-lg">
+              <div className="text-center py-6 text-slate-500 text-xs italic border-2 border-dashed border-slate-200 rounded-lg">
                 No furniture added. Click &quot;Add Item&quot; to start.
               </div>
             )}

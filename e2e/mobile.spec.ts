@@ -60,7 +60,7 @@ test('tap through the tabs, add furniture, touch-drag it, share link round-trips
   // The sidebar is an off-canvas drawer on narrow screens.
   await page.getByRole('button', { name: 'Edit room settings' }).tap();
   await page.getByRole('button', { name: /^2\. (Furniture|Items)/ }).tap();
-  await page.getByRole('button', { name: 'Add new furniture item' }).tap();
+  await page.getByRole('button', { name: 'Add Item' }).tap();
   const piece = page.getByRole('button', { name: /^New Item,/ });
   await expect(piece).toBeVisible();
   const before = (await storedItems(page)).find((i: { label: string }) => i.label === 'New Item');
@@ -74,7 +74,7 @@ test('tap through the tabs, add furniture, touch-drag it, share link round-trips
     .toBeGreaterThan(before.x + 0.3);
 
   await expect(page.getByTestId('save-status')).toContainText('Saved');
-  await page.getByRole('button', { name: 'Share and save layout' }).tap();
+  await page.getByRole('button', { name: 'Share / Save' }).tap();
   const shareInput = page.locator('#share-url');
   await expect(shareInput).toHaveValue(/#s=[A-Za-z0-9_-]+$/);
   const shareUrl = await shareInput.inputValue();

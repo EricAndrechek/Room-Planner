@@ -78,13 +78,13 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
         <div className="flex items-center gap-2">
           {!isActiveMode && (
             <>
-              <span className="text-[10px] text-slate-400 flex items-center gap-1">
+              <span className="text-[10px] text-slate-500 flex items-center gap-1">
                 <Lock className="w-3 h-3" /> Locked
               </span>
               {expanded ? (
-                <ChevronUp className="w-4 h-4 text-slate-400" />
+                <ChevronUp className="w-4 h-4 text-slate-500" />
               ) : (
-                <ChevronDown className="w-4 h-4 text-slate-400" />
+                <ChevronDown className="w-4 h-4 text-slate-500" />
               )}
             </>
           )}
@@ -117,7 +117,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
         >
           {/* Room Dimensions */}
           <section>
-            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+            <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
               Room Dimensions
             </h2>
             <div className="grid grid-cols-2 gap-3">
@@ -156,12 +156,12 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
           {/* Doors */}
           <section>
             <div className="flex justify-between items-center mb-3">
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Doors</h2>
+              <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Doors</h2>
               <button
                 type="button"
                 onClick={props.onAddDoor}
                 className="flex items-center gap-1 text-xs bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-2 py-1 rounded-sm font-medium transition-colors"
-                aria-label="Add new door"
+                aria-label="Add Door"
               >
                 <Plus className="w-3 h-3" /> Add Door
               </button>
@@ -181,7 +181,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                       <button
                         type="button"
                         onClick={() => props.onDeleteDoor(door.id)}
-                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-sm transition-colors flex items-center justify-center"
+                        className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-sm transition-colors flex items-center justify-center"
                         aria-label="Delete door"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -271,7 +271,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
               })}
 
               {doors.length === 0 && (
-                <div className="text-center py-3 text-slate-400 text-xs italic border-2 border-dashed border-slate-200 rounded-lg">
+                <div className="text-center py-3 text-slate-500 text-xs italic border-2 border-dashed border-slate-200 rounded-lg">
                   No doors added yet
                 </div>
               )}
@@ -281,12 +281,12 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
           {/* Windows */}
           <section>
             <div className="flex justify-between items-center mb-3">
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Windows</h2>
+              <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Windows</h2>
               <button
                 type="button"
                 onClick={props.onAddWindow}
                 className="flex items-center gap-1 text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-1 rounded-sm font-medium transition-colors"
-                aria-label="Add new window"
+                aria-label="Add Window"
               >
                 <Plus className="w-3 h-3" /> Add Window
               </button>
@@ -306,7 +306,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                       <button
                         type="button"
                         onClick={() => props.onDeleteWindow(win.id)}
-                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-sm transition-colors flex items-center justify-center"
+                        className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-sm transition-colors flex items-center justify-center"
                         aria-label="Delete window"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -361,7 +361,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
               })}
 
               {windows.length === 0 && (
-                <div className="text-center py-3 text-slate-400 text-xs italic border-2 border-dashed border-blue-100 rounded-lg">
+                <div className="text-center py-3 text-slate-500 text-xs italic border-2 border-dashed border-blue-100 rounded-lg">
                   No windows added yet
                 </div>
               )}
@@ -372,7 +372,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
             <button
               type="button"
               onClick={props.onContinue}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors shadow-xs"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-sm font-medium transition-colors shadow-xs"
             >
               Continue to Furniture
               <ArrowRight className="w-4 h-4" />

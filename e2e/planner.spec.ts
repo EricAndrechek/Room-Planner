@@ -59,7 +59,7 @@ test('add, drag, rotate, undo, share, reopen and reload', async ({ page, browser
 
   // Add furniture.
   await page.getByRole('button', { name: '2. Furniture' }).click();
-  await page.getByRole('button', { name: 'Add new furniture item' }).click();
+  await page.getByRole('button', { name: 'Add Item' }).click();
   const piece = page.getByRole('button', { name: /^New Item,/ });
   await expect(piece).toBeVisible();
   const before = (await storedItems(page)).find((i: { label: string }) => i.label === 'New Item');
@@ -77,10 +77,10 @@ test('add, drag, rotate, undo, share, reopen and reload', async ({ page, browser
 
   // Rotate it ~90deg clockwise with the handle; it snaps to exactly 90.
   await piece.click();
-  const handle = page.getByLabel('Rotate handle');
+  const handle = page.getByTestId('rotate-handle');
   await expect(handle).toBeVisible();
   const c = await center(page, 'role=button[name=/^New Item,/]');
-  const h = await center(page, '[aria-label="Rotate handle"]');
+  const h = await center(page, '[data-testid="rotate-handle"]');
   const r = Math.hypot(h.x - c.x, h.y - c.y);
   await page.mouse.move(h.x, h.y);
   await page.mouse.down();
@@ -100,7 +100,7 @@ test('add, drag, rotate, undo, share, reopen and reload', async ({ page, browser
 
   // Let autosave run, then create a share link.
   await expect(page.getByTestId('save-status')).toContainText('Saved');
-  await page.getByRole('button', { name: 'Share and save layout' }).click();
+  await page.getByRole('button', { name: 'Share / Save' }).click();
   const shareInput = page.locator('#share-url');
   await expect(shareInput).toHaveValue(/#s=[A-Za-z0-9_-]+$/);
   const shareUrl = await shareInput.inputValue();
@@ -154,7 +154,9 @@ test("loads data saved by the original app's localStorage", async ({ page, isMob
   await expect(page.getByTestId('save-status')).toContainText('Saved');
   await expect(page.getByTestId('furniture-card')).toHaveCount(4);
   await expect(page.getByLabel('Rotation of Desk')).toHaveValue('90');
-  await expect(page.getByRole('button', { name: /^Wardrobe,.*\(locked\)/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Wardrobe,/ })).toHaveAccessibleDescription(
+    /Locked/,
+  );
   await expect(page.getByRole('button', { name: /^Rug,/ })).toHaveCount(0); // hidden
   if (!isMobile) await expect(page.getByRole('button', { name: 'Show Rug' })).toBeVisible();
 

@@ -147,7 +147,7 @@ export function ExportModal({
                 className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
                   paper === o.value
                     ? 'bg-white text-slate-800 shadow-xs'
-                    : 'text-slate-500 hover:text-slate-700'
+                    : 'text-slate-600 hover:text-slate-800'
                 }`}
               >
                 {o.label}

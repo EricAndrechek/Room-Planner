@@ -1,5 +1,6 @@
-import { useEffect, useId, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
+import { useDialogFocus } from '../../hooks/useDialogFocus';
 
 interface ModalProps {
   isOpen: boolean;
@@ -11,20 +12,19 @@ interface ModalProps {
 /** Centered dialog with backdrop; closes on Escape or backdrop click. */
 export function Modal({ isOpen, onClose, title, children }: ModalProps) {
   const titleId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Focus moves in on open, Tab is trapped, Escape closes, focus returns to the trigger.
+  useDialogFocus(panelRef, { onClose, active: isOpen });
 
   useEffect(() => {
     if (!isOpen) return;
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleEscape);
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
-      document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = previousOverflow;
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -37,7 +37,9 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
       aria-labelledby={titleId}
     >
       <div
-        className="bg-white rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh] animate-slide-up"
+        ref={panelRef}
+        tabIndex={-1}
+        className="bg-white rounded-xl shadow-2xl w-full max-w-md outline-hidden flex flex-col max-h-[90vh] animate-slide-up"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center p-4 border-b border-slate-100">

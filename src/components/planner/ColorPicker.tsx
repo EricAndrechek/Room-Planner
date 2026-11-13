@@ -1,6 +1,7 @@
-import { useLayoutEffect, useState, type ReactNode, type RefObject } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Palette, X } from 'lucide-react';
+import { useDialogFocus } from '../../hooks/useDialogFocus';
 import { COLOR_PRESETS, DEFAULT_COLOR, isValidHex } from '../../lib/colors';
 
 interface ColorPickerProps {
@@ -29,6 +30,9 @@ export function ColorPicker({
   );
   const [hexError, setHexError] = useState('');
   const [position, setPosition] = useState({ top: 0, left: 0 });
+  const panelRef = useRef<HTMLDivElement>(null);
+  // Both variants take focus on open, trap Tab, close on Escape and hand focus back to the trigger.
+  useDialogFocus(panelRef, { onClose });
 
   // Anchor the desktop popover under the trigger, flipping/clamping to stay on screen.
   useLayoutEffect(() => {
@@ -177,7 +181,12 @@ export function ColorPicker({
         onClick={onClose}
       >
         <div
-          className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:w-auto sm:min-w-[280px] p-4 animate-slide-up"
+          ref={panelRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Choose color"
+          tabIndex={-1}
+          className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:w-auto sm:min-w-[280px] p-4 animate-slide-up outline-hidden"
           onClick={(e) => e.stopPropagation()}
           data-color-picker
         >
@@ -190,7 +199,11 @@ export function ColorPicker({
   // Desktop: portal to <body> to escape the sidebar's overflow clipping.
   return createPortal(
     <div
-      className="fixed bg-white rounded-lg shadow-xl border border-slate-200 p-3 z-[9999] min-w-[200px] animate-fade-in"
+      ref={panelRef}
+      role="dialog"
+      aria-label="Choose color"
+      tabIndex={-1}
+      className="fixed bg-white rounded-lg shadow-xl outline-hidden border border-slate-200 p-3 z-[9999] min-w-[200px] animate-fade-in"
       style={{ top: position.top, left: position.left }}
       data-color-picker
       onClick={(e) => e.stopPropagation()}

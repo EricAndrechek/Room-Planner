@@ -25,6 +25,7 @@ interface RoomCanvasProps {
   zoom: number;
   pan: { x: number; y: number };
   showModeBadge: boolean;
+  onSelectOpening: (type: 'door' | 'window', id: Id) => void;
   onItemPointerDown: (e: ReactPointerEvent<HTMLDivElement>, item: FurnitureItem) => void;
   onRotatePointerDown: (e: ReactPointerEvent<HTMLDivElement>, item: FurnitureItem) => void;
   onSelectItem: (item: FurnitureItem) => void;
@@ -49,6 +50,7 @@ export function RoomCanvas({
   zoom,
   pan,
   showModeBadge,
+  onSelectOpening,
   onItemPointerDown,
   onRotatePointerDown,
   onSelectItem,
@@ -62,14 +64,26 @@ export function RoomCanvas({
 
   return (
     <div
-      className="flex-1 bg-slate-100 overflow-hidden relative w-full"
+      className="flex-1 bg-slate-100 overflow-hidden relative w-full outline-hidden"
       ref={containerRef}
+      id="floor-plan"
+      role="main"
+      aria-label="Floor plan"
+      aria-describedby="floor-plan-help"
+      tabIndex={-1}
       data-pan-area
     >
+      <p id="floor-plan-help" className="sr-only">
+        Press Tab to move between {isRoomSetup ? 'door and window handles' : 'furniture pieces'}.
+        {isRoomSetup
+          ? ' Arrow keys slide the focused opening along its wall; hold Shift for larger steps.'
+          : ' Arrow keys move the focused piece; hold Shift for larger steps. R rotates it by 90 degrees, Shift and R rotates the other way. Delete removes it. Escape deselects.'}{' '}
+        Control or Command with Z undoes.
+      </p>
       {showModeBadge && (
         <div
           className={`absolute top-4 left-1/2 -translate-x-1/2 px-3 sm:px-4 py-2 rounded-full shadow-lg text-[11px] sm:text-xs z-20 pointer-events-none animate-fade-in backdrop-blur-xs ${
-            isRoomSetup ? 'bg-indigo-600/90 text-white' : 'bg-emerald-600/90 text-white'
+            isRoomSetup ? 'bg-indigo-600/90 text-white' : 'bg-emerald-700/90 text-white'
           }`}
         >
           {isRoomSetup ? (
@@ -118,6 +132,9 @@ export function RoomCanvas({
               room={roomDims}
               isActive={isActive('door', door.id)}
               isLocked={!isRoomSetup}
+              unitSystem={unitSystem}
+              zoom={zoom}
+              onSelect={() => onSelectOpening('door', door.id)}
               onHandlePointerDown={(e) => onDoorPointerDown(e, door)}
             />
           ))}
@@ -128,6 +145,9 @@ export function RoomCanvas({
               room={roomDims}
               isActive={isActive('window', win.id)}
               isLocked={!isRoomSetup}
+              unitSystem={unitSystem}
+              zoom={zoom}
+              onSelect={() => onSelectOpening('window', win.id)}
               onHandlePointerDown={(e) => onWindowPointerDown(e, win)}
             />
           ))}
