@@ -81,7 +81,7 @@ test('the whole app works offline', async ({ page, context }) => {
   await page.getByTitle('Click to rename').click();
   await page.getByLabel('Floor plan name').fill('Offline plan');
   await page.getByLabel('Floor plan name').press('Enter');
-  await page.getByRole('button', { name: 'Share and save layout' }).click();
+  await page.getByRole('button', { name: 'Share / Save' }).click();
   // The link is compressed asynchronously; wait for it before reading.
   await expect(page.locator('#share-url')).toHaveValue(/#s=/);
   const shareUrl = await page.locator('#share-url').inputValue();
@@ -106,7 +106,7 @@ test('the whole app works offline', async ({ page, context }) => {
   await ready(page);
   await expect(page.getByRole('heading', { name: 'Offline plan' })).toBeVisible();
   await page.getByRole('button', { name: '2. Furniture' }).click();
-  await page.getByRole('button', { name: 'Add new furniture item' }).click();
+  await page.getByRole('button', { name: 'Add Item' }).click();
   await expect(page.getByRole('button', { name: /^New Item,/ })).toBeVisible();
   await expect(page.getByTestId('save-status')).toContainText('Saved');
 
@@ -180,7 +180,7 @@ test('asks for persistent storage once, after the first save', async ({ page }) 
     page.evaluate(() => (window as unknown as { __persistCalls: number }).__persistCalls);
   await expect.poll(calls).toBe(1);
   await page.getByRole('button', { name: '2. Furniture' }).click();
-  await page.getByRole('button', { name: 'Add new furniture item' }).click();
+  await page.getByRole('button', { name: 'Add Item' }).click();
   await expect(page.getByTestId('save-status')).toContainText('Saved');
   expect(await calls()).toBe(1);
 });
