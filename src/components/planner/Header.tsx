@@ -14,6 +14,7 @@ import { feetToDisplay, formatArea } from '../../lib/units';
 import { useNow } from '../../hooks/useNow';
 import type { RoomDims, SaveStatus, UnitSystem } from '../../types';
 import { Tooltip } from './Tooltip';
+import { InstallButton } from './PwaNotices';
 import { HeaderZoomControls } from './ZoomControls';
 
 interface HeaderProps {
@@ -153,6 +154,8 @@ export function Header(props: HeaderProps) {
           onZoomOut={props.onZoomOut}
           onFit={props.onFit}
         />
+
+        <InstallButton variant="header" />
 
         <Tooltip text="Help & FAQ">
           <a

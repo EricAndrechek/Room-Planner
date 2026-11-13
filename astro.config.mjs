@@ -3,6 +3,8 @@ import { defineConfig } from 'astro/config';
 import react from '@astrojs/react';
 import sitemap from '@astrojs/sitemap';
 import tailwindcss from '@tailwindcss/vite';
+import { AstroPWAIntegration } from '@vite-pwa/astro';
+import { pwaOptions } from './pwa-options.mjs';
 
 /**
  * The public origin of the site. Every absolute URL (canonical, og:url,
@@ -20,6 +22,7 @@ export default defineConfig({
     sitemap({
       filter: (page) => !/\/404\/?$/.test(page),
     }),
+    AstroPWAIntegration(pwaOptions),
   ],
   vite: {
     plugins: [tailwindcss()],

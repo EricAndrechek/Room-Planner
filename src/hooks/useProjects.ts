@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { track } from '../lib/analytics';
+import { requestPersistentStorageOnce } from '../lib/persist';
 import {
   createProject,
   defaultProjectName,
@@ -71,6 +72,7 @@ export function useProjects({
     (next: Project[]) => {
       projectsRef.current = next;
       saveProjects(storage, next);
+      void requestPersistentStorageOnce();
       setProjectsState(next);
     },
     [storage],
