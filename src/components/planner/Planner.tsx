@@ -192,6 +192,13 @@ export function Planner({ storage, initial }: PlannerProps) {
     [applyLayout, setLayout],
   );
 
+  const clearRoom = useCallback(() => {
+    track('room_cleared', { count: layout.items.length });
+    applyLayout((l) => ({ ...l, items: [] }));
+    setSelection(null);
+    setColorPickerItemId(null);
+  }, [applyLayout, layout.items.length]);
+
   const toggleLock = useCallback(
     (id: Id) =>
       applyLayout((l) => ({
@@ -507,6 +514,7 @@ export function Planner({ storage, initial }: PlannerProps) {
             roomDims={layout.roomDims}
             unitSystem={unitSystem}
             onAddItem={addItem}
+            onClearRoom={clearRoom}
             onSelectItem={selectItem}
             onChangeItem={changeItem}
             onCommit={commit}

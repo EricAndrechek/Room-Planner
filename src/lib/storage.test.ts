@@ -246,12 +246,8 @@ describe('opening share links at boot', () => {
       cleanUrl: 'https://example.com/',
     });
     expect(result.state.projects[0]!.name).toBe('Wohnzimmer 🛋️');
-    expect(result.state.layout.items.map((i) => i.label)).toEqual([
-      'Bed 🪑',
-      'Desk 🪑',
-      'Wardrobe 🪑',
-      'Rug 🪑',
-    ]);
+    expect(result.state.layout.items.map((i) => i.label)).toEqual(layout.items.map((i) => i.label));
+    expect(result.state.layout.items.every((i) => i.label.endsWith(' 🪑'))).toBe(true);
     expect(result.state.layout.roomDims.width).toBeCloseTo(12, 4);
   });
 
