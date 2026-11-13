@@ -142,3 +142,43 @@ a:focus-visible {
     min-width: 44px;
   }
 }
+
+/*
+ * Printing: the export module (src/lib/export/exportPlan.ts) puts a clean SVG floor plan
+ * into #print-plan and sets html.printing-plan (on the Print button and on `beforeprint`,
+ * so the browser's own Print menu works too). Print only that, never the editor.
+ */
+#print-plan {
+  display: none;
+}
+
+@media print {
+  html.app,
+  html.app body {
+    position: static;
+    height: auto;
+    overflow: visible;
+    padding: 0;
+  }
+
+  html.printing-plan body > *:not(#print-plan) {
+    display: none !important;
+  }
+
+  html.printing-plan #print-plan {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    break-inside: avoid;
+  }
+
+  #print-plan svg {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    /* One page: the @page margin is 10mm on each side. */
+    max-height: calc(100vh - 2px);
+  }
+}
