@@ -39,6 +39,17 @@ A powerful, intuitive tool for planning room layouts with furniture, doors, and 
 - **JSON Export/Import** - Full backup and restore capability
 - **Inline Renaming** - Click project name to rename (like Google Docs)
 
+### 📴 Offline & Install
+
+- **Works Offline** - After the first visit the whole app is cached by a service worker
+- **Installable** - Add Room Planner to your home screen or desktop as a standalone app
+- **Update Prompts** - A small notice appears when a new version is ready
+
+### 🔒 Privacy
+
+- **Your Plans Stay Local** - Floor plans live in your browser; share links keep the layout in the URL fragment, which never reaches a server
+- **Anonymous Analytics** - Optional, cookieless usage and error stats with no plan content; opt out any time on the Help page
+
 ### 🎯 Smart Feedback
 
 - **Collision Detection** - Visual warnings when furniture overlaps
@@ -125,7 +136,7 @@ Switch between measurement systems anytime:
 
 ### Prerequisites
 
-- **Node.js** 22 or higher (see `.nvmrc`)
+- **Node.js** 22.23.4 or higher (see `.nvmrc`)
 - **pnpm** (the version is pinned in `package.json` → `packageManager`; `corepack enable` picks it up)
 
 ### Getting Started
@@ -141,20 +152,45 @@ Open [http://localhost:4321](http://localhost:4321) in your browser.
 
 ### Scripts
 
-| Command         | What it does                                            |
-| --------------- | ------------------------------------------------------- |
-| `pnpm dev`      | Astro dev server                                        |
-| `pnpm build`    | Static build into `dist/`                               |
-| `pnpm preview`  | Serve `dist/` locally                                   |
-| `pnpm check`    | Type-check (`astro check`, TypeScript strict)           |
-| `pnpm lint`     | ESLint (typescript-eslint + react-hooks)                |
-| `pnpm format`   | Prettier (with `prettier-plugin-astro`)                 |
-| `pnpm test`     | Vitest unit tests (`src/**/*.test.ts`)                  |
-| `pnpm test:e2e` | Playwright smoke tests (Chromium) against a fresh build |
+| Command            | What it does                                                                  |
+| ------------------ | ----------------------------------------------------------------------------- |
+| `pnpm dev`         | Astro dev server                                                              |
+| `pnpm build`       | Static build into `dist/` (also generates the service worker and manifest)    |
+| `pnpm preview`     | Serve `dist/` locally                                                         |
+| `pnpm check`       | Type-check (`astro check` plus the Worker, TypeScript strict)                 |
+| `pnpm lint`        | ESLint (typescript-eslint + react-hooks)                                      |
+| `pnpm format`      | Prettier (with `prettier-plugin-astro`)                                       |
+| `pnpm test`        | Vitest unit tests plus the Worker proxy tests                                 |
+| `pnpm test:e2e`    | Playwright specs (Chromium) against a fresh build on port 43291               |
+| `pnpm assets`      | Regenerate icons and social images from `brand/`                              |
+| `pnpm screenshots` | Regenerate the PWA manifest screenshots (needs a running preview server)      |
+| `pnpm dev:worker`  | Build, then run the Cloudflare Worker locally with `wrangler dev`             |
+| `pnpm deploy`      | `wrangler deploy` (normally done by CI; see [docs/DEPLOY.md](docs/DEPLOY.md)) |
+
+To run the e2e suite against an already-running server (for example `wrangler dev`
+on port 8787, which also exercises the CSP headers), set `E2E_BASE_URL`:
+`E2E_BASE_URL=http://localhost:8787 pnpm test:e2e`.
 
 The public site URL used for canonical links, Open Graph tags, the sitemap and
 `robots.txt` comes from `SITE_URL` at build time (default
 `https://roomplanner.andrechek.com`), e.g. `SITE_URL=https://example.com pnpm build`.
+
+### Environment
+
+Copy `.env.example` to `.env` to configure the build. All variables are optional:
+without `PUBLIC_POSTHOG_KEY`, analytics is disabled entirely.
+
+| Variable              | Purpose                                             |
+| --------------------- | --------------------------------------------------- |
+| `PUBLIC_POSTHOG_KEY`  | PostHog project token (public; ships in the bundle) |
+| `PUBLIC_POSTHOG_HOST` | Defaults to the same-origin `/ingest` reverse proxy |
+| `PUBLIC_DEPLOY_ENV`   | `production` (default) or `preview`                 |
+
+Analytics never runs on `localhost` unless you opt in for debugging: open the
+browser console and run `localStorage['rp:analytics-debug']='1'`, then reload.
+In `pnpm dev`, `/ingest` is proxied to PostHog; with `wrangler dev` the Worker does it.
+
+Deployment, secrets, and the domain cutover are documented in [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ### Project Structure
 
@@ -186,14 +222,16 @@ e2e/                       # Playwright specs
   marker; `src/lib/storage.ts` documents the format and its migrations
 - Share links put a deflate-compressed, base64url payload in the URL **fragment**
   (`#s=…`), so layouts never reach a server; old `?config=` links still open
-- `src/lib/analytics.ts` exposes `track()` / `captureError()` (currently no-ops)
+- `src/lib/analytics.ts` wraps a lazily loaded `posthog-js` (events queue until it loads; a no-op without a key)
+- `src/lib/pwa.ts` / `pwa-options.mjs` configure the service worker via `@vite-pwa/astro`
 
 ---
 
 ## 🚢 Deployment
 
-`pnpm build` produces a fully static site in `dist/`; deploy that folder to any
-static host. If the site is served from a sub-path, set Astro's `base` in
+The site is deployed as a Cloudflare Worker serving the static `dist/` (see
+[docs/DEPLOY.md](docs/DEPLOY.md)). `pnpm build` itself produces a fully static site in
+`dist/` that any static host can serve. If the site is served from a sub-path, set Astro's `base` in
 `astro.config.mjs`; all internal links are base-aware.
 
 ---
