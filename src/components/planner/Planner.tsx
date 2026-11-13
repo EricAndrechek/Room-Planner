@@ -50,6 +50,7 @@ import type {
   UnitSystem,
 } from '../../types';
 import { ColorPicker } from './ColorPicker';
+import { ExportModal } from './ExportModal';
 import { FileBrowserModal } from './FileBrowserModal';
 import { FurniturePanel } from './FurniturePanel';
 import { Header } from './Header';
@@ -83,6 +84,7 @@ export function Planner({ storage, initial }: PlannerProps) {
 
   const [selection, setSelection] = useState<Selection | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [colorPickerItemId, setColorPickerItemId] = useState<Id | null>(null);
   const [roomSetupExpanded, setRoomSetupExpanded] = useState(false);
@@ -193,6 +195,13 @@ export function Planner({ storage, initial }: PlannerProps) {
       (shouldCommit ? applyLayout : setLayout)((l) => patchItem(l, id, patch)),
     [applyLayout, setLayout],
   );
+
+  const clearRoom = useCallback(() => {
+    track('room_cleared', { count: layout.items.length });
+    applyLayout((l) => ({ ...l, items: [] }));
+    setSelection(null);
+    setColorPickerItemId(null);
+  }, [applyLayout, layout.items.length]);
 
   const toggleLock = useCallback(
     (id: Id) =>
@@ -416,7 +425,7 @@ export function Planner({ storage, initial }: PlannerProps) {
         return true;
       },
     },
-    !shareOpen && !filesOpen,
+    !shareOpen && !filesOpen && !exportOpen,
   );
 
   // --- Projects --------------------------------------------------------------------------
@@ -499,6 +508,7 @@ export function Planner({ storage, initial }: PlannerProps) {
         onZoomOut={zoomOut}
         onFit={fitToView}
         onShare={() => setShareOpen(true)}
+        onExport={() => setExportOpen(true)}
       />
 
       <div className="flex flex-1 overflow-hidden relative">
@@ -550,6 +560,7 @@ export function Planner({ storage, initial }: PlannerProps) {
             roomDims={layout.roomDims}
             unitSystem={unitSystem}
             onAddItem={addItem}
+            onClearRoom={clearRoom}
             onSelectItem={selectItem}
             onChangeItem={changeItem}
             onCommit={commit}
@@ -572,7 +583,7 @@ export function Planner({ storage, initial }: PlannerProps) {
             className={`fixed bottom-6 right-6 z-40 text-white rounded-full pl-4 pr-5 py-3 shadow-lg flex items-center gap-2 transition-all active:scale-95 animate-fade-in ${
               isRoomSetup
                 ? 'bg-indigo-600 hover:bg-indigo-700'
-                : 'bg-emerald-600 hover:bg-emerald-700'
+                : 'bg-emerald-700 hover:bg-emerald-800'
             }`}
             aria-label={isRoomSetup ? 'Edit room settings' : 'Edit furniture'}
           >
@@ -623,6 +634,14 @@ export function Planner({ storage, initial }: PlannerProps) {
         onClose={() => setShareOpen(false)}
         config={shareConfig}
         onImport={importConfig}
+      />
+
+      <ExportModal
+        isOpen={exportOpen}
+        onClose={() => setExportOpen(false)}
+        layout={layout}
+        unitSystem={unitSystem}
+        projectName={projectName}
       />
 
       <FileBrowserModal

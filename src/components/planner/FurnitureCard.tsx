@@ -152,7 +152,7 @@ export const FurnitureCard = memo(function FurnitureCard({
 
       {hasWarning && (
         <div className="mb-2 py-1.5 px-2 bg-red-50 border border-red-200 rounded-sm text-center">
-          <p className="text-[10px] text-red-600 flex items-center justify-center gap-1">
+          <p className="text-[10px] text-red-700 flex items-center justify-center gap-1">
             <AlertTriangle className="w-3 h-3" />
             {text}
           </p>

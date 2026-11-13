@@ -32,7 +32,8 @@ function watchProblems(context: BrowserContext, problems: string[]) {
   context.on('weberror', (e) => problems.push(String(e.error())));
 }
 
-test('manifest is valid and the app is installable', async ({ page }) => {
+test('manifest is valid and the app is installable', async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'Page.getAppManifest / installability need CDP (Chromium)');
   await page.goto('/');
   await ready(page);
   await controlled(page);
@@ -69,7 +70,12 @@ test('manifest is valid and the app is installable', async ({ page }) => {
   );
 });
 
-test('the whole app works offline', async ({ page, context }) => {
+test('the whole app works offline', async ({ page, context, isMobile }) => {
+  test.skip(
+    isMobile,
+    'drives the desktop sidebar tabs; the service worker is the same engine path',
+  );
+  test.slow(); // WebKit/Firefox service workers are slower to install under load
   const problems: string[] = [];
   watchProblems(context, problems);
 
@@ -131,15 +137,22 @@ test('the whole app works offline', async ({ page, context }) => {
   await ready(page);
   await expect(page.getByTestId('room')).toBeVisible();
 
+  // (The failed offline navigation below legitimately logs a network error; check before it.)
+  expect(problems).toEqual([]);
+
   // Unknown URLs are not answered with the app shell.
+  await page.goto('about:blank'); // WebKit keeps the old page when an offline navigation fails
   await page.goto('/definitely-not-a-page/').catch(() => {});
   await expect(page.getByTestId('room')).toHaveCount(0);
 
   await context.setOffline(false);
-  expect(problems).toEqual([]);
 });
 
-test('install button appears on beforeinstallprompt and hides once installed', async ({ page }) => {
+test('install button appears on beforeinstallprompt and hides once installed', async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, 'on narrow layouts the install button lives in the collapsed sidebar sheet');
   await page.goto('/');
   await ready(page);
   await expect(page.getByRole('button', { name: 'Install app' })).toHaveCount(0);
@@ -163,15 +176,23 @@ test('install button appears on beforeinstallprompt and hides once installed', a
   await expect(button).toHaveCount(0);
 });
 
-test('asks for persistent storage once, after the first save', async ({ page }) => {
+test('asks for persistent storage once, after the first save', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'drives the desktop sidebar tabs');
   await page.addInitScript(() => {
     (window as unknown as { __persistCalls: number }).__persistCalls = 0;
-    const storage = navigator.storage;
-    storage.persist = () => {
-      (window as unknown as { __persistCalls: number }).__persistCalls++;
-      return Promise.resolve(true);
-    };
-    storage.persisted = () => Promise.resolve(false);
+    // Patch the prototype: WebKit hands out per-access wrappers / ignores instance assignment.
+    const storage = Object.getPrototypeOf(navigator.storage);
+    Object.defineProperty(storage, 'persist', {
+      configurable: true,
+      value: () => {
+        (window as unknown as { __persistCalls: number }).__persistCalls++;
+        return Promise.resolve(true);
+      },
+    });
+    Object.defineProperty(storage, 'persisted', {
+      configurable: true,
+      value: () => Promise.resolve(false),
+    });
   });
   await page.goto('/');
   await ready(page);

@@ -10,7 +10,7 @@
   },
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "astro build && node scripts/csp-hashes.mjs",
     "preview": "astro preview",
     "check": "astro check",
     "lint": "eslint .",
@@ -18,10 +18,11 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test --project=chromium",
+    "test:e2e:all": "playwright test",
     "assets": "node brand/generate.mjs",
     "screenshots": "node brand/screenshots.mjs",
-    "build:ci": "astro build && sh scripts/upload-sourcemaps.sh",
+    "build:ci": "astro build && node scripts/csp-hashes.mjs && sh scripts/upload-sourcemaps.sh",
     "deploy": "wrangler deploy",
     "dev:worker": "pnpm build && wrangler dev"
   },

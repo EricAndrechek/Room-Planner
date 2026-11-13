@@ -47,6 +47,26 @@ for (const [name, viewport] of [
       await expectNoSeriousViolations(page);
     });
 
+    test('planner with the Export dialog open has no serious violations', async ({ page }) => {
+      await page.goto('/');
+      await ready(page);
+      await page.getByRole('button', { name: 'Export as image or PDF' }).click();
+      await expect(page.getByRole('dialog', { name: 'Export Floor Plan' })).toBeVisible();
+      await page.waitForTimeout(700); // let the fade/slide-in finish so colors are settled
+      await expectNoSeriousViolations(page);
+    });
+
+    test('planner with the Clear room confirmation has no serious violations', async ({ page }) => {
+      await page.goto('/');
+      await ready(page);
+      const edit = page.getByRole('button', { name: 'Edit room settings' });
+      if (await edit.isVisible()) await edit.click(); // mobile: the sidebar starts closed
+      await page.getByRole('button', { name: /^2\. (Furniture|Items)/ }).click();
+      await page.getByRole('button', { name: 'Clear room' }).click();
+      await expect(page.getByRole('alert').filter({ hasText: /Remove all/ })).toBeVisible();
+      await expectNoSeriousViolations(page);
+    });
+
     test('help page has no serious violations', async ({ page }) => {
       await page.goto('/help/');
       await expectNoSeriousViolations(page);

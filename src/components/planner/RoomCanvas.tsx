@@ -83,7 +83,7 @@ export function RoomCanvas({
       {showModeBadge && (
         <div
           className={`absolute top-4 left-1/2 -translate-x-1/2 px-3 sm:px-4 py-2 rounded-full shadow-lg text-[11px] sm:text-xs z-20 pointer-events-none animate-fade-in backdrop-blur-xs ${
-            isRoomSetup ? 'bg-indigo-600/90 text-white' : 'bg-emerald-600/90 text-white'
+            isRoomSetup ? 'bg-indigo-600/90 text-white' : 'bg-emerald-700/90 text-white'
           }`}
         >
           {isRoomSetup ? (

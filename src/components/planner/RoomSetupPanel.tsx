@@ -372,7 +372,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
             <button
               type="button"
               onClick={props.onContinue}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors shadow-xs"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-sm font-medium transition-colors shadow-xs"
             >
               Continue to Furniture
               <ArrowRight className="w-4 h-4" />
