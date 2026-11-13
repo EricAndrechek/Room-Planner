@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openStep } from './ui';
 
 /** Wait for the island to mount and for the initial auto-fit zoom (500ms) to settle. */
 async function ready(page: Page) {
@@ -13,7 +14,7 @@ test('a fresh visitor sees a clean sample room, and can clear it and undo', asyn
   // No collision / out-of-bounds warnings on the default layout.
   await expect(page.getByText(/Overlapping|Outside room/)).toHaveCount(0);
 
-  await page.getByRole('button', { name: '2. Furniture' }).click();
+  await openStep(page, 'furniture');
   await expect(page.getByRole('button', { name: /^Bed,/ })).toBeVisible();
 
   await page.getByRole('button', { name: 'Clear room' }).click();

@@ -52,15 +52,39 @@ In GitHub, run the workflow by hand: Actions > Cross-browser > Run workflow, opt
 
 ### Mobile projects
 
-`mobile-safari`/`mobile-chrome` run the layout-agnostic specs plus `e2e/mobile.spec.ts` (tap, touch
-drag via pointer events, share round-trip, no horizontal overflow). Specs that drive the desktop
-sidebar tabs are skipped there with a reason (the sidebar is an off-canvas drawer on narrow screens).
+`mobile-safari`/`mobile-chrome` run the same specs as desktop plus `e2e/mobile.spec.ts` (tap, touch
+drag via pointer events, share round-trip, no horizontal overflow). Below 768px the sidebar is an
+off-canvas sheet and the step buttons read "1. Room" / "2. Items"; specs reach the sidebar through
+`openStep()` / `viewPlan()` in `e2e/ui.ts`, which work on both layouts. Only the mouse drag/rotate
+test in `planner.spec.ts` is desktop-only (its touch twin is in `mobile.spec.ts`).
 
-### Browser-specific skips
+On iOS (`mobile-safari`), PNG/PDF export opens the share sheet (Save Image / Save to Files) instead of
+a blob download, falling back to a download if sharing is refused; `export.spec.ts` stubs
+`navigator.share` there to check the shared file.
+
+### Browser-specific skips and quirks
 
 Some specs are skipped per engine with a reason in the spec (CDP installability checks are
-Chromium-only; offline service-worker behavior and clipboard permissions differ). A skip is a note
-in the test output, not a silent pass.
+Chromium-only). A skip is a note in the test output, not a silent pass.
+
+Engine quirks the specs account for (none are app bugs):
+
+- Download names: macOS WebKit reports them NFD-normalized (`café` as `e` + combining accent) and
+  Linux WebKit replaces spaces with `_`; `export.spec.ts` compares the name in the app's spelling.
+- Playwright's Firefox crashes the page when a `getByRole('dialog', { name })` lookup is followed by
+  axe's `aria-dialog-name` rule (reproducible on a one-line static page), so the a11y spec finds
+  dialogs by their heading before scanning.
+- axe scans run with `reducedMotion: 'reduce'` and wait for animations to finish: a scan taken
+  mid fade-in (a dialog, or the "Ready to work offline" toast) sees blended colors.
+- Firefox logs PostHog's cookie-domain probe (`dmn_chk_…` rejected for `.com`) as an error;
+  `e2e/problems.ts` tolerates it.
+
+### Notifications
+
+The daily run should only fail for a real regression. Each failing test is retried once on CI
+(`retries: 1`; a pass on retry is reported as flaky, not failed), browser downloads are retried, and
+a remote target must answer a retried `curl` before tests start, so a short outage or network blip
+does not send a failure email.
 
 ## CSP
 

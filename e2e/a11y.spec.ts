@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { animationsSettled, openStep, viewPlan } from './ui';
 
 /** Wait for the island to mount and the initial auto-fit zoom to settle. */
 async function ready(page: Page) {
@@ -9,6 +10,8 @@ async function ready(page: Page) {
 
 /** Zero serious/critical axe violations (WCAG 2.x A/AA + best practices). */
 async function expectNoSeriousViolations(page: Page) {
+  // Contrast is judged on final colors: a scan taken mid fade-in sees blended, washed-out ones.
+  await animationsSettled(page);
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
     .analyze();
@@ -31,7 +34,10 @@ for (const [name, viewport] of [
   ['mobile 390x844', { width: 390, height: 844 }],
 ] as const) {
   test.describe(name, () => {
-    test.use({ viewport });
+    // Reduced motion makes entrance animations (dialogs, the "Ready to work offline" toast that can
+    // pop up at any moment once the service worker is installed) effectively instant, so a scan
+    // never samples a half-faded element. The scans judge the settled UI, which is the same.
+    test.use({ viewport, reducedMotion: 'reduce' });
 
     test('planner page has no serious violations', async ({ page }) => {
       await page.goto('/');
@@ -51,17 +57,20 @@ for (const [name, viewport] of [
       await page.goto('/');
       await ready(page);
       await page.getByRole('button', { name: 'Export as image or PDF' }).click();
-      await expect(page.getByRole('dialog', { name: 'Export Floor Plan' })).toBeVisible();
-      await page.waitForTimeout(700); // let the fade/slide-in finish so colors are settled
+      // Found by its heading, not getByRole('dialog', { name }): in Playwright's Firefox, resolving a
+      // dialog's aria-labelledby name and then running axe's aria-dialog-name rule crashes the page
+      // (reproduces on a one-line static page; not an app bug).
+      const dialog = page
+        .getByRole('dialog')
+        .filter({ has: page.getByRole('heading', { name: 'Export Floor Plan' }) });
+      await expect(dialog).toBeVisible();
       await expectNoSeriousViolations(page);
     });
 
     test('planner with the Clear room confirmation has no serious violations', async ({ page }) => {
       await page.goto('/');
       await ready(page);
-      const edit = page.getByRole('button', { name: 'Edit room settings' });
-      if (await edit.isVisible()) await edit.click(); // mobile: the sidebar starts closed
-      await page.getByRole('button', { name: /^2\. (Furniture|Items)/ }).click();
+      await openStep(page, 'furniture');
       await page.getByRole('button', { name: 'Clear room' }).click();
       await expect(page.getByRole('alert').filter({ hasText: /Remove all/ })).toBeVisible();
       await expectNoSeriousViolations(page);
@@ -89,8 +98,8 @@ test('furniture can be selected, moved, rotated, undone and removed with the key
   const itemOf = async () => (await items()).find((i: { label: string }) => i.label === 'New Item');
 
   // Set up one piece (setup itself is mouse-free: Tab + Enter would work, click is just shorter).
-  await page.getByRole('button', { name: '2. Furniture' }).click();
-  await page.getByRole('button', { name: 'Add Item' }).click();
+  await openStep(page, 'furniture');
+  await page.getByRole('button', { name: 'Add Item' }).click(); // closes the sheet on phones
   const piece = page.getByRole('button', { name: /^New Item,/ });
   await expect(piece).toBeVisible();
   const start = await itemOf();
@@ -165,7 +174,9 @@ test('modal traps focus, closes on Escape and returns focus to its trigger', asy
 test('door handles are keyboard operable in room setup', async ({ page }) => {
   await page.goto('/');
   await ready(page);
+  await openStep(page, 'room');
   await page.getByRole('button', { name: 'Add Door' }).click();
+  await viewPlan(page);
   const handle = page.getByRole('button', { name: /^Door handle/ }).first();
   await handle.focus();
   const before = await handle.getAttribute('aria-label');
