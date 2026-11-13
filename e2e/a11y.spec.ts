@@ -134,11 +134,22 @@ test('furniture can be selected, moved, rotated, undone and removed with the key
   await page.keyboard.press('r');
   await expect.poll(async () => (await itemOf()).rotation).toBe(90);
 
-  // Undo steps back through the rotation.
+  // Undo steps back through the rotation, and the live region announces it (debounced). Record
+  // every text the region shows: a later announcement ("Project saved") can replace it quickly.
+  await page.evaluate(() => {
+    const region = document.querySelector('[role="status"][aria-atomic="true"]')!;
+    const said: string[] = ((window as unknown as { __said: string[] }).__said = []);
+    new MutationObserver(() => said.push(region.textContent ?? '')).observe(region, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+  });
   await page.keyboard.press('ControlOrMeta+z');
   await expect.poll(async () => (await itemOf()).rotation).toBe(0);
-  // The live region announces it (debounced).
-  await expect(page.getByRole('status').filter({ hasText: /Undo/ })).toBeAttached();
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __said: string[] }).__said.join(' | ')))
+    .toMatch(/Undo/);
 
   // Escape deselects and moves focus off the piece onto the canvas.
   await page.keyboard.press('Escape');

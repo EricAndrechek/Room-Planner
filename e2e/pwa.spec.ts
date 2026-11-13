@@ -127,10 +127,11 @@ test('the whole app works offline', async ({ page, context }) => {
   await expect(page.getByRole('heading', { name: 'Café Plan' })).toBeVisible();
   expect(new URL(page.url()).search).toBe('');
 
-  // A #s= share link loads offline.
-  await page.goto('/');
+  // A #s= share link loads offline, opened fresh (from another page, as a clicked link would).
+  // Not goto('/') + goto(link) + reload(): the hash change is same-document, and the reload could
+  // race the first page's own boot (its history.replaceState aborted the reload under load).
+  await page.goto('about:blank');
   await page.goto(shareUrl);
-  await page.reload();
   await ready(page);
   await expect(page.getByTestId('room')).toBeVisible();
 
