@@ -1,4 +1,5 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { isProblem } from './problems';
 import fs from 'node:fs';
 
 // Service workers and offline mode are Chromium features; this runs against `astro preview`
@@ -26,8 +27,7 @@ async function controlled(page: Page) {
 
 function watchProblems(context: BrowserContext, problems: string[]) {
   context.on('console', (m) => {
-    if (m.type() === 'error' || /content security policy|refused to/i.test(m.text()))
-      problems.push(m.text());
+    if (isProblem(m)) problems.push(m.text());
   });
   context.on('weberror', (e) => problems.push(String(e.error())));
 }
