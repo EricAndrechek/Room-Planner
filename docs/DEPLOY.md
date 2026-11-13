@@ -13,10 +13,13 @@ Cloudflare builds from GitHub on push; there are no GitHub Actions deploy jobs a
 secrets. (`.github/workflows/ci.yml` only runs the tests on PRs.)
 
 - **Production**: a push to `main` builds and deploys the Worker.
-  Build command `pnpm build:ci`, deploy command
-  `npx wrangler deploy && npx wrangler deploy -c legacy/wrangler.jsonc` (both Workers; the legacy one
-  needs no build output).
-- **Previews**: pushes to other branches (and PRs) run `npx wrangler versions upload` as the
+  Build command `pnpm build:ci`, deploy command `pnpm run deploy` (the repo script deploys both
+  Workers; the legacy one needs no build output).
+  **Gotcha:** Workers Builds sets `WRANGLER_CI_OVERRIDE_NAME` (and `WRANGLER_CI_MATCH_TAG`) for the
+  connected Worker, and Wrangler applies them to _every_ deploy in the build, so a second
+  `wrangler deploy -c legacy/...` silently uploads the legacy code **as `room-planner`** and steals its
+  custom domain. `deploy:legacy` clears both variables (`env -u ...`) for that reason; keep it.
+- **Previews**: pushes to other branches (and PRs) run `npx wrangler preview` as the
   non-production branch deploy command. The preview URL
   (`<alias>-room-planner.<subdomain>.workers.dev`) shows in the Cloudflare dashboard (Workers >
   room-planner > Deployments) and in the GitHub check. `preview_urls` is enabled in

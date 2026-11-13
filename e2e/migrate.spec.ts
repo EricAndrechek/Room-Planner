@@ -109,6 +109,20 @@ test('saved projects and the current layout arrive on the new origin, hash clean
   // The old origin is left untouched (a safety net / rollback).
 });
 
+test('arriving on a non-planner page (/help/) still imports the data and restores the URL', async ({
+  page,
+}) => {
+  await seed(page, OLD!, seedStorage([unicodeProject]));
+  await page.goto(`${OLD}/help/#faq`);
+  await page.waitForURL((u) => u.origin === NEW && u.pathname === '/help/');
+  await expect
+    .poll(async () => (await projectsOf(page)).map((p: { name: string }) => p.name), {
+      timeout: 10_000,
+    })
+    .toEqual(['Café Plan', UNICODE_NAME]);
+  await expect.poll(() => page.url()).toBe(`${NEW}/help/#faq`);
+});
+
 test('a legacy ?config= link opens correctly and the data still migrates', async ({ page }) => {
   const config = { ...ftInConfig, name: 'Café Gäste', roomDims: { width: 21, height: 9 } };
   const legacyParam = Buffer.from(JSON.stringify(config), 'latin1').toString('base64');

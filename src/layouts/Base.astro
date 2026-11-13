@@ -112,5 +112,16 @@ const jsonLd = {
   </head>
   <body class={app ? 'bg-slate-50 text-slate-800' : 'bg-slate-50 text-slate-800 min-h-screen'}>
     <slot />
+    <script>
+      // Visitors bridged from the old domain can land on any page (e.g. /help/). The planner
+      // (html.app) imports the carried data itself before it reads storage; every other page
+      // imports it here so the data is already in place when they open the planner.
+      import { hasMigrationHash, importMigration } from '../lib/migrate';
+      if (!document.documentElement.classList.contains('app') && hasMigrationHash(location.hash)) {
+        void importMigration(window.location, window.localStorage, (url) =>
+          window.history.replaceState(window.history.state, '', url),
+        );
+      }
+    </script>
   </body>
 </html>
