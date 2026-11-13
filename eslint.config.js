@@ -30,7 +30,7 @@ export default defineConfig(
     },
   },
   {
-    files: ['*.{js,mjs,ts}', 'e2e/**/*.ts', 'brand/**/*.mjs'],
+    files: ['*.{js,mjs,ts}', 'e2e/**/*.ts', 'brand/**/*.mjs', 'scripts/**/*.mjs'],
     languageOptions: { globals: { ...globals.node } },
   },
 );

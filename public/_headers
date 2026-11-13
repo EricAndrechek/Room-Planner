@@ -5,14 +5,15 @@
 #
 # CSP rationale (edit the one line under /* to adjust; verify in a browser after changes):
 #  - default-src 'self'             everything is same-origin by default.
-#  - script-src 'self' 'unsafe-inline'
-#        Astro may inline small bootstrap scripts (islands hydration, PWA registerSW).
-#        Their content hashes change per build, so hashes cannot be hardcoded here;
-#        'unsafe-inline' is the pragmatic choice for a static, client-only app with no
-#        user-generated HTML. Tighten to hashes if the built HTML has no inline scripts
-#        (check: grep '<script' dist/**/*.html). No 'unsafe-eval'.
-#        PostHog's snippet loads array.js and lazy bundles (recorder, exceptions, web vitals)
-#        from *.posthog.com (us-assets.i.posthog.com), so the wildcard host is allowed too.
+#  - script-src 'self' 'unsafe-inline' (in this source file) -> 'sha256-...' hashes (in dist)
+#        Built HTML has inline scripts (Astro island bootstrap, the PostHog snippet with
+#        define:vars). Their hashes change per build, so scripts/csp-hashes.mjs (run by `build`
+#        and `build:ci` after `astro build`) hashes every inline <script> in dist/**/*.html
+#        (JSON-LD excluded: not executable) and replaces 'unsafe-inline' in dist/_headers.
+#        The build fails if this line or that token is missing, so keep both here.
+#        No 'unsafe-eval'. PostHog's snippet loads array.js and lazy bundles (recorder,
+#        exceptions, web vitals) from *.posthog.com (us-assets.i.posthog.com), so the wildcard
+#        host is allowed too.
 #  - style-src 'self' 'unsafe-inline'   Astro scoped styles and React inline style="" attributes.
 #  - img-src 'self' data: blob:         canvas exports, data-URI icons, blob previews.
 #  - font-src 'self' data:
