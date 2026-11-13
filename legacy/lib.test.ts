@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import worker, { KILL_SWITCH_SW, buildBridge, type Env } from './index';
+import { KILL_SWITCH_SW, buildBridge, handle, type Env } from './lib';
 
 const env: Env = { TARGET_ORIGIN: 'https://room-planner.andrechek.com' };
 const BROWSER = {
@@ -8,7 +8,7 @@ const BROWSER = {
   accept: 'text/html,application/xhtml+xml',
 };
 const get = (path: string, headers: Record<string, string> = BROWSER, method = 'GET') =>
-  worker.fetch(new Request(`https://roomplanner.andrechek.com${path}`, { method, headers }), env);
+  handle(new Request(`https://roomplanner.andrechek.com${path}`, { method, headers }), env);
 
 describe('crawlers and non-navigations get a 301', () => {
   for (const ua of [

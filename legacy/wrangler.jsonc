@@ -5,7 +5,7 @@
   "compatibility_date": "2026-11-13",
   // No account_id on purpose: it comes from CLOUDFLARE_ACCOUNT_ID, same as the main Worker.
   // Serves the OLD hostname: a bridge page that carries visitors' localStorage across to the new
-  // origin, plus 301s for crawlers/assets and a kill-switch service worker (see legacy/index.ts).
+  // origin, plus 301s for crawlers/assets and a kill-switch service worker (see legacy/lib.ts).
   "routes": [{ "pattern": "roomplanner.andrechek.com", "custom_domain": true }],
   "vars": { "TARGET_ORIGIN": "https://room-planner.andrechek.com" },
   "workers_dev": true,

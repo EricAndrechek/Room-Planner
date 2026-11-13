@@ -2,7 +2,7 @@
  * Import of data carried over from the legacy origin (roomplanner.andrechek.com).
  *
  * localStorage is per-origin, so a plain redirect would strand every visitor's
- * projects. The legacy Worker (legacy/index.ts) serves a bridge page that reads
+ * projects. The legacy Worker (legacy/lib.ts) serves a bridge page that reads
  * the old origin's storage and redirects here with the data in the URL
  * fragment (never sent to a server):
  *
