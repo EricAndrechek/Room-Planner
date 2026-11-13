@@ -1,0 +1,13 @@
+{
+  "_comment": "localStorage as written by commit 3bd206d (first room-sim-v3 release): Tailwind-class colors, project data without designMode/unitSystem.",
+  "localStorage": {
+    "room-sim-v3-dims": "{\"width\": 12, \"height\": 12}",
+    "room-sim-v3-doors": "[{\"id\": 1, \"width\": 3, \"position\": 6, \"wall\": \"bottom\", \"hinge\": \"left\", \"type\": \"swing-in\"}]",
+    "room-sim-v3-windows": "[{\"id\": 1, \"width\": 4, \"position\": 4, \"wall\": \"top\"}]",
+    "room-sim-v3-items": "[{\"id\": 1, \"label\": \"Bed\", \"width\": 6, \"height\": 4, \"x\": 2, \"y\": 2, \"rotation\": 0, \"color\": \"bg-blue-200 border-blue-400\", \"visible\": true}, {\"id\": 2, \"label\": \"Desk\", \"width\": 4, \"height\": 2, \"x\": 9, \"y\": 2, \"rotation\": 45, \"color\": \"bg-emerald-200 border-emerald-400\", \"visible\": true}, {\"id\": 3, \"label\": \"Wardrobe\", \"width\": 3, \"height\": 2, \"x\": 2, \"y\": 8, \"rotation\": 0, \"color\": \"bg-amber-200 border-amber-400\", \"visible\": false}, {\"id\": 4, \"label\": \"Rug\", \"width\": 5, \"height\": 8, \"x\": 6, \"y\": 5, \"rotation\": 0, \"color\": \"bg-rose-100 border-rose-300\", \"visible\": true}]",
+    "room-sim-v3-units": "ft",
+    "room-sim-v3-mode": "room-setup",
+    "room-sim-v3-currentProject": "project-1735500000000-abc123def",
+    "room-planner-projects": "[{\"id\": \"project-1735500000000-abc123def\", \"name\": \"Floor Plan 1\", \"data\": {\"roomDims\": {\"width\": 12, \"height\": 12}, \"doors\": [{\"id\": 1, \"width\": 3, \"position\": 6, \"wall\": \"bottom\", \"hinge\": \"left\", \"type\": \"swing-in\"}], \"windows\": [{\"id\": 1, \"width\": 4, \"position\": 4, \"wall\": \"top\"}], \"items\": [{\"id\": 1, \"label\": \"Bed\", \"width\": 6, \"height\": 4, \"x\": 2, \"y\": 2, \"rotation\": 0, \"color\": \"bg-blue-200 border-blue-400\", \"visible\": true}, {\"id\": 2, \"label\": \"Desk\", \"width\": 4, \"height\": 2, \"x\": 9, \"y\": 2, \"rotation\": 45, \"color\": \"bg-emerald-200 border-emerald-400\", \"visible\": true}, {\"id\": 3, \"label\": \"Wardrobe\", \"width\": 3, \"height\": 2, \"x\": 2, \"y\": 8, \"rotation\": 0, \"color\": \"bg-amber-200 border-amber-400\", \"visible\": false}, {\"id\": 4, \"label\": \"Rug\", \"width\": 5, \"height\": 8, \"x\": 6, \"y\": 5, \"rotation\": 0, \"color\": \"bg-rose-100 border-rose-300\", \"visible\": true}]}, \"createdAt\": \"2025-12-29T18:00:00.000Z\", \"updatedAt\": \"2025-12-29T18:00:00.000Z\"}]"
+  }
+}

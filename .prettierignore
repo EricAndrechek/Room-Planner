@@ -1,0 +1,11 @@
+dist
+.astro
+.wrangler
+node_modules
+pnpm-lock.yaml
+playwright-report
+test-results
+public
+.github
+src/lib/__fixtures__
+brand/*.svg

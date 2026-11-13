@@ -1,0 +1,55 @@
+---
+// PostHog web snippet (https://posthog.com/docs/libraries/astro). The snippet stubs `window.posthog`
+// and queues calls until the SDK finishes loading, so `src/lib/analytics.ts` can call it any time.
+import { execSync } from 'node:child_process';
+import pkg from '../../package.json';
+
+// Build-time release label: Workers Builds exposes the commit sha; fall back to git, then the version.
+let sha = process.env.WORKERS_CI_COMMIT_SHA ?? '';
+try {
+  sha ||= execSync('git rev-parse HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString();
+} catch {
+  /* not a git checkout */
+}
+const appVersion = sha ? `${pkg.version}+${sha.trim().slice(0, 7)}` : pkg.version;
+---
+
+<script is:inline define:vars={{ appVersion }}>
+  // prettier-ignore
+  !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],Object.defineProperty(u,"toString",{configurable:!0,enumerable:!0,writable:!0,value:function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e}}),Object.defineProperty(u.people,"toString",{configurable:!0,enumerable:!0,writable:!0,value:function(){return u.toString(1)+".people (stub)"}}),o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagResult reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+
+  const ls = (key) => {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  };
+  const host = location.hostname;
+  const debug = ls('rp:analytics-debug') === '1';
+  const local = host === 'localhost' || host === '127.0.0.1';
+
+  // Off under automation (tests) and on localhost, unless opted in for manual debugging.
+  if (debug || (!navigator.webdriver && !local)) {
+    posthog.init('phc_ykKVRqy82jxfkj4MNtEUhTRZKSLUQ2sDtUXizUoWQ77r', {
+      api_host: 'https://us.i.posthog.com',
+      defaults: '2026-08-30',
+      person_profiles: 'identified_only',
+      capture_exceptions: true,
+      respect_dnt: true,
+      opt_out_capturing_by_default: ls('rp:analytics-optout') === '1',
+      session_recording: { maskAllInputs: true },
+      debug,
+      loaded: (ph) =>
+        ph.register({
+          app_version: appVersion,
+          environment:
+            host === 'roomplanner.andrechek.com'
+              ? 'production'
+              : host.endsWith('.workers.dev')
+                ? 'preview'
+                : 'development',
+        }),
+    });
+  }
+</script>
