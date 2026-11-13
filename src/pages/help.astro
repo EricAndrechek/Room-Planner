@@ -37,6 +37,7 @@ const sections = [
   { id: 'sharing', label: 'Share links' },
   { id: 'export-import', label: 'Export & import' },
   { id: 'privacy', label: 'Your data stays in your browser' },
+  { id: 'install', label: 'Install & offline' },
   { id: 'shortcuts', label: 'Keyboard shortcuts' },
 ];
 ---
@@ -308,6 +309,39 @@ const sections = [
           <input type="checkbox" id="analytics-off" class="size-4 accent-indigo-600" />
           Disable analytics on this device
         </label>
+      </section>
+
+      <section id="install">
+        <h2>Install &amp; offline</h2>
+        <p>
+          Room Planner is a progressive web app: after your first visit it works with no connection,
+          and you can install it so it opens in its own window like any other app.
+        </p>
+        <ul>
+          <li>
+            <strong>Chrome, Edge and other Chromium browsers (desktop and Android):</strong> click
+            <em>Install app</em> in the planner, or use the install icon in the address bar or the
+            browser menu.
+          </li>
+          <li>
+            <strong>iPhone and iPad (Safari):</strong> tap <em>Share</em>, then{' '}
+            <em>Add to Home Screen</em>, then <em>Add</em>.
+          </li>
+          <li>
+            <strong>Offline:</strong> the planner, this help page and your floor plans all work
+            without internet. Share links also open offline once the app has been visited.
+          </li>
+          <li>
+            <strong>Updates:</strong> when a new version is ready, a notice at the bottom of the
+            planner offers <em>Reload</em>. Your plans save automatically, so reloading is safe.
+          </li>
+          <li>
+            <strong>Keeping your plans safe:</strong> the app asks your browser to protect its
+            storage from automatic clean-up. Installed apps are also exempt from Safari's 7-day
+            clean-up of sites you haven't visited. Plans still live only on this device, so export a
+            backup now and then.
+          </li>
+        </ul>
       </section>
 
       <section id="shortcuts">

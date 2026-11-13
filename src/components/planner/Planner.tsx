@@ -52,6 +52,7 @@ import { ColorPicker } from './ColorPicker';
 import { FileBrowserModal } from './FileBrowserModal';
 import { FurniturePanel } from './FurniturePanel';
 import { Header } from './Header';
+import { PwaNotices } from './PwaNotices';
 import { RoomCanvas } from './RoomCanvas';
 import { RoomSetupPanel } from './RoomSetupPanel';
 import { ShareModal } from './ShareModal';
@@ -595,6 +596,8 @@ export function Planner({ storage, initial }: PlannerProps) {
           setFilesOpen(false);
         }}
       />
+
+      <PwaNotices />
 
       {colorPickerItem && (
         <ColorPicker

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { CircleHelp, Eye, Home, Info, Lock, Sofa } from 'lucide-react';
 import { DESIGN_MODES, UNIT_SYSTEMS } from '../../lib/constants';
+import { InstallButton } from './PwaNotices';
 import type { DesignMode, UnitSystem } from '../../types';
 
 interface SidebarProps {
@@ -156,6 +157,7 @@ export function Sidebar({
       <div className="p-4 space-y-4 min-w-0 md:min-w-[20rem]">{children}</div>
 
       <div className="mt-auto px-4 pb-4 pt-2 md:min-w-[20rem]">
+        <InstallButton variant="sidebar" />
         <a
           href={helpHref}
           className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400 hover:text-indigo-600 transition-colors"

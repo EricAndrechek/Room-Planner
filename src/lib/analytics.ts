@@ -24,7 +24,11 @@ export type AnalyticsEvent =
   | 'units_changed'
   | 'mode_changed'
   | 'undo'
-  | 'redo';
+  | 'redo'
+  | 'pwa_install_prompted'
+  | 'pwa_installed'
+  | 'app_update_applied'
+  | 'storage_persist_result';
 
 export type AnalyticsProps = Record<string, string | number | boolean | null | undefined>;
 

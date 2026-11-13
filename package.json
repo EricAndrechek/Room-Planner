@@ -22,6 +22,7 @@
     "check:worker": "tsc -p worker/tsconfig.json",
     "test:worker": "node --test worker/proxy.test.ts",
     "assets": "node brand/generate.mjs",
+    "screenshots": "node brand/screenshots.mjs",
     "deploy": "wrangler deploy",
     "dev:worker": "pnpm build && wrangler dev",
     "cf:types": "wrangler types worker/worker-configuration.d.ts"
@@ -44,6 +45,7 @@
     "@playwright/test": "^1.65.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@vite-pwa/astro": "^2.0.2",
     "eslint": "^10.14.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.14.0",
@@ -55,6 +57,7 @@
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.72.2",
     "vitest": "^5.1.0",
+    "workbox-window": "^7.4.1",
     "wrangler": "^4.161.0"
   }
 }
