@@ -1,6 +1,7 @@
 # Deploys to Cloudflare Workers (static assets + PostHog proxy Worker).
 # Required repo secrets: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID.
-# Optional: POSTHOG_CLI_API_KEY (+ repo variable POSTHOG_CLI_PROJECT_ID) for source maps.
+# Optional: repo variable PUBLIC_POSTHOG_KEY (analytics), and for source maps secret POSTHOG_CLI_API_KEY
+# (personal API key: error tracking write + organization read) + repo variable POSTHOG_CLI_PROJECT_ID.
 # Without the Cloudflare secrets every job here no-ops with a notice (stays green).
 name: Deploy
 
@@ -52,6 +53,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - if: steps.cf.outputs.enabled == 'true'
         run: pnpm build
+        env:
+          PUBLIC_POSTHOG_KEY: ${{ vars.PUBLIC_POSTHOG_KEY }}
 
       # Optional: upload source maps to PostHog error tracking BEFORE deploying.
       # Requires the build to emit maps (build.sourcemap: 'hidden'); .assetsignore keeps *.map off the CDN.
@@ -60,7 +63,7 @@ jobs:
         run: |
           npm install -g @posthog/cli
           posthog-cli sourcemap inject --directory dist
-          posthog-cli sourcemap upload --directory dist --release-version "$GITHUB_SHA"
+          posthog-cli sourcemap upload --directory dist --release-name room-planner --release-version "$GITHUB_SHA"
 
       - name: Deploy to Cloudflare
         if: steps.cf.outputs.enabled == 'true'
@@ -107,6 +110,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - if: steps.cf.outputs.enabled == 'true'
         run: pnpm build
+        env:
+          PUBLIC_POSTHOG_KEY: ${{ vars.PUBLIC_POSTHOG_KEY }}
+          PUBLIC_DEPLOY_ENV: preview
 
       # Uploads a version WITHOUT deploying it; the alias URL is stable per PR.
       - name: Upload preview version
