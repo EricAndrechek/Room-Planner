@@ -25,7 +25,8 @@ export type AnalyticsEvent =
   | 'pwa_install_prompted'
   | 'pwa_installed'
   | 'app_update_applied'
-  | 'storage_persist_result';
+  | 'storage_persist_result'
+  | 'domain_migration_imported';
 
 export type AnalyticsProps = Record<string, string | number | boolean | null | undefined>;
 
@@ -73,4 +74,14 @@ export function setAnalyticsEnabled(enabled: boolean): void {
     /* storage unavailable */
   }
   ph((p) => (enabled ? p.opt_in_capturing() : p.opt_out_capturing()));
+}
+
+/**
+ * After a cross-domain migration import: the PostHog snippet starts opted-out on a
+ * `#rp-migrate` arrival (the visitor's opt-out preference was still inside the URL
+ * payload), so resume capturing unless the imported data opted out.
+ */
+export function resumeAnalyticsAfterMigration(): void {
+  if (isAnalyticsOptedOut()) return;
+  ph((p) => p.opt_in_capturing());
 }

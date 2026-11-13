@@ -54,8 +54,10 @@ const pipeThrough = async (
   return new Uint8Array(await new Response(out).arrayBuffer());
 };
 
-const deflate = (bytes: Uint8Array) => pipeThrough(bytes, new CompressionStream('deflate-raw'));
-const inflate = (bytes: Uint8Array) => pipeThrough(bytes, new DecompressionStream('deflate-raw'));
+export const deflate = (bytes: Uint8Array) =>
+  pipeThrough(bytes, new CompressionStream('deflate-raw'));
+export const inflate = (bytes: Uint8Array) =>
+  pipeThrough(bytes, new DecompressionStream('deflate-raw'));
 
 // --- new (fragment) format ---------------------------------------------------------
 

@@ -9,9 +9,9 @@
     // Astro emits dist/404.html; serve it (with a 404 status) for unknown paths.
     "not_found_handling": "404-page",
   },
-  // Custom domain. Cloudflare creates the DNS record itself, so any existing
-  // `roomplanner` CNAME must be deleted first (see docs/DEPLOY.md).
-  "routes": [{ "pattern": "roomplanner.andrechek.com", "custom_domain": true }],
+  // Custom domain. Cloudflare creates the DNS record itself. The old hostname
+  // (roomplanner.andrechek.com) is served by the separate legacy/ Worker (see docs/DEPLOY.md).
+  "routes": [{ "pattern": "room-planner.andrechek.com", "custom_domain": true }],
   // Branch Previews: Workers Builds runs `npx wrangler preview` for non-main branches,
   // served on workers.dev (noindex). The block can stay empty; top-level settings apply.
   "previews": {},
