@@ -106,5 +106,10 @@ const jsonLd = {
   </head>
   <body class={app ? 'bg-slate-50 text-slate-800' : 'bg-slate-50 text-slate-800 min-h-screen'}>
     <slot />
+    <script>
+      // Every page (planner, help, 404): lazy-loads PostHog after first paint; a no-op without a key.
+      import { initAnalytics } from '../lib/analytics';
+      initAnalytics();
+    </script>
   </body>
 </html>

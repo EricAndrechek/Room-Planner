@@ -31,3 +31,8 @@ test-results/
 # Cloudflare
 .wrangler
 .dev.vars*
+
+# Local env (see .env.example)
+.env
+.env.*
+!.env.example
