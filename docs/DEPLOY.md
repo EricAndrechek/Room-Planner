@@ -41,26 +41,23 @@ secrets exist, the deploy and preview jobs print a notice and exit green.
 PostHog source maps need the build to emit maps (`vite.build.sourcemap: 'hidden'` in the Astro
 config). `.assetsignore` (`*.map`) keeps them off the public site; they only go to PostHog.
 
-## 2. Cutover (order matters)
+## 2. Cutover
 
 A Workers custom domain cannot be attached while a DNS record already exists for that hostname, and
-today `roomplanner` is a proxied CNAME to `<user>.github.io`. So:
+today `roomplanner` is a proxied CNAME to `<user>.github.io`. The zone's Universal SSL wildcard
+already covers `*.andrechek.com`, so the Worker serves HTTPS as soon as the record exists and
+downtime is about a minute. Do steps 2 and 3 back to back.
 
-1. **First deploy without the custom domain taking effect.** Temporarily remove the `routes` block
-   from the deploy (or accept that the first deploy will fail on the domain step) and deploy:
-   `pnpm build && pnpm exec wrangler deploy` (or push to main). The Worker is live at
-   `https://room-planner.<account-subdomain>.workers.dev`.
-   Tip: easiest is a throwaway branch where `routes` is deleted from `wrangler.jsonc`, deployed
-   via `workflow_dispatch` or locally with `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` exported.
-2. **Verify on workers.dev**: app loads, headers (`curl -I`), a missing path shows the 404 page,
-   `/ingest/static/array.js` returns JS, events arrive in PostHog, service worker registers, no CSP
-   violations in the console.
-3. **Delete the DNS record**: Cloudflare dashboard > andrechek.com > DNS > remove CNAME `roomplanner`
-   (`<user>.github.io`). The site is down from now until step 4 finishes, so do these back to back.
-4. **Attach the domain**: deploy with the committed `wrangler.jsonc` (push to main, or
-   `pnpm exec wrangler deploy`). Cloudflare creates the DNS record and certificate.
-5. **Verify** `https://roomplanner.andrechek.com` (certificate may take a minute or two).
-6. **Disable GitHub Pages**: `gh api -X DELETE repos/EricAndrechek/Room-Planner/pages`.
+1. **One-time setup** (section 1): API token and repo secrets in place.
+2. **Delete the DNS record**: Cloudflare dashboard > andrechek.com > DNS > remove CNAME
+   `roomplanner` (`<user>.github.io`).
+3. **Deploy immediately**: Actions > Deploy > Run workflow (`workflow_dispatch`), or locally after
+   `pnpm exec wrangler login` to the PERSONAL Cloudflare account: `pnpm build && pnpm deploy`.
+   The custom domain in `wrangler.jsonc` recreates the DNS record.
+4. **Verify** `https://roomplanner.andrechek.com`: app loads, headers (`curl -I`), a missing path
+   shows the 404 page, `/ingest/static/array.js` returns JS, events arrive in PostHog, service
+   worker registers, no CSP violations in the console.
+5. **Disable GitHub Pages**: `gh api -X DELETE repos/EricAndrechek/Room-Planner/pages`.
 
 ### Rollback
 
@@ -84,7 +81,7 @@ Worker must have been deployed once before versions can be uploaded; fork PRs ge
 
 ```sh
 pnpm build
-pnpm exec wrangler dev        # serves dist/ + the /ingest proxy on http://localhost:8787
+pnpm dev:worker         # serves dist/ + the /ingest proxy on http://localhost:8787
 pnpm exec wrangler deploy --dry-run --outdir /tmp/out   # validate config, no upload
 ```
 
