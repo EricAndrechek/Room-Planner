@@ -6,7 +6,7 @@
   <rect width="1200" height="630" fill="#f8fafc"/>
   <rect width="1200" height="630" fill="url(#grid)"/>
   <!-- floor-plan motif, right side -->
-  <g transform="translate(190 50) scale(.8)"><g fill="none" stroke="#4f46e5" stroke-opacity=".28" stroke-width="8" stroke-linejoin="round">
+  <g transform="translate(260 50) scale(.78)"><g fill="none" stroke="#4f46e5" stroke-opacity=".28" stroke-width="8" stroke-linejoin="round">
     <path d="M700 90H1120V320H940V540H700Z"/>
     <path d="M940 320H700"/>
     <path d="M940 320V540H1120V320" stroke-opacity=".18"/>

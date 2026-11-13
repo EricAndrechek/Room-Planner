@@ -16,7 +16,7 @@ const out = (f, d) => writeFile(path.join(pub, f), d);
 const png = (buf, size, w = size, h = size) =>
   sharp(buf, { density: 384 })
     .resize(w, h)
-    .png({ compressionLevel: 9, effort: 10, palette: true, quality: 95 })
+    .png({ compressionLevel: 9, effort: 10, palette: false, })
     .toBuffer();
 
 // --- og-image.svg: bake the wordmark/tagline into outlines (Inter, OFL) ---
@@ -43,8 +43,8 @@ const d = (font, text, x, y, size) => {
 let og = await src('og-template.svg');
 og = og
   .replace('@WORDMARK@', d(bold, 'Room Planner', 272, 262, 88))
-  .replace('@TAG1@', d(med, 'Plan your room layout in the browser —', 96, 392, 38))
-  .replace('@TAG2@', d(med, 'free, private, no sign-up', 96, 440, 38));
+  .replace('@TAG1@', d(med, 'Plan your room layout in the browser', 96, 392, 38))
+  .replace('@TAG2@', d(med, '\u2014 free, private, no sign-up', 96, 440, 38));
 await writeFile(path.join(here, 'og-image.svg'), og);
 
 // --- SVGs ---
@@ -61,7 +61,7 @@ await out('maskable-icon-512x512.png', await png(Buffer.from(await src('logo-mas
 await out('apple-touch-icon.png', await png(Buffer.from(await src('logo-apple.svg')), 180));
 await out(
   'og-image.png',
-  await sharp(Buffer.from(og), { density: 72 }).resize(1200, 630).png({ compressionLevel: 9, effort: 10, palette: true, quality: 90 }).toBuffer(),
+  await sharp(Buffer.from(og), { density: 72 }).resize(1200, 630).png({ compressionLevel: 9, effort: 10, palette: false, }).toBuffer(),
 );
 
 // --- favicon.ico (16/32 from the chunky small design, 48 from the master), PNG-in-ICO ---
