@@ -16,7 +16,9 @@
   // Custom domain. Cloudflare creates the DNS record itself, so any existing
   // `roomplanner` CNAME must be deleted first (see docs/DEPLOY.md).
   "routes": [{ "pattern": "roomplanner.andrechek.com", "custom_domain": true }],
-  // Version / PR preview URLs on workers.dev (`wrangler versions upload --preview-alias`).
+  // Branch Previews: Workers Builds runs `npx wrangler preview` for non-main branches,
+  // served on workers.dev (noindex). The block can stay empty; top-level settings apply.
+  "previews": {},
   "preview_urls": true,
   "workers_dev": true,
   "observability": { "enabled": true },
