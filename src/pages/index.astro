@@ -14,15 +14,22 @@ import { SITE_NAME } from '../lib/site';
           <img src={withBase('favicon.svg')} width="72" height="72" alt="" class="mx-auto" />
           <h1 class="text-2xl font-bold text-slate-800">{SITE_NAME}</h1>
           <p class="text-slate-600">
-            A free online room layout and furniture planner. Set your room's dimensions, add doors and windows,
-            then drag, rotate and arrange furniture to scale — right in your browser.
+            A free online room layout and furniture planner. Set your room's dimensions, add doors
+            and windows, then drag, rotate and arrange furniture to scale — right in your browser.
           </p>
-          <p class="text-sm text-slate-500" data-loading>Loading the planner…</p>
+          <p class="text-sm text-slate-500" data-loading>
+            Loading the planner…
+          </p>
           <noscript>
-            <p class="text-sm text-amber-700">Room Planner needs JavaScript to run. Please enable it and reload.</p>
+            <p class="text-sm text-amber-700">
+              Room Planner needs JavaScript to run. Please enable it and reload.
+            </p>
           </noscript>
           <p>
-            <a href={withBase('help/')} class="text-sm font-medium text-indigo-600 hover:text-indigo-800 underline">
+            <a
+              href={withBase('help/')}
+              class="text-sm font-medium text-indigo-600 hover:text-indigo-800 underline"
+            >
               How to use Room Planner
             </a>
           </p>

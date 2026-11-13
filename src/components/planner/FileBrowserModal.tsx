@@ -92,7 +92,8 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
             disabled={selectedIds.length === 0 && !currentProjectId}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <FileDown className="w-3.5 h-3.5" /> Export {selectedIds.length > 0 ? `(${selectedIds.length})` : ''}
+            <FileDown className="w-3.5 h-3.5" /> Export{' '}
+            {selectedIds.length > 0 ? `(${selectedIds.length})` : ''}
           </button>
           {selectedIds.length > 0 && (
             <>
@@ -194,7 +195,9 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
                     ) : (
                       <>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-slate-800 truncate">{project.name}</span>
+                          <span className="text-sm font-medium text-slate-800 truncate">
+                            {project.name}
+                          </span>
                           {project.id === currentProjectId && (
                             <span className="text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-sm font-medium">
                               Active
@@ -278,7 +281,10 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
 
         {/* Import Section */}
         <div className="pt-3 border-t border-slate-200">
-          <label className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2" htmlFor="import-plans">
+          <label
+            className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2"
+            htmlFor="import-plans"
+          >
             <FileUp className="w-4 h-4" /> Import Floor Plan(s)
           </label>
           <textarea

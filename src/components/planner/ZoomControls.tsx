@@ -24,7 +24,9 @@ export function HeaderZoomControls({ zoom, onZoomIn, onZoomOut, onFit }: ZoomCon
           <ZoomOut className="w-4 h-4" />
         </button>
       </Tooltip>
-      <span className="text-xs font-medium text-slate-600 min-w-[3rem] text-center">{Math.round(zoom * 100)}%</span>
+      <span className="text-xs font-medium text-slate-600 min-w-[3rem] text-center">
+        {Math.round(zoom * 100)}%
+      </span>
       <Tooltip text="Zoom in">
         <button
           type="button"
@@ -67,7 +69,9 @@ export function FloatingZoomControls({ zoom, onZoomIn, onZoomOut, onFit }: ZoomC
       >
         <ZoomOut className="w-5 h-5" />
       </button>
-      <span className="text-xs font-medium text-slate-600 min-w-[3rem] text-center">{Math.round(zoom * 100)}%</span>
+      <span className="text-xs font-medium text-slate-600 min-w-[3rem] text-center">
+        {Math.round(zoom * 100)}%
+      </span>
       <button
         type="button"
         onClick={onZoomIn}

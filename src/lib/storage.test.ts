@@ -16,7 +16,8 @@ import {
   saveLayout,
 } from './storage';
 
-const fixture = (f: { localStorage: Record<string, string> }) => createMemoryStorage({ ...f.localStorage });
+const fixture = (f: { localStorage: Record<string, string> }) =>
+  createMemoryStorage({ ...f.localStorage });
 
 describe('storage written by the original app', () => {
   it('loads every key unchanged', () => {
@@ -61,7 +62,9 @@ describe('storage written by the original app', () => {
     const out = createMemoryStorage();
     saveLayout(out, state.layout);
     for (const key of [KEYS.dims, KEYS.doors, KEYS.windows, KEYS.items]) {
-      expect(out.getItem(key)).toBe(originalStorage.localStorage[key as keyof typeof originalStorage.localStorage]);
+      expect(out.getItem(key)).toBe(
+        originalStorage.localStorage[key as keyof typeof originalStorage.localStorage],
+      );
     }
   });
 
@@ -69,7 +72,9 @@ describe('storage written by the original app', () => {
     const s = fixture(originalStorage);
     const state = bootFromStorage(s);
     expect(state.saveStatus).toBe('saved');
-    expect(state.lastSavedAt?.toISOString()).toBe(JSON.parse(originalStorage.localStorage['room-planner-projects'])[0].updatedAt);
+    expect(state.lastSavedAt?.toISOString()).toBe(
+      JSON.parse(originalStorage.localStorage['room-planner-projects'])[0].updatedAt,
+    );
   });
 });
 
@@ -80,7 +85,12 @@ describe('early v3 storage (Tailwind colors, project data without mode/units)', 
     const state = loadPersistedState(s);
     expect(state.unitSystem).toBe('ft');
     expect(state.designMode).toBe('room-setup');
-    expect(state.layout.items.map((i) => i.color)).toEqual(['#93c5fd', '#6ee7b7', '#fcd34d', '#fecaca']);
+    expect(state.layout.items.map((i) => i.color)).toEqual([
+      '#93c5fd',
+      '#6ee7b7',
+      '#fcd34d',
+      '#fecaca',
+    ]);
     expect(state.layout.items[2]!.visible).toBe(false);
     expect(state.layout.items[1]!.rotation).toBe(45);
     // the raw project is kept as-is (normalized only when opened)
@@ -99,7 +109,15 @@ describe('v2 storage (first release: room-sim-v2-*, single door)', () => {
     const state = loadPersistedState(s);
     expect(state.layout.roomDims).toEqual({ width: 10, height: 9 });
     expect(state.layout.doors).toEqual([
-      { width: 2.5, position: 3, wall: 'bottom', hinge: 'left', open: 'out', id: 1, type: 'swing-out' },
+      {
+        width: 2.5,
+        position: 3,
+        wall: 'bottom',
+        hinge: 'left',
+        open: 'out',
+        id: 1,
+        type: 'swing-out',
+      },
     ]);
     expect(state.layout.windows).toEqual([]);
     expect(state.layout.items).toHaveLength(4);
@@ -138,7 +156,16 @@ describe('robustness', () => {
     expect(state.layout.roomDims).toEqual({ width: 12, height: 12 });
     expect(state.layout.doors).toEqual(defaultLayout().doors);
     expect(state.layout.items).toEqual([
-      { id: 'item-3', label: 'Chair', width: 2, height: 2, x: 0, y: 0, rotation: 0, color: '#93c5fd' },
+      {
+        id: 'item-3',
+        label: 'Chair',
+        width: 2,
+        height: 2,
+        x: 0,
+        y: 0,
+        rotation: 0,
+        color: '#93c5fd',
+      },
     ]);
     expect(state.unitSystem).toBe('ft-in');
     expect(state.designMode).toBe('room-setup');
@@ -146,7 +173,10 @@ describe('robustness', () => {
   });
 
   it('a dangling currentProject id starts a fresh plan', () => {
-    const s = createMemoryStorage({ ...originalStorage.localStorage, [KEYS.currentProject]: 'project-gone' });
+    const s = createMemoryStorage({
+      ...originalStorage.localStorage,
+      [KEYS.currentProject]: 'project-gone',
+    });
     const state = bootFromStorage(s);
     expect(state.currentProjectId).toBeNull();
     expect(state.saveStatus).toBe('unsaved');
@@ -201,12 +231,27 @@ describe('opening share links at boot', () => {
 
   it('a new #s= link opens with unicode intact', async () => {
     const s = createMemoryStorage();
-    const layout = { ...defaultLayout(), items: defaultLayout().items.map((i) => ({ ...i, label: `${i.label} 🪑` })) };
-    const url = await buildShareUrl('https://example.com/', toShareConfig(layout, 'Wohnzimmer 🛋️', 'cm'));
+    const layout = {
+      ...defaultLayout(),
+      items: defaultLayout().items.map((i) => ({ ...i, label: `${i.label} 🪑` })),
+    };
+    const url = await buildShareUrl(
+      'https://example.com/',
+      toShareConfig(layout, 'Wohnzimmer 🛋️', 'cm'),
+    );
     const result = await boot(url, s);
-    expect(result.shared).toMatchObject({ legacy: false, createdProject: true, cleanUrl: 'https://example.com/' });
+    expect(result.shared).toMatchObject({
+      legacy: false,
+      createdProject: true,
+      cleanUrl: 'https://example.com/',
+    });
     expect(result.state.projects[0]!.name).toBe('Wohnzimmer 🛋️');
-    expect(result.state.layout.items.map((i) => i.label)).toEqual(['Bed 🪑', 'Desk 🪑', 'Wardrobe 🪑', 'Rug 🪑']);
+    expect(result.state.layout.items.map((i) => i.label)).toEqual([
+      'Bed 🪑',
+      'Desk 🪑',
+      'Wardrobe 🪑',
+      'Rug 🪑',
+    ]);
     expect(result.state.layout.roomDims.width).toBeCloseTo(12, 4);
   });
 

@@ -31,7 +31,11 @@ const originalImport = (search: string) => {
   const conv = (v: number) => unitValueToFeet(v, sourceUnitSystem);
   let doors = structuredClone(INITIAL_DOORS) as unknown[];
   if (parsed.doors) {
-    doors = parsed.doors.map((d: Record<string, number>) => ({ ...d, width: conv(d.width!), position: conv(d.position!) }));
+    doors = parsed.doors.map((d: Record<string, number>) => ({
+      ...d,
+      width: conv(d.width!),
+      position: conv(d.position!),
+    }));
   } else if (parsed.door) {
     doors = [
       {
@@ -44,7 +48,11 @@ const originalImport = (search: string) => {
     ];
   }
   const windows = parsed.windows
-    ? parsed.windows.map((w: Record<string, number>) => ({ ...w, width: conv(w.width!), position: conv(w.position!) }))
+    ? parsed.windows.map((w: Record<string, number>) => ({
+        ...w,
+        width: conv(w.width!),
+        position: conv(w.position!),
+      }))
     : structuredClone(INITIAL_WINDOWS);
   return {
     roomDims: { width: conv(parsed.roomDims.width), height: conv(parsed.roomDims.height) },
@@ -107,8 +115,28 @@ describe('legacy ?config= links (captured from the original app)', () => {
       roomDims: { width: 10, height: 9 },
       door: { width: 2.5, position: 3, wall: 'left', hinge: 'right', open: 'in' },
       items: [
-        { id: 1, label: 'Bed', width: 6, height: 4, x: 2, y: 2, rotation: 0, color: 'bg-blue-200 border-blue-400', visible: true },
-        { id: 2, label: 'Desk', width: 4, height: 2, x: 9, y: 2, rotation: 30, color: 'bg-fuchsia-200 border-fuchsia-400', visible: true },
+        {
+          id: 1,
+          label: 'Bed',
+          width: 6,
+          height: 4,
+          x: 2,
+          y: 2,
+          rotation: 0,
+          color: 'bg-blue-200 border-blue-400',
+          visible: true,
+        },
+        {
+          id: 2,
+          label: 'Desk',
+          width: 4,
+          height: 2,
+          x: 9,
+          y: 2,
+          rotation: 30,
+          color: 'bg-fuchsia-200 border-fuchsia-400',
+          visible: true,
+        },
       ],
     };
     const href = `https://example.com/?config=${encodeURIComponent(encodeLegacyConfig(v2))}`;
@@ -116,7 +144,15 @@ describe('legacy ?config= links (captured from the original app)', () => {
     const layout = fromShareConfig(link!.config);
     expect(layout).toEqual(originalImport(new URL(href).search));
     expect(layout.doors).toEqual([
-      { width: 2.5, position: 3, wall: 'left', hinge: 'right', open: 'in', id: 1, type: 'swing-in' },
+      {
+        width: 2.5,
+        position: 3,
+        wall: 'left',
+        hinge: 'right',
+        open: 'in',
+        id: 1,
+        type: 'swing-in',
+      },
     ]);
     expect(layout.items.map((i) => i.color)).toEqual(['#93c5fd', '#f9a8d4']);
     expect(layout.windows).toEqual(INITIAL_WINDOWS);
@@ -153,7 +189,9 @@ describe('legacy ?config= links (captured from the original app)', () => {
 
   it('the original encoder could not handle emoji (bug this replaces)', () => {
     expect(originalLinks.emojiName.url.endsWith('?config=')).toBe(true);
-    expect(() => encodeLegacyConfig({ name: 'Bedroom 🛏️', roomDims: { width: 1, height: 1 }, items: [] })).toThrow();
+    expect(() =>
+      encodeLegacyConfig({ name: 'Bedroom 🛏️', roomDims: { width: 1, height: 1 }, items: [] }),
+    ).toThrow();
   });
 });
 
@@ -180,7 +218,10 @@ describe('new #s= fragment links', () => {
     const config = toShareConfig(
       {
         ...layout,
-        items: layout.items.map((i, n) => ({ ...i, label: ['Bett 🛏️', 'Schreibtisch', '衣柜', 'Ковёр'][n]! })),
+        items: layout.items.map((i, n) => ({
+          ...i,
+          label: ['Bett 🛏️', 'Schreibtisch', '衣柜', 'Ковёр'][n]!,
+        })),
       },
       'Bedroom 🛏️ — 2ᵉ étage',
       'm',

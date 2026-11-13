@@ -39,10 +39,16 @@ export function Sidebar({
       <div className="md:hidden bg-white px-4 py-3 flex justify-between items-center sticky top-0 z-10 border-b border-slate-200">
         <div className="flex items-center gap-2">
           <div className={`p-1.5 rounded-lg ${isRoomSetup ? 'bg-indigo-100' : 'bg-emerald-100'}`}>
-            {isRoomSetup ? <Home className="w-4 h-4 text-indigo-600" /> : <Sofa className="w-4 h-4 text-emerald-600" />}
+            {isRoomSetup ? (
+              <Home className="w-4 h-4 text-indigo-600" />
+            ) : (
+              <Sofa className="w-4 h-4 text-emerald-600" />
+            )}
           </div>
           <div>
-            <h2 className="font-bold text-slate-800 text-sm leading-tight">{isRoomSetup ? 'Room Setup' : 'Furniture'}</h2>
+            <h2 className="font-bold text-slate-800 text-sm leading-tight">
+              {isRoomSetup ? 'Room Setup' : 'Furniture'}
+            </h2>
             <p className="text-[10px] text-slate-500">
               {isRoomSetup ? 'Configure room, doors & windows' : 'Add and arrange furniture'}
             </p>
@@ -56,7 +62,9 @@ export function Sidebar({
             onClose();
           }}
           className={`flex items-center gap-1 px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors active:scale-95 ${
-            isRoomSetup ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-emerald-600 hover:bg-emerald-700'
+            isRoomSetup
+              ? 'bg-indigo-600 hover:bg-indigo-700'
+              : 'bg-emerald-600 hover:bg-emerald-700'
           }`}
           aria-label="View floor plan"
         >
@@ -89,14 +97,18 @@ export function Sidebar({
       {/* Design Mode Switcher */}
       <div className="bg-white p-4 border-b border-slate-200">
         <div className="flex items-center gap-2 mb-3">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Design Steps</span>
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            Design Steps
+          </span>
         </div>
         <div className="flex gap-2">
           <button
             type="button"
             onClick={() => onDesignModeChange(DESIGN_MODES.ROOM_SETUP)}
             className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
-              isRoomSetup ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              isRoomSetup
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
             aria-pressed={isRoomSetup}
           >
@@ -108,7 +120,9 @@ export function Sidebar({
             type="button"
             onClick={() => onDesignModeChange(DESIGN_MODES.FURNITURE)}
             className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
-              !isRoomSetup ? 'bg-emerald-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              !isRoomSetup
+                ? 'bg-emerald-600 text-white shadow-md'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
             aria-pressed={!isRoomSetup}
           >
@@ -134,8 +148,8 @@ export function Sidebar({
       <div className="bg-slate-50 p-3 text-xs text-slate-600 border-b border-slate-100 flex gap-2 items-center">
         <Info className="w-4 h-4 shrink-0 text-slate-400" />
         <p>
-          You can type values with units (e.g., <strong>12&apos;6&quot;</strong>, <strong>150cm</strong>,{' '}
-          <strong>1.5m</strong>)
+          You can type values with units (e.g., <strong>12&apos;6&quot;</strong>,{' '}
+          <strong>150cm</strong>, <strong>1.5m</strong>)
         </p>
       </div>
 

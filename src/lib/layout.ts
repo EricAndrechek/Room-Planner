@@ -8,7 +8,14 @@ import type {
   UnitSystem,
   Wall,
 } from '../types';
-import { DOOR_TYPES, INITIAL_DOORS, INITIAL_ITEMS, INITIAL_ROOM, INITIAL_WINDOWS, WALL_OPTIONS } from './constants';
+import {
+  DOOR_TYPES,
+  INITIAL_DOORS,
+  INITIAL_ITEMS,
+  INITIAL_ROOM,
+  INITIAL_WINDOWS,
+  WALL_OPTIONS,
+} from './constants';
 import { migrateColor } from './colors';
 import { feetToUnitValue, unitValueToFeet } from './units';
 
@@ -21,12 +28,13 @@ const num = (v: unknown, fallback: number): number =>
 const isWall = (v: unknown): v is Wall => WALL_OPTIONS.includes(v as Wall);
 
 /** Deep copy of the built-in starter room (so callers can never mutate the constants). */
-export const defaultLayout = (): Layout => structuredClone({
-  roomDims: INITIAL_ROOM,
-  doors: INITIAL_DOORS,
-  windows: INITIAL_WINDOWS,
-  items: INITIAL_ITEMS,
-});
+export const defaultLayout = (): Layout =>
+  structuredClone({
+    roomDims: INITIAL_ROOM,
+    doors: INITIAL_DOORS,
+    windows: INITIAL_WINDOWS,
+    items: INITIAL_ITEMS,
+  });
 
 // --- Normalization ------------------------------------------------------------
 // Stored and imported data is untrusted. These keep every field that is
@@ -36,12 +44,18 @@ export const defaultLayout = (): Layout => structuredClone({
 
 export const normalizeRoomDims = (raw: unknown, fallback: RoomDims = INITIAL_ROOM): RoomDims => {
   if (!isObject(raw)) return { ...fallback };
-  return { ...raw, width: num(raw.width, fallback.width), height: num(raw.height, fallback.height) };
+  return {
+    ...raw,
+    width: num(raw.width, fallback.width),
+    height: num(raw.height, fallback.height),
+  };
 };
 
 export const normalizeDoor = (raw: unknown, index = 0): Door | null => {
   if (!isObject(raw)) return null;
-  const type = DOOR_TYPES.some((t) => t.value === raw.type) ? (raw.type as Door['type']) : 'swing-in';
+  const type = DOOR_TYPES.some((t) => t.value === raw.type)
+    ? (raw.type as Door['type'])
+    : 'swing-in';
   const hinge: Hinge = raw.hinge === 'right' ? 'right' : 'left';
   return {
     ...raw,
@@ -148,7 +162,11 @@ export const isShareConfig = (v: unknown): v is ShareConfig =>
   isObject(v) && isObject(v.roomDims) && Array.isArray(v.items);
 
 /** Layout (feet) -> portable config in the given unit system. */
-export const toShareConfig = (layout: Layout, name: string, unitSystem: UnitSystem): ShareConfig => {
+export const toShareConfig = (
+  layout: Layout,
+  name: string,
+  unitSystem: UnitSystem,
+): ShareConfig => {
   const c = (feet: number) => feetToUnitValue(feet, unitSystem);
   return {
     name,

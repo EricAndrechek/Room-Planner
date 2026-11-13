@@ -4,12 +4,7 @@
  */
 import type { Project, SaveStatus } from '../types';
 import { fromShareConfig, layoutsEqual, normalizeLayout } from './layout';
-import {
-  SHARED_PROJECT_NAME,
-  createProject,
-  findDuplicateProject,
-  findProject,
-} from './projects';
+import { SHARED_PROJECT_NAME, createProject, findDuplicateProject, findProject } from './projects';
 import { readShareLink, stripShareLink, type SharedLayoutLink } from './share';
 import {
   loadPersistedState,
@@ -77,7 +72,9 @@ export const applySharedLink = (
     project = duplicate;
   } else {
     const name =
-      typeof link.config.name === 'string' && link.config.name ? link.config.name : SHARED_PROJECT_NAME;
+      typeof link.config.name === 'string' && link.config.name
+        ? link.config.name
+        : SHARED_PROJECT_NAME;
     project = createProject(name, layout, now);
     projects = [...projects, project];
     saveProjects(storage, projects);
@@ -99,13 +96,21 @@ export const applySharedLink = (
 };
 
 /** Full start-up: storage, then any share link in `href`. */
-export const boot = async (href: string, storage: StorageLike, now: Date = new Date()): Promise<BootResult> => {
+export const boot = async (
+  href: string,
+  storage: StorageLike,
+  now: Date = new Date(),
+): Promise<BootResult> => {
   const state = bootFromStorage(storage);
   const link = await readShareLink(href);
   if (!link) return { state, shared: null };
   const applied = applySharedLink(state, link, storage, now);
   return {
     state: applied.state,
-    shared: { legacy: link.legacy, createdProject: applied.createdProject, cleanUrl: stripShareLink(href) },
+    shared: {
+      legacy: link.legacy,
+      createdProject: applied.createdProject,
+      cleanUrl: stripShareLink(href),
+    },
   };
 };

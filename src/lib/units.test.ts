@@ -156,7 +156,9 @@ describe('unit value conversion (share/export format)', () => {
   it('round-trips with sub-millimeter error', () => {
     for (const system of ['ft-in', 'ft', 'in', 'm', 'cm'] as UnitSystem[]) {
       for (const feet of [0, 0.1, 2.7142857142857153, 14.5, 99.99]) {
-        expect(Math.abs(unitValueToFeet(feetToUnitValue(feet, system), system) - feet)).toBeLessThan(1e-4);
+        expect(
+          Math.abs(unitValueToFeet(feetToUnitValue(feet, system), system) - feet),
+        ).toBeLessThan(1e-4);
       }
     }
   });

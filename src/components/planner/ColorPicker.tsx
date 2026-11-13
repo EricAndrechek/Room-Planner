@@ -16,9 +16,17 @@ const PICKER_WIDTH = 220;
 const PICKER_HEIGHT = 280;
 
 /** Preset swatches plus a custom hex / native color input. */
-export function ColorPicker({ currentColor, onChange, onClose, isMobile = false, triggerRef }: ColorPickerProps) {
+export function ColorPicker({
+  currentColor,
+  onChange,
+  onClose,
+  isMobile = false,
+  triggerRef,
+}: ColorPickerProps) {
   const [showCustom, setShowCustom] = useState(false);
-  const [customHex, setCustomHex] = useState(currentColor.startsWith('#') ? currentColor : DEFAULT_COLOR);
+  const [customHex, setCustomHex] = useState(
+    currentColor.startsWith('#') ? currentColor : DEFAULT_COLOR,
+  );
   const [hexError, setHexError] = useState('');
   const [position, setPosition] = useState({ top: 0, left: 0 });
 

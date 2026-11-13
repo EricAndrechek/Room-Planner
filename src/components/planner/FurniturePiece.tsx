@@ -49,7 +49,11 @@ export const FurniturePiece = memo(function FurniturePiece({
       onPointerDown={(e) => onPointerDown(e, item)}
       onClick={() => onSelect(item)}
       className={`absolute flex items-center justify-center text-xs font-bold text-slate-700 select-none transition-shadow rounded-md ${
-        modeLocked ? 'cursor-not-allowed opacity-50' : isItemLocked ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'
+        modeLocked
+          ? 'cursor-not-allowed opacity-50'
+          : isItemLocked
+            ? 'cursor-pointer'
+            : 'cursor-grab active:cursor-grabbing'
       }`}
       style={{
         width: item.width * PIXELS_PER_UNIT,
@@ -60,7 +64,10 @@ export const FurniturePiece = memo(function FurniturePiece({
         borderWidth,
         borderStyle: 'solid',
         zIndex: isActive ? 50 : 10,
-        boxShadow: isActive && !isLocked ? '0 8px 20px -4px rgba(0, 0, 0, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.08)',
+        boxShadow:
+          isActive && !isLocked
+            ? '0 8px 20px -4px rgba(0, 0, 0, 0.15)'
+            : '0 1px 3px rgba(0, 0, 0, 0.08)',
         touchAction: 'none',
       }}
       role="button"

@@ -20,7 +20,11 @@ export const copyText = async (text: string): Promise<void> => {
 };
 
 /** Trigger a download of `content` as a file. */
-export const downloadFile = (filename: string, content: string, type = 'application/json'): void => {
+export const downloadFile = (
+  filename: string,
+  content: string,
+  type = 'application/json',
+): void => {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

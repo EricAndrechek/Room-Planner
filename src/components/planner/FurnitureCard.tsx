@@ -61,12 +61,18 @@ export const FurnitureCard = memo(function FurnitureCard({
       <div className="flex justify-between items-center mb-3 gap-2">
         <div className="flex items-center gap-2 flex-1 min-w-0 relative">
           {hasWarning && (
-            <div className="w-5 h-5 bg-red-100 rounded-sm flex items-center justify-center shrink-0" title={text}>
+            <div
+              className="w-5 h-5 bg-red-100 rounded-sm flex items-center justify-center shrink-0"
+              title={text}
+            >
               <AlertTriangle className="w-3 h-3 text-red-500" />
             </div>
           )}
           {isItemLocked && !hasWarning && (
-            <div className="w-5 h-5 bg-amber-100 rounded-sm flex items-center justify-center shrink-0" title="Locked">
+            <div
+              className="w-5 h-5 bg-amber-100 rounded-sm flex items-center justify-center shrink-0"
+              title="Locked"
+            >
               <Lock className="w-3 h-3 text-amber-600" />
             </div>
           )}
@@ -195,7 +201,9 @@ export const FurnitureCard = memo(function FurnitureCard({
               <label className="text-[10px] text-slate-500">X Position</label>
               <DimensionInput
                 value={item.x}
-                onChange={(val) => onChange(item.id, { x: clamp(val, 0, roomDims.width - item.width) })}
+                onChange={(val) =>
+                  onChange(item.id, { x: clamp(val, 0, roomDims.width - item.width) })
+                }
                 className="w-full p-1.5 text-xs border border-slate-200 rounded-sm"
                 min={0}
                 max={roomDims.width - item.width}
@@ -207,7 +215,9 @@ export const FurnitureCard = memo(function FurnitureCard({
               <label className="text-[10px] text-slate-500">Y Position</label>
               <DimensionInput
                 value={item.y}
-                onChange={(val) => onChange(item.id, { y: clamp(val, 0, roomDims.height - item.height) })}
+                onChange={(val) =>
+                  onChange(item.id, { y: clamp(val, 0, roomDims.height - item.height) })
+                }
                 className="w-full p-1.5 text-xs border border-slate-200 rounded-sm"
                 min={0}
                 max={roomDims.height - item.height}
@@ -220,7 +230,9 @@ export const FurnitureCard = memo(function FurnitureCard({
               <input
                 type="number"
                 value={Math.round(normalizeDegrees(item.rotation))}
-                onChange={(e) => onChange(item.id, { rotation: parseFloat(e.target.value) || 0 }, false)}
+                onChange={(e) =>
+                  onChange(item.id, { rotation: parseFloat(e.target.value) || 0 }, false)
+                }
                 onBlur={onCommit}
                 className="w-full p-1.5 text-xs border border-slate-200 rounded-sm focus:ring-2 focus:ring-emerald-500 outline-hidden"
                 min={0}

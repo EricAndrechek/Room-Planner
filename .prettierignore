@@ -6,3 +6,4 @@ playwright-report
 test-results
 public
 .github
+src/lib/__fixtures__

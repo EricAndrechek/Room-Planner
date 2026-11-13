@@ -2,8 +2,10 @@
 import type { Layout, Project, ProjectData } from '../types';
 import { layoutsEqual, normalizeLayout } from './layout';
 
-export const generateProjectId = (now: number = Date.now(), random: () => number = Math.random): string =>
-  `project-${now}-${random().toString(36).substring(2, 11)}`;
+export const generateProjectId = (
+  now: number = Date.now(),
+  random: () => number = Math.random,
+): string => `project-${now}-${random().toString(36).substring(2, 11)}`;
 
 /** Name given to a plan that was auto-saved before the user named it. */
 export const defaultProjectName = (date: Date = new Date()): string =>
@@ -56,7 +58,10 @@ export interface ProjectsExportFile {
   projects: Project[];
 }
 
-export const buildExportFile = (projects: Project[], now: Date = new Date()): ProjectsExportFile => ({
+export const buildExportFile = (
+  projects: Project[],
+  now: Date = new Date(),
+): ProjectsExportFile => ({
   version: 1,
   exportedAt: now.toISOString(),
   projects,

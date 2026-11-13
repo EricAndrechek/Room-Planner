@@ -60,7 +60,9 @@ export const KEYS = {
 } as const;
 
 /** In-memory fallback used when localStorage is unavailable (private mode, blocked cookies...). */
-export const createMemoryStorage = (initial: Record<string, string> = {}): StorageLike & {
+export const createMemoryStorage = (
+  initial: Record<string, string> = {},
+): StorageLike & {
   dump(): Record<string, string>;
 } => {
   const map = new Map(Object.entries(initial));
@@ -147,7 +149,9 @@ export const migrateStorage = (s: StorageLike): void => {
         const layout = normalizeLayout({
           roomDims: normalizeRoomDims(v2Dims),
           doors:
-            v2Door && typeof v2Door === 'object' ? [legacyDoorToDoor(v2Door as LegacyDoor)] : undefined,
+            v2Door && typeof v2Door === 'object'
+              ? [legacyDoorToDoor(v2Door as LegacyDoor)]
+              : undefined,
           // v2 rooms had no windows.
           windows: [],
           items: v2Items,

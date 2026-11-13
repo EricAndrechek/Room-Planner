@@ -22,12 +22,20 @@ describe('projects', () => {
 
   it('create / update / rename / duplicate / delete', () => {
     const a = createProject('A', defaultLayout(), now);
-    expect(a).toMatchObject({ name: 'A', createdAt: now.toISOString(), updatedAt: now.toISOString() });
+    expect(a).toMatchObject({
+      name: 'A',
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    });
 
     const later = new Date('2026-03-05T00:00:00.000Z');
     const data = { ...defaultLayout(), roomDims: { width: 20, height: 10 } };
     const updated = updateProjectData([a], a.id, data, later);
-    expect(updated[0]).toMatchObject({ data, updatedAt: later.toISOString(), createdAt: a.createdAt });
+    expect(updated[0]).toMatchObject({
+      data,
+      updatedAt: later.toISOString(),
+      createdAt: a.createdAt,
+    });
 
     expect(renameProject(updated, a.id, 'Kitchen 🍳', later)[0]!.name).toBe('Kitchen 🍳');
 
@@ -41,7 +49,11 @@ describe('projects', () => {
   });
 
   it('finds an identical layout regardless of stored mode/units', () => {
-    const p = createProject('A', { ...defaultLayout(), designMode: 'furniture', unitSystem: 'm' }, now);
+    const p = createProject(
+      'A',
+      { ...defaultLayout(), designMode: 'furniture', unitSystem: 'm' },
+      now,
+    );
     expect(findDuplicateProject([p], defaultLayout())?.id).toBe(p.id);
     expect(
       findDuplicateProject([p], { ...defaultLayout(), roomDims: { width: 1, height: 1 } }),
@@ -50,7 +62,11 @@ describe('projects', () => {
 
   it('export file + name', () => {
     const p = createProject('My Room #1', defaultLayout(), now);
-    expect(buildExportFile([p], now)).toEqual({ version: 1, exportedAt: now.toISOString(), projects: [p] });
+    expect(buildExportFile([p], now)).toEqual({
+      version: 1,
+      exportedAt: now.toISOString(),
+      projects: [p],
+    });
     expect(exportFileName([p], now)).toBe('My_Room__1.json');
     expect(exportFileName([p, p], now)).toBe('floor_plans_export_2026-03-04.json');
   });
@@ -61,7 +77,11 @@ describe('projects', () => {
     const imported = parseProjectsImport(text, 0, new Date('2026-04-01T00:00:00.000Z'));
     expect(imported).toHaveLength(1);
     expect(imported[0]!.id).not.toBe(p.id);
-    expect(imported[0]).toMatchObject({ name: 'Den', createdAt: p.createdAt, updatedAt: '2026-04-01T00:00:00.000Z' });
+    expect(imported[0]).toMatchObject({
+      name: 'Den',
+      createdAt: p.createdAt,
+      updatedAt: '2026-04-01T00:00:00.000Z',
+    });
     expect(imported[0]!.data).toEqual(p.data);
   });
 

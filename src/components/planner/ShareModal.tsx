@@ -77,12 +77,15 @@ export function ShareModal({ isOpen, onClose, config, onImport }: ShareModalProp
     <Modal isOpen={isOpen} onClose={onClose} title="Share & Save Layout">
       <div className="space-y-6">
         <div>
-          <label className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2" htmlFor="share-url">
+          <label
+            className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2"
+            htmlFor="share-url"
+          >
             <Share2 className="w-4 h-4" /> Direct Link (Snapshot)
           </label>
           <p className="text-[10px] text-slate-500 mb-2">
-            This link captures your current layout. Any changes you make after sharing won&apos;t be reflected —
-            it&apos;s a snapshot, not a live link.
+            This link captures your current layout. Any changes you make after sharing won&apos;t be
+            reflected — it&apos;s a snapshot, not a live link.
           </p>
           <div className="flex gap-2">
             <input
@@ -100,7 +103,11 @@ export function ShareModal({ isOpen, onClose, config, onImport }: ShareModalProp
               className="px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg text-slate-600 transition-colors"
               aria-label="Copy share link"
             >
-              {copyFeedback === 'url' ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+              {copyFeedback === 'url' ? (
+                <Check className="w-4 h-4 text-green-600" />
+              ) : (
+                <Copy className="w-4 h-4" />
+              )}
             </button>
           </div>
         </div>
@@ -109,7 +116,10 @@ export function ShareModal({ isOpen, onClose, config, onImport }: ShareModalProp
 
         <div>
           <div className="flex justify-between items-end mb-2">
-            <label className="text-sm font-medium text-slate-700 flex items-center gap-2" htmlFor="layout-json">
+            <label
+              className="text-sm font-medium text-slate-700 flex items-center gap-2"
+              htmlFor="layout-json"
+            >
               <Download className="w-4 h-4" /> Layout Config (JSON)
             </label>
             <button
@@ -133,7 +143,10 @@ export function ShareModal({ isOpen, onClose, config, onImport }: ShareModalProp
             className="w-full h-24 bg-slate-50 border border-slate-200 rounded-lg p-2 text-[10px] text-slate-600 font-mono mb-4"
           />
 
-          <label className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2" htmlFor="import-json">
+          <label
+            className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2"
+            htmlFor="import-json"
+          >
             <Upload className="w-4 h-4" /> Import Config
           </label>
           <textarea

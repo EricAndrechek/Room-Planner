@@ -73,9 +73,13 @@ const TOKEN_RE =
  * system). A bare number after a feet value is inches (`12'6`), after a meter
  * value is centimeters (`1m 20`). Unparseable input yields 0, like before.
  */
-export const parseToFeet = (input: string | number | null | undefined, unitSystem: UnitSystem = 'ft-in'): number => {
+export const parseToFeet = (
+  input: string | number | null | undefined,
+  unitSystem: UnitSystem = 'ft-in',
+): number => {
   if (input === null || input === undefined || input === '') return 0;
-  if (typeof input === 'number') return Number.isFinite(input) ? input * SYSTEM_FEET_PER[unitSystem] : 0;
+  if (typeof input === 'number')
+    return Number.isFinite(input) ? input * SYSTEM_FEET_PER[unitSystem] : 0;
 
   const str = input
     .trim()

@@ -43,7 +43,10 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    captureError(error, { source: 'error_boundary', componentStack: info.componentStack ?? undefined });
+    captureError(error, {
+      source: 'error_boundary',
+      componentStack: info.componentStack ?? undefined,
+    });
   }
 
   render() {
@@ -53,14 +56,17 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="max-w-md w-full bg-white rounded-xl shadow-xl border border-slate-200 p-6 text-center space-y-4">
           <h1 className="text-lg font-bold text-slate-800">Something went wrong</h1>
           <p className="text-sm text-slate-600">
-            Room Planner hit an unexpected error. Your floor plans are stored in this browser and have not been
-            deleted. You can download a backup of them before reloading.
+            Room Planner hit an unexpected error. Your floor plans are stored in this browser and
+            have not been deleted. You can download a backup of them before reloading.
           </p>
           <div className="flex flex-col sm:flex-row gap-2 justify-center">
             <button
               type="button"
               onClick={() =>
-                downloadFile(`room-planner-backup-${new Date().toISOString().split('T')[0]}.json`, collectBackup())
+                downloadFile(
+                  `room-planner-backup-${new Date().toISOString().split('T')[0]}.json`,
+                  collectBackup(),
+                )
               }
               className="px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium"
             >

@@ -15,7 +15,9 @@ const storage = typeof window === 'undefined' ? null : getBrowserStorage();
  */
 function PlannerBoot() {
   const [result, setResult] = useState<BootResult | null>(() =>
-    storage && !hasShareLink(window.location.href) ? { state: bootFromStorage(storage), shared: null } : null,
+    storage && !hasShareLink(window.location.href)
+      ? { state: bootFromStorage(storage), shared: null }
+      : null,
   );
 
   useEffect(() => {

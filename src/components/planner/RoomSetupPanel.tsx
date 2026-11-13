@@ -1,4 +1,14 @@
-import { ArrowLeftRight, ArrowRight, ChevronDown, ChevronUp, Home, Lock, Plus, Trash2, Unlock } from 'lucide-react';
+import {
+  ArrowLeftRight,
+  ArrowRight,
+  ChevronDown,
+  ChevronUp,
+  Home,
+  Lock,
+  Plus,
+  Trash2,
+  Unlock,
+} from 'lucide-react';
 import { DOOR_TYPES, WALL_OPTIONS } from '../../lib/constants';
 import { wallLength } from '../../lib/geometry';
 import { feetToDisplay, formatArea } from '../../lib/units';
@@ -30,7 +40,8 @@ const plural = (n: number, word: string) => `${n} ${word}${n !== 1 ? 's' : ''}`;
 /** Step 1 group in the sidebar: room size, doors and windows. */
 export function RoomSetupPanel(props: RoomSetupPanelProps) {
   const { isActiveMode, expanded, roomDims, doors, windows, unitSystem } = props;
-  const inputClass = 'w-full p-2 border border-slate-200 rounded-sm focus:ring-2 focus:ring-indigo-500 outline-hidden';
+  const inputClass =
+    'w-full p-2 border border-slate-200 rounded-sm focus:ring-2 focus:ring-indigo-500 outline-hidden';
   const smallInput = (ring: string) =>
     `w-full p-1.5 text-xs border border-slate-200 rounded-sm focus:ring-2 ${ring} outline-hidden`;
 
@@ -58,8 +69,9 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
           <div className="text-left">
             <span className="text-sm font-semibold text-slate-700 block">Room Setup</span>
             <span className="text-[10px] text-slate-500">
-              {feetToDisplay(roomDims.width, unitSystem)} × {feetToDisplay(roomDims.height, unitSystem)} •{' '}
-              {plural(doors.length, 'door')} • {plural(windows.length, 'window')}
+              {feetToDisplay(roomDims.width, unitSystem)} ×{' '}
+              {feetToDisplay(roomDims.height, unitSystem)} • {plural(doors.length, 'door')} •{' '}
+              {plural(windows.length, 'window')}
             </span>
           </div>
         </div>
@@ -105,7 +117,9 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
         >
           {/* Room Dimensions */}
           <section>
-            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Room Dimensions</h2>
+            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+              Room Dimensions
+            </h2>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium mb-1">Width</label>
@@ -157,7 +171,11 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
               {doors.map((door, index) => {
                 const wallLen = wallLength(roomDims, door.wall);
                 return (
-                  <div key={door.id} className="p-3 bg-white rounded-lg border border-slate-200" data-testid="door-card">
+                  <div
+                    key={door.id}
+                    className="p-3 bg-white rounded-lg border border-slate-200"
+                    data-testid="door-card"
+                  >
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-xs font-medium text-slate-700">Door {index + 1}</span>
                       <button
@@ -175,7 +193,9 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                         <label className="block text-[10px] text-slate-500 mb-1">Wall</label>
                         <select
                           value={door.wall}
-                          onChange={(e) => props.onUpdateDoor(door.id, { wall: e.target.value as Wall })}
+                          onChange={(e) =>
+                            props.onUpdateDoor(door.id, { wall: e.target.value as Wall })
+                          }
                           className={`${smallInput('focus:ring-indigo-500')} bg-white`}
                           aria-label={`Door ${index + 1} wall`}
                         >
@@ -190,7 +210,9 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                         <label className="block text-[10px] text-slate-500 mb-1">Type</label>
                         <select
                           value={door.type}
-                          onChange={(e) => props.onUpdateDoor(door.id, { type: e.target.value as DoorType })}
+                          onChange={(e) =>
+                            props.onUpdateDoor(door.id, { type: e.target.value as DoorType })
+                          }
                           className={`${smallInput('focus:ring-indigo-500')} bg-white`}
                           aria-label={`Door ${index + 1} type`}
                         >
@@ -233,10 +255,15 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                     {door.type !== 'sliding' && (
                       <button
                         type="button"
-                        onClick={() => props.onUpdateDoor(door.id, { hinge: door.hinge === 'left' ? 'right' : 'left' })}
+                        onClick={() =>
+                          props.onUpdateDoor(door.id, {
+                            hinge: door.hinge === 'left' ? 'right' : 'left',
+                          })
+                        }
                         className="w-full py-1.5 px-2 bg-slate-100 hover:bg-slate-200 rounded-sm text-[10px] font-medium text-slate-600 flex items-center justify-center gap-1 transition-colors"
                       >
-                        <ArrowLeftRight className="w-3 h-3" /> Hinge: {door.hinge === 'left' ? 'Left' : 'Right'}
+                        <ArrowLeftRight className="w-3 h-3" /> Hinge:{' '}
+                        {door.hinge === 'left' ? 'Left' : 'Right'}
                       </button>
                     )}
                   </div>
@@ -269,7 +296,11 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
               {windows.map((win, index) => {
                 const wallLen = wallLength(roomDims, win.wall);
                 return (
-                  <div key={win.id} className="p-3 bg-blue-50/30 rounded-lg border border-blue-100" data-testid="window-card">
+                  <div
+                    key={win.id}
+                    className="p-3 bg-blue-50/30 rounded-lg border border-blue-100"
+                    data-testid="window-card"
+                  >
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-xs font-medium text-slate-700">Window {index + 1}</span>
                       <button
@@ -287,7 +318,9 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                         <label className="block text-[10px] text-slate-500 mb-1">Wall</label>
                         <select
                           value={win.wall}
-                          onChange={(e) => props.onUpdateWindow(win.id, { wall: e.target.value as Wall })}
+                          onChange={(e) =>
+                            props.onUpdateWindow(win.id, { wall: e.target.value as Wall })
+                          }
                           className={`${smallInput('focus:ring-blue-500')} bg-white`}
                           aria-label={`Window ${index + 1} wall`}
                         >

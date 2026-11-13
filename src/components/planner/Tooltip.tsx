@@ -44,7 +44,9 @@ export function Tooltip({ children, text }: { children: ReactNode; text: string 
             {text}
             <div
               className={`absolute border-4 border-transparent -translate-x-1/2 ${
-                position === 'top' ? 'top-full border-t-slate-800' : 'bottom-full border-b-slate-800'
+                position === 'top'
+                  ? 'top-full border-t-slate-800'
+                  : 'bottom-full border-b-slate-800'
               }`}
               style={{ left: `${arrowLeft}px` }}
             />

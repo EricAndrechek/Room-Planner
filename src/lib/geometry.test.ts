@@ -80,7 +80,9 @@ describe('checkItemsCollision', () => {
     // AABB of the diamond reaches the corner region, but the diamond itself doesn't.
     const corner = item({ x: 1.8, y: 1.8, width: 0.4, height: 0.4 });
     expect(checkItemsCollision(diamond, corner)).toBe(false);
-    expect(checkItemsCollision(diamond, item({ x: 0.9, y: 0.9, width: 0.2, height: 0.2 }))).toBe(true);
+    expect(checkItemsCollision(diamond, item({ x: 0.9, y: 0.9, width: 0.2, height: 0.2 }))).toBe(
+      true,
+    );
   });
 
   it('is symmetric', () => {
@@ -104,7 +106,9 @@ describe('isItemInBounds', () => {
   it('accounts for rotation', () => {
     // 6x2 at (0,5) fits unrotated but rotated 90deg its top-left corner leaves the room.
     expect(isItemInBounds(item({ x: 0, y: 5, width: 6, height: 2 }), room)).toBe(true);
-    expect(isItemInBounds(item({ x: 0, y: 0, width: 6, height: 2, rotation: 90 }), room)).toBe(false);
+    expect(isItemInBounds(item({ x: 0, y: 0, width: 6, height: 2, rotation: 90 }), room)).toBe(
+      false,
+    );
     // A 2x2 rotated 45deg in a corner pokes out.
     expect(isItemInBounds(item({ x: 0, y: 0, rotation: 45 }), room)).toBe(false);
   });
@@ -130,7 +134,14 @@ describe('computeItemWarnings', () => {
 });
 
 describe('openings', () => {
-  const door: Door = { id: 1, width: 3, position: 6, wall: 'bottom', hinge: 'left', type: 'swing-in' };
+  const door: Door = {
+    id: 1,
+    width: 3,
+    position: 6,
+    wall: 'bottom',
+    hinge: 'left',
+    type: 'swing-in',
+  };
   const rect = { width: 14, height: 10 };
 
   it('wallLength', () => {

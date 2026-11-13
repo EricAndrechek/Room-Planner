@@ -1,5 +1,14 @@
 import { useState } from 'react';
-import { Check, CircleHelp, Edit3, FolderOpen, Maximize2, Redo2, Share2, Undo2 } from 'lucide-react';
+import {
+  Check,
+  CircleHelp,
+  Edit3,
+  FolderOpen,
+  Maximize2,
+  Redo2,
+  Share2,
+  Undo2,
+} from 'lucide-react';
 import { formatTimeAgo } from '../../lib/browser';
 import { feetToDisplay, formatArea } from '../../lib/units';
 import { useNow } from '../../hooks/useNow';
@@ -96,7 +105,10 @@ export function Header(props: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-1 sm:gap-2">
-        <div className="hidden sm:flex items-center gap-1.5 text-[10px] text-slate-400" data-testid="save-status">
+        <div
+          className="hidden sm:flex items-center gap-1.5 text-[10px] text-slate-400"
+          data-testid="save-status"
+        >
           {props.saveStatus === 'saved' && props.lastSavedAt ? (
             <span className="flex items-center gap-1">
               <Check className="w-3 h-3 text-green-500" />
@@ -135,7 +147,12 @@ export function Header(props: HeaderProps) {
           </Tooltip>
         </div>
 
-        <HeaderZoomControls zoom={props.zoom} onZoomIn={props.onZoomIn} onZoomOut={props.onZoomOut} onFit={props.onFit} />
+        <HeaderZoomControls
+          zoom={props.zoom}
+          onZoomIn={props.onZoomIn}
+          onZoomOut={props.onZoomOut}
+          onFit={props.onFit}
+        />
 
         <Tooltip text="Help & FAQ">
           <a

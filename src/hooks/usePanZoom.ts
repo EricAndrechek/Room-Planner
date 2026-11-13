@@ -11,7 +11,11 @@ const DRAGGABLE_SELECTOR = '[data-draggable], [role="button"], .cursor-grab, .cu
  * pans, touch pinch zooms + pans, one-finger touch on the background pans.
  * The room is fitted to the view shortly after mount and on window resize.
  */
-export function usePanZoom(containerRef: RefObject<HTMLElement | null>, room: RoomDims, isMobile: boolean) {
+export function usePanZoom(
+  containerRef: RefObject<HTMLElement | null>,
+  room: RoomDims,
+  isMobile: boolean,
+) {
   const [zoom, setZoomState] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const zoomRef = useRef(zoom);
@@ -28,7 +32,11 @@ export function usePanZoom(containerRef: RefObject<HTMLElement | null>, room: Ro
     const rect = el.getBoundingClientRect();
     const padding = isMobile ? 32 : 64;
     setZoom(
-      computeFitZoom({ width: rect.width - padding, height: rect.height - padding }, room, PIXELS_PER_UNIT),
+      computeFitZoom(
+        { width: rect.width - padding, height: rect.height - padding },
+        room,
+        PIXELS_PER_UNIT,
+      ),
     );
     setPan({ x: 0, y: 0 });
   }, [containerRef, isMobile, room, setZoom]);
@@ -68,7 +76,8 @@ export function usePanZoom(containerRef: RefObject<HTMLElement | null>, room: Ro
     let lastSingle: { x: number; y: number } | null = null;
     let singlePanning = false;
 
-    const distance = (t: TouchList) => Math.hypot(t[0]!.clientX - t[1]!.clientX, t[0]!.clientY - t[1]!.clientY);
+    const distance = (t: TouchList) =>
+      Math.hypot(t[0]!.clientX - t[1]!.clientX, t[0]!.clientY - t[1]!.clientY);
     const center = (t: TouchList) => ({
       x: (t[0]!.clientX + t[1]!.clientX) / 2,
       y: (t[0]!.clientY + t[1]!.clientY) / 2,

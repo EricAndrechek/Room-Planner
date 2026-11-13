@@ -24,9 +24,18 @@ test('static shell is served for crawlers and no-JS visitors', async ({ browser 
   await page.goto('/');
   await expect(page).toHaveTitle('Room Planner — Free Online Room Layout & Furniture Planner');
   await expect(page.getByRole('heading', { name: 'Room Planner' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'How to use Room Planner' })).toHaveAttribute('href', '/help/');
-  const jsonLd = JSON.parse((await page.locator('script[type="application/ld+json"]').textContent())!);
-  expect(jsonLd['@graph'][0]).toMatchObject({ '@type': 'WebSite', name: 'Room Planner', alternateName: 'RoomPlanner' });
+  await expect(page.getByRole('link', { name: 'How to use Room Planner' })).toHaveAttribute(
+    'href',
+    '/help/',
+  );
+  const jsonLd = JSON.parse(
+    (await page.locator('script[type="application/ld+json"]').textContent())!,
+  );
+  expect(jsonLd['@graph'][0]).toMatchObject({
+    '@type': 'WebSite',
+    name: 'Room Planner',
+    alternateName: 'RoomPlanner',
+  });
   await context.close();
 });
 
@@ -145,7 +154,9 @@ test("loads data saved by the original app's localStorage", async ({ page }) => 
   await expect(page.getByRole('button', { name: 'Show Rug' })).toBeVisible();
 
   // Nothing was rewritten just by loading.
-  const after = await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).map((k) => [k, localStorage.getItem(k)])));
+  const after = await page.evaluate(() =>
+    Object.fromEntries(Object.keys(localStorage).map((k) => [k, localStorage.getItem(k)])),
+  );
   for (const [k, v] of Object.entries(seed)) expect(after[k]).toBe(v);
   expect(after['room-planner-schema']).toBe('1');
 });

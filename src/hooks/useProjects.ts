@@ -45,7 +45,14 @@ const toProjectData = (doc: WorkingDoc): ProjectData => ({
  * project is written 500ms after the last change; with no current project a
  * new one is created ("Floor Plan - <date>"), as the original app did.
  */
-export function useProjects({ storage, initialProjects, initialProjectId, initialSaved, initialSavedAt, doc }: Options) {
+export function useProjects({
+  storage,
+  initialProjects,
+  initialProjectId,
+  initialSaved,
+  initialSavedAt,
+  doc,
+}: Options) {
   const [projects, setProjectsState] = useState(initialProjects);
   const projectsRef = useRef(initialProjects);
   const [currentProjectId, setCurrentProjectId] = useState(initialProjectId);
@@ -124,7 +131,12 @@ export function useProjects({ storage, initialProjects, initialProjectId, initia
 
   /** Save the working document as a new named project and make it current. */
   const createNamed = useCallback(
-    (name: string, source: string, snapshot: WorkingDoc = docRef.current, data?: ProjectData): Project => {
+    (
+      name: string,
+      source: string,
+      snapshot: WorkingDoc = docRef.current,
+      data?: ProjectData,
+    ): Project => {
       const project = createProject(name, data ?? toProjectData(snapshot));
       commitProjects([...projectsRef.current, project]);
       select(project, snapshot);

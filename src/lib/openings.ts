@@ -41,31 +41,79 @@ const gapStyle = (wall: Wall, pos: number, widthPx: number, room: RoomDims): CSS
   const base = { position: 'absolute', backgroundColor: 'white', zIndex: 10 } as const;
   switch (wall) {
     case 'bottom':
-      return { ...base, left: pos * P, top: room.height * P - WALL_THICKNESS / 2, width: widthPx, height: WALL_THICKNESS };
+      return {
+        ...base,
+        left: pos * P,
+        top: room.height * P - WALL_THICKNESS / 2,
+        width: widthPx,
+        height: WALL_THICKNESS,
+      };
     case 'top':
-      return { ...base, left: pos * P, top: -WALL_THICKNESS / 2, width: widthPx, height: WALL_THICKNESS };
+      return {
+        ...base,
+        left: pos * P,
+        top: -WALL_THICKNESS / 2,
+        width: widthPx,
+        height: WALL_THICKNESS,
+      };
     case 'left':
-      return { ...base, left: -WALL_THICKNESS / 2, top: pos * P, width: WALL_THICKNESS, height: widthPx };
+      return {
+        ...base,
+        left: -WALL_THICKNESS / 2,
+        top: pos * P,
+        width: WALL_THICKNESS,
+        height: widthPx,
+      };
     case 'right':
-      return { ...base, left: room.width * P - WALL_THICKNESS / 2, top: pos * P, width: WALL_THICKNESS, height: widthPx };
+      return {
+        ...base,
+        left: room.width * P - WALL_THICKNESS / 2,
+        top: pos * P,
+        width: WALL_THICKNESS,
+        height: widthPx,
+      };
   }
 };
 
 /** Architectural jamb lines at both ends of the opening. */
-const jambStyles = (wall: Wall, pos: number, widthPx: number, room: RoomDims): [CSSProperties, CSSProperties] => {
+const jambStyles = (
+  wall: Wall,
+  pos: number,
+  widthPx: number,
+  room: RoomDims,
+): [CSSProperties, CSSProperties] => {
   const base = { position: 'absolute', backgroundColor: JAMB_COLOR, zIndex: 11 } as const;
   if (isHorizontalWall(wall)) {
     const top = wall === 'top' ? -JAMB_LENGTH / 2 : room.height * P - JAMB_LENGTH / 2;
-    const jamb = (x: number): CSSProperties => ({ ...base, left: x - JAMB_WIDTH / 2, top, width: JAMB_WIDTH, height: JAMB_LENGTH });
+    const jamb = (x: number): CSSProperties => ({
+      ...base,
+      left: x - JAMB_WIDTH / 2,
+      top,
+      width: JAMB_WIDTH,
+      height: JAMB_LENGTH,
+    });
     return [jamb(pos * P), jamb(pos * P + widthPx)];
   }
   const left = wall === 'left' ? -JAMB_LENGTH / 2 : room.width * P - JAMB_LENGTH / 2;
-  const jamb = (y: number): CSSProperties => ({ ...base, left, top: y - JAMB_WIDTH / 2, width: JAMB_LENGTH, height: JAMB_WIDTH });
+  const jamb = (y: number): CSSProperties => ({
+    ...base,
+    left,
+    top: y - JAMB_WIDTH / 2,
+    width: JAMB_LENGTH,
+    height: JAMB_WIDTH,
+  });
   return [jamb(pos * P), jamb(pos * P + widthPx)];
 };
 
 /** Round drag handle centered on the opening. `inset` nudges window handles 2px into the room. */
-const handleStyle = (wall: Wall, pos: number, widthPx: number, room: RoomDims, size: number, inset: number): CSSProperties => {
+const handleStyle = (
+  wall: Wall,
+  pos: number,
+  widthPx: number,
+  room: RoomDims,
+  size: number,
+  inset: number,
+): CSSProperties => {
   const along = pos * P + widthPx / 2 - size / 2;
   const base = { position: 'absolute', width: size, height: size, zIndex: 20 } as const;
   switch (wall) {
@@ -94,9 +142,25 @@ export const doorStyles = (door: Door, room: RoomDims): DoorStyles => {
   let arc: CSSProperties = {};
   let panel: CSSProperties = {};
   let track: CSSProperties = {};
-  const arcBase = { position: 'absolute', width: r, height: r, border: DASH, opacity: 0.5, pointerEvents: 'none' } as const;
-  const panelBase = { position: 'absolute', backgroundColor: '#cbd5e1', border: '1px solid #64748b' } as const;
-  const trackBase = { position: 'absolute', backgroundColor: '#94a3b8', borderRadius: 2, opacity: 0.6 } as const;
+  const arcBase = {
+    position: 'absolute',
+    width: r,
+    height: r,
+    border: DASH,
+    opacity: 0.5,
+    pointerEvents: 'none',
+  } as const;
+  const panelBase = {
+    position: 'absolute',
+    backgroundColor: '#cbd5e1',
+    border: '1px solid #64748b',
+  } as const;
+  const trackBase = {
+    position: 'absolute',
+    backgroundColor: '#94a3b8',
+    borderRadius: 2,
+    opacity: 0.6,
+  } as const;
   const startX = isLeft ? pos * P : (pos + door.width) * P - r;
   const panelX = isLeft ? pos * P : (pos + door.width) * P - 4;
 
@@ -105,7 +169,13 @@ export const doorStyles = (door: Door, room: RoomDims): DoorStyles => {
       const top = swingIn ? (room.height - door.width) * P : room.height * P;
       arc = {
         ...arcBase,
-        borderRadius: !isLeft ? (swingIn ? '100% 0 0 0' : '0 0 0 100%') : swingIn ? '0 100% 0 0' : '0 0 100% 0',
+        borderRadius: !isLeft
+          ? swingIn
+            ? '100% 0 0 0'
+            : '0 0 0 100%'
+          : swingIn
+            ? '0 100% 0 0'
+            : '0 0 100% 0',
         borderBottom: swingIn ? DASH : 'none',
         borderTop: !swingIn ? DASH : 'none',
         borderLeft: !isLeft ? DASH : 'none',
@@ -121,7 +191,13 @@ export const doorStyles = (door: Door, room: RoomDims): DoorStyles => {
       const top = swingIn ? 0 : -r;
       arc = {
         ...arcBase,
-        borderRadius: isLeft ? (swingIn ? '0 0 100% 0' : '0 0 0 100%') : swingIn ? '0 0 0 100%' : '0 0 100% 0',
+        borderRadius: isLeft
+          ? swingIn
+            ? '0 0 100% 0'
+            : '0 0 0 100%'
+          : swingIn
+            ? '0 0 0 100%'
+            : '0 0 100% 0',
         borderTop: !swingIn ? DASH : 'none',
         borderBottom: swingIn ? DASH : 'none',
         borderLeft: isLeft ? DASH : 'none',
@@ -138,7 +214,13 @@ export const doorStyles = (door: Door, room: RoomDims): DoorStyles => {
       const arcTop = isLeft ? pos * P : (pos + door.width) * P - r;
       arc = {
         ...arcBase,
-        borderRadius: isLeft ? (swingIn ? '0 100% 0 0' : '0 0 0 100%') : swingIn ? '0 0 100% 0' : '100% 0 0 0',
+        borderRadius: isLeft
+          ? swingIn
+            ? '0 100% 0 0'
+            : '0 0 0 100%'
+          : swingIn
+            ? '0 0 100% 0'
+            : '100% 0 0 0',
         borderLeft: !swingIn ? DASH : 'none',
         borderRight: swingIn ? DASH : 'none',
         borderTop: isLeft ? DASH : 'none',
@@ -146,7 +228,13 @@ export const doorStyles = (door: Door, room: RoomDims): DoorStyles => {
         left,
         top: arcTop,
       };
-      panel = { ...panelBase, width: r, height: 4, left, top: isLeft ? pos * P : (pos + door.width) * P - 4 };
+      panel = {
+        ...panelBase,
+        width: r,
+        height: 4,
+        left,
+        top: isLeft ? pos * P : (pos + door.width) * P - 4,
+      };
       track = { ...trackBase, left: 2, top: pos * P, width: 6, height: widthPx };
       break;
     }
@@ -155,7 +243,13 @@ export const doorStyles = (door: Door, room: RoomDims): DoorStyles => {
       const arcTop = isLeft ? pos * P : (pos + door.width) * P - r;
       arc = {
         ...arcBase,
-        borderRadius: !isLeft ? (swingIn ? '100% 0 0 0' : '0 0 100% 0') : swingIn ? '0 0 0 100%' : '0 100% 0 0',
+        borderRadius: !isLeft
+          ? swingIn
+            ? '100% 0 0 0'
+            : '0 0 100% 0'
+          : swingIn
+            ? '0 0 0 100%'
+            : '0 100% 0 0',
         borderLeft: swingIn ? DASH : 'none',
         borderRight: !swingIn ? DASH : 'none',
         borderTop: !isLeft ? DASH : 'none',
@@ -163,7 +257,13 @@ export const doorStyles = (door: Door, room: RoomDims): DoorStyles => {
         left,
         top: arcTop,
       };
-      panel = { ...panelBase, width: r, height: 4, left, top: isLeft ? pos * P : (pos + door.width) * P - 4 };
+      panel = {
+        ...panelBase,
+        width: r,
+        height: 4,
+        left,
+        top: isLeft ? pos * P : (pos + door.width) * P - 4,
+      };
       track = { ...trackBase, left: room.width * P - 8, top: pos * P, width: 6, height: widthPx };
       break;
     }
@@ -196,16 +296,44 @@ export const windowStyles = (win: RoomWindow, room: RoomDims): WindowStyles => {
   let pane: CSSProperties;
   switch (wall) {
     case 'top':
-      pane = { ...paneBase, left: pos * P, top: -2, width: widthPx, height: 8, cursor: 'ew-resize' };
+      pane = {
+        ...paneBase,
+        left: pos * P,
+        top: -2,
+        width: widthPx,
+        height: 8,
+        cursor: 'ew-resize',
+      };
       break;
     case 'bottom':
-      pane = { ...paneBase, left: pos * P, top: room.height * P - 6, width: widthPx, height: 8, cursor: 'ew-resize' };
+      pane = {
+        ...paneBase,
+        left: pos * P,
+        top: room.height * P - 6,
+        width: widthPx,
+        height: 8,
+        cursor: 'ew-resize',
+      };
       break;
     case 'left':
-      pane = { ...paneBase, left: -2, top: pos * P, width: 8, height: widthPx, cursor: 'ns-resize' };
+      pane = {
+        ...paneBase,
+        left: -2,
+        top: pos * P,
+        width: 8,
+        height: widthPx,
+        cursor: 'ns-resize',
+      };
       break;
     case 'right':
-      pane = { ...paneBase, left: room.width * P - 6, top: pos * P, width: 8, height: widthPx, cursor: 'ns-resize' };
+      pane = {
+        ...paneBase,
+        left: room.width * P - 6,
+        top: pos * P,
+        width: 8,
+        height: widthPx,
+        cursor: 'ns-resize',
+      };
       break;
   }
   return {

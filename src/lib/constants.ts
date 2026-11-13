@@ -35,10 +35,50 @@ export const INITIAL_DOORS: Door[] = [
 export const INITIAL_WINDOWS: RoomWindow[] = [{ id: 1, width: 4, position: 4, wall: 'top' }];
 
 export const INITIAL_ITEMS: FurnitureItem[] = [
-  { id: 1, label: 'Bed', width: 6, height: 4, x: 2, y: 2, rotation: 0, color: '#93c5fd', visible: true },
-  { id: 2, label: 'Desk', width: 4, height: 2, x: 9, y: 2, rotation: 0, color: '#6ee7b7', visible: true },
-  { id: 3, label: 'Wardrobe', width: 3, height: 2, x: 2, y: 8, rotation: 0, color: '#fcd34d', visible: true },
-  { id: 4, label: 'Rug', width: 5, height: 8, x: 6, y: 5, rotation: 0, color: '#fecaca', visible: true },
+  {
+    id: 1,
+    label: 'Bed',
+    width: 6,
+    height: 4,
+    x: 2,
+    y: 2,
+    rotation: 0,
+    color: '#93c5fd',
+    visible: true,
+  },
+  {
+    id: 2,
+    label: 'Desk',
+    width: 4,
+    height: 2,
+    x: 9,
+    y: 2,
+    rotation: 0,
+    color: '#6ee7b7',
+    visible: true,
+  },
+  {
+    id: 3,
+    label: 'Wardrobe',
+    width: 3,
+    height: 2,
+    x: 2,
+    y: 8,
+    rotation: 0,
+    color: '#fcd34d',
+    visible: true,
+  },
+  {
+    id: 4,
+    label: 'Rug',
+    width: 5,
+    height: 8,
+    x: 6,
+    y: 5,
+    rotation: 0,
+    color: '#fecaca',
+    visible: true,
+  },
 ];
 
 export const WALL_OPTIONS: Wall[] = ['top', 'right', 'bottom', 'left'];

@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { Home, Sofa } from 'lucide-react';
 import { useHistory } from '../../hooks/useHistory';
 import { useIsMobile } from '../../hooks/useIsMobile';
@@ -12,8 +19,19 @@ import type { BootState } from '../../lib/boot';
 import { downloadFile } from '../../lib/browser';
 import { migrateColor, randomPresetColor } from '../../lib/colors';
 import { DESIGN_MODES, PIXELS_PER_UNIT, isDesignMode, isUnitSystem } from '../../lib/constants';
-import { computeItemWarnings, constrainOpening, isHorizontalWall, wallLength } from '../../lib/geometry';
-import { defaultLayout, fromShareConfig, normalizeLayout, toShareConfig, type ShareConfig } from '../../lib/layout';
+import {
+  computeItemWarnings,
+  constrainOpening,
+  isHorizontalWall,
+  wallLength,
+} from '../../lib/geometry';
+import {
+  defaultLayout,
+  fromShareConfig,
+  normalizeLayout,
+  toShareConfig,
+  type ShareConfig,
+} from '../../lib/layout';
 import { HELP_PATH } from '../../lib/paths';
 import { buildExportFile, exportFileName } from '../../lib/projects';
 import { saveDesignMode, saveLayout, saveUnitSystem, type StorageLike } from '../../lib/storage';
@@ -69,7 +87,11 @@ export function Planner({ storage, initial }: PlannerProps) {
   const [furnitureExpanded, setFurnitureExpanded] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const { zoom, zoomRef, pan, zoomIn, zoomOut, fitToView } = usePanZoom(containerRef, layout.roomDims, isMobile);
+  const { zoom, zoomRef, pan, zoomIn, zoomOut, fitToView } = usePanZoom(
+    containerRef,
+    layout.roomDims,
+    isMobile,
+  );
   const startDrag = usePointerDrag();
   const startRotation = useRotationDrag();
 
@@ -89,8 +111,14 @@ export function Planner({ storage, initial }: PlannerProps) {
   useEffect(() => saveDesignMode(storage, designMode), [storage, designMode]);
 
   const isRoomSetup = designMode === DESIGN_MODES.ROOM_SETUP;
-  const warnings = useMemo(() => computeItemWarnings(layout.items, layout.roomDims), [layout.items, layout.roomDims]);
-  const shareConfig = useMemo(() => toShareConfig(layout, projectName, unitSystem), [layout, projectName, unitSystem]);
+  const warnings = useMemo(
+    () => computeItemWarnings(layout.items, layout.roomDims),
+    [layout.items, layout.roomDims],
+  );
+  const shareConfig = useMemo(
+    () => toShareConfig(layout, projectName, unitSystem),
+    [layout, projectName, unitSystem],
+  );
 
   // --- Modes & units ----------------------------------------------------------
   const changeDesignMode = useCallback(
@@ -162,17 +190,27 @@ export function Planner({ storage, initial }: PlannerProps) {
   );
 
   const toggleLock = useCallback(
-    (id: Id) => applyLayout((l) => ({ ...l, items: l.items.map((i) => (i.id === id ? { ...i, locked: !i.locked } : i)) })),
+    (id: Id) =>
+      applyLayout((l) => ({
+        ...l,
+        items: l.items.map((i) => (i.id === id ? { ...i, locked: !i.locked } : i)),
+      })),
     [applyLayout],
   );
 
   const toggleVisibility = useCallback(
     (id: Id) =>
-      applyLayout((l) => ({ ...l, items: l.items.map((i) => (i.id === id ? { ...i, visible: !(i.visible !== false) } : i)) })),
+      applyLayout((l) => ({
+        ...l,
+        items: l.items.map((i) => (i.id === id ? { ...i, visible: !(i.visible !== false) } : i)),
+      })),
     [applyLayout],
   );
 
-  const toggleColorPicker = useCallback((id: Id) => setColorPickerItemId((c) => (c === id ? null : id)), []);
+  const toggleColorPicker = useCallback(
+    (id: Id) => setColorPickerItemId((c) => (c === id ? null : id)),
+    [],
+  );
   const closeColorPicker = useCallback(() => setColorPickerItemId(null), []);
 
   // Close the desktop color popover on any outside press.
@@ -190,10 +228,20 @@ export function Planner({ storage, initial }: PlannerProps) {
 
   // --- Room, doors, windows ----------------------------------------------------------
   const updateRoomDims = (dims: RoomDims) =>
-    applyLayout((l) => ({ ...l, roomDims: { width: Math.max(1, dims.width || 1), height: Math.max(1, dims.height || 1) } }));
+    applyLayout((l) => ({
+      ...l,
+      roomDims: { width: Math.max(1, dims.width || 1), height: Math.max(1, dims.height || 1) },
+    }));
 
   const addDoor = () => {
-    const door: Door = { id: Date.now(), width: 3, position: 2, wall: 'bottom', hinge: 'left', type: 'swing-in' };
+    const door: Door = {
+      id: Date.now(),
+      width: 3,
+      position: 2,
+      wall: 'bottom',
+      hinge: 'left',
+      type: 'swing-in',
+    };
     applyLayout((l) => ({ ...l, doors: [...l.doors, door] }));
     track('door_added', { count: layout.doors.length + 1 });
   };
@@ -202,7 +250,8 @@ export function Planner({ storage, initial }: PlannerProps) {
       ...l,
       doors: l.doors.map((d) => (d.id === id ? constrainOpening(d, updates, l.roomDims, 1) : d)),
     }));
-  const deleteDoor = (id: Id) => applyLayout((l) => ({ ...l, doors: l.doors.filter((d) => d.id !== id) }));
+  const deleteDoor = (id: Id) =>
+    applyLayout((l) => ({ ...l, doors: l.doors.filter((d) => d.id !== id) }));
 
   const addWindow = () => {
     const win: RoomWindow = { id: Date.now(), width: 3, position: 2, wall: 'top' };
@@ -212,9 +261,12 @@ export function Planner({ storage, initial }: PlannerProps) {
   const updateWindow = (id: Id, updates: Partial<RoomWindow>) =>
     applyLayout((l) => ({
       ...l,
-      windows: l.windows.map((w) => (w.id === id ? constrainOpening(w, updates, l.roomDims, 0.5) : w)),
+      windows: l.windows.map((w) =>
+        w.id === id ? constrainOpening(w, updates, l.roomDims, 0.5) : w,
+      ),
     }));
-  const deleteWindow = (id: Id) => applyLayout((l) => ({ ...l, windows: l.windows.filter((w) => w.id !== id) }));
+  const deleteWindow = (id: Id) =>
+    applyLayout((l) => ({ ...l, windows: l.windows.filter((w) => w.id !== id) }));
 
   // --- Canvas interactions -----------------------------------------------------------
   const onItemPointerDown = useCallback(
@@ -315,7 +367,9 @@ export function Planner({ storage, initial }: PlannerProps) {
         if (!canEditSelected) return false;
         applyLayout((l) => ({
           ...l,
-          items: l.items.map((i) => (i.id === selectedItem.id ? { ...i, x: i.x + dx, y: i.y + dy } : i)),
+          items: l.items.map((i) =>
+            i.id === selectedItem.id ? { ...i, x: i.x + dx, y: i.y + dy } : i,
+          ),
         }));
         return true;
       },
@@ -374,7 +428,9 @@ export function Planner({ storage, initial }: PlannerProps) {
 
   // --- Render --------------------------------------------------------------------------------
   const colorPickerItem =
-    isMobile && colorPickerItemId !== null ? layout.items.find((i) => i.id === colorPickerItemId) : undefined;
+    isMobile && colorPickerItemId !== null
+      ? layout.items.find((i) => i.id === colorPickerItemId)
+      : undefined;
 
   return (
     <div className="flex flex-col h-full bg-slate-50 text-slate-800 font-sans overflow-hidden relative">
@@ -467,7 +523,9 @@ export function Planner({ storage, initial }: PlannerProps) {
               setSelection(null);
             }}
             className={`fixed bottom-6 right-6 z-40 text-white rounded-full pl-4 pr-5 py-3 shadow-lg flex items-center gap-2 transition-all active:scale-95 animate-fade-in ${
-              isRoomSetup ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-emerald-600 hover:bg-emerald-700'
+              isRoomSetup
+                ? 'bg-indigo-600 hover:bg-indigo-700'
+                : 'bg-emerald-600 hover:bg-emerald-700'
             }`}
             aria-label={isRoomSetup ? 'Edit room settings' : 'Edit furniture'}
           >
@@ -485,7 +543,14 @@ export function Planner({ storage, initial }: PlannerProps) {
           </button>
         )}
 
-        {!sidebarOpen && <FloatingZoomControls zoom={zoom} onZoomIn={zoomIn} onZoomOut={zoomOut} onFit={fitToView} />}
+        {!sidebarOpen && (
+          <FloatingZoomControls
+            zoom={zoom}
+            onZoomIn={zoomIn}
+            onZoomOut={zoomOut}
+            onFit={fitToView}
+          />
+        )}
 
         <RoomCanvas
           containerRef={containerRef}
@@ -505,7 +570,12 @@ export function Planner({ storage, initial }: PlannerProps) {
         />
       </div>
 
-      <ShareModal isOpen={shareOpen} onClose={() => setShareOpen(false)} config={shareConfig} onImport={importConfig} />
+      <ShareModal
+        isOpen={shareOpen}
+        onClose={() => setShareOpen(false)}
+        config={shareConfig}
+        onImport={importConfig}
+      />
 
       <FileBrowserModal
         isOpen={filesOpen}

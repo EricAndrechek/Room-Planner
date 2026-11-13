@@ -28,7 +28,8 @@ const push = <T>(state: HistoryState<T>, value: T, limit: number): HistoryState<
   return { present: value, stack, index: stack.length - 1 };
 };
 
-export const historyReducer = <T>(limit = MAX_HISTORY) =>
+export const historyReducer =
+  <T>(limit = MAX_HISTORY) =>
   (state: HistoryState<T>, action: Action<T>): HistoryState<T> => {
     switch (action.type) {
       case 'set': {
@@ -54,7 +55,11 @@ export const historyReducer = <T>(limit = MAX_HISTORY) =>
     }
   };
 
-export const initHistory = <T>(value: T): HistoryState<T> => ({ present: value, stack: [value], index: 0 });
+export const initHistory = <T>(value: T): HistoryState<T> => ({
+  present: value,
+  stack: [value],
+  index: 0,
+});
 
 export interface History<T> {
   present: T;
@@ -78,8 +83,14 @@ export function useHistory<T>(initial: T | (() => T), limit = MAX_HISTORY): Hist
     initHistory(typeof init === 'function' ? (init as () => T)() : init),
   );
 
-  const set = useCallback((update: (prev: T) => T) => dispatch({ type: 'set', update, commit: false }), []);
-  const apply = useCallback((update: (prev: T) => T) => dispatch({ type: 'set', update, commit: true }), []);
+  const set = useCallback(
+    (update: (prev: T) => T) => dispatch({ type: 'set', update, commit: false }),
+    [],
+  );
+  const apply = useCallback(
+    (update: (prev: T) => T) => dispatch({ type: 'set', update, commit: true }),
+    [],
+  );
   const commit = useCallback(() => dispatch({ type: 'commit' }), []);
   const undo = useCallback(() => dispatch({ type: 'undo' }), []);
   const redo = useCallback(() => dispatch({ type: 'redo' }), []);

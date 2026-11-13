@@ -1,5 +1,11 @@
 import { useCallback } from 'react';
-import { angleAround, angleDelta, normalizeDegrees, snapRotation, type Point } from '../lib/geometry';
+import {
+  angleAround,
+  angleDelta,
+  normalizeDegrees,
+  snapRotation,
+  type Point,
+} from '../lib/geometry';
 import { usePointerDrag } from './usePointerDrag';
 
 export interface RotationDragOptions {

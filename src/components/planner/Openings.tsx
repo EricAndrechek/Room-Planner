@@ -11,7 +11,13 @@ interface OpeningProps<T> {
   onHandlePointerDown: (e: ReactPointerEvent<HTMLDivElement>) => void;
 }
 
-export function DoorShape({ opening: door, room, isActive, isLocked, onHandlePointerDown }: OpeningProps<Door>) {
+export function DoorShape({
+  opening: door,
+  room,
+  isActive,
+  isLocked,
+  onHandlePointerDown,
+}: OpeningProps<Door>) {
   const s = doorStyles(door, room);
   return (
     <>
@@ -36,7 +42,13 @@ export function DoorShape({ opening: door, room, isActive, isLocked, onHandlePoi
   );
 }
 
-export function WindowShape({ opening: win, room, isActive, isLocked, onHandlePointerDown }: OpeningProps<RoomWindow>) {
+export function WindowShape({
+  opening: win,
+  room,
+  isActive,
+  isLocked,
+  onHandlePointerDown,
+}: OpeningProps<RoomWindow>) {
   const s = windowStyles(win, room);
   return (
     <>
