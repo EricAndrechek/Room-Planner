@@ -12,7 +12,9 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "check": "astro check",
+    "check": "astro check && pnpm check:legacy",
+    "check:legacy": "pnpm types:legacy && tsc -p legacy/tsconfig.json",
+    "types:legacy": "wrangler types -c legacy/wrangler.jsonc legacy/worker-configuration.d.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -22,8 +24,10 @@
     "assets": "node brand/generate.mjs",
     "screenshots": "node brand/screenshots.mjs",
     "build:ci": "astro build && sh scripts/upload-sourcemaps.sh",
-    "deploy": "wrangler deploy",
-    "dev:worker": "pnpm build && wrangler dev"
+    "deploy": "wrangler deploy && wrangler deploy -c legacy/wrangler.jsonc",
+    "deploy:legacy": "wrangler deploy -c legacy/wrangler.jsonc",
+    "dev:worker": "pnpm build && wrangler dev",
+    "dev:legacy": "wrangler dev -c legacy/wrangler.jsonc --port 8788"
   },
   "dependencies": {
     "@astrojs/react": "^7.1.8",
