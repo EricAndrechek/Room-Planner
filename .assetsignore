@@ -1,0 +1,2 @@
+# Never upload source maps to the public assets bucket (they go to PostHog instead).
+*.map

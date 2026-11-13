@@ -1,0 +1,52 @@
+# Cloudflare Workers static-assets headers. Rules are additive: when several rules
+# match a path, their headers are merged (same header names are comma-joined), so
+# Cache-Control is set ONLY on specific paths, never on /*.
+# Default for assets without a rule is `public, max-age=0, must-revalidate`.
+#
+# CSP rationale (edit the one line under /* to adjust; verify in a browser after changes):
+#  - default-src 'self'             everything is same-origin by default.
+#  - script-src 'self' 'unsafe-inline'
+#        Astro may inline small bootstrap scripts (islands hydration, PWA registerSW).
+#        Their content hashes change per build, so hashes cannot be hardcoded here;
+#        'unsafe-inline' is the pragmatic choice for a static, client-only app with no
+#        user-generated HTML. Tighten to hashes if the built HTML has no inline scripts
+#        (check: grep '<script' dist/**/*.html). No 'unsafe-eval'.
+#        PostHog's SDK/recorder load from same-origin /ingest/static/ (covered by 'self').
+#  - style-src 'self' 'unsafe-inline'   Astro scoped styles and React inline style="" attributes.
+#  - img-src 'self' data: blob:         canvas exports, data-URI icons, blob previews.
+#  - font-src 'self' data:
+#  - connect-src 'self' + PostHog hosts  analytics/replay go to same-origin /ingest; the
+#        explicit us.i / us-assets.i hosts are a fallback if api_host is ever changed.
+#        (us.posthog.com is the UI host, only linked to, not fetched.)
+#  - worker-src 'self' blob:            service worker (/sw.js) and PostHog replay web worker (blob:).
+#  - manifest-src 'self'
+#  - object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'.
+#  - frame-src is not set, so it falls back to default-src 'self'.
+#  - upgrade-insecure-requests
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), interest-cohort=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+
+# Hashed build output: cache forever.
+/_astro/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Service worker + PWA bootstrap: must always revalidate so updates roll out.
+# (workbox-<hash>.js is content-hashed but is imported by sw.js; keep it revalidating
+# too, it is tiny and avoids stale-precache surprises.)
+/sw.js
+  Cache-Control: no-cache
+/registerSW.js
+  Cache-Control: no-cache
+/workbox-*
+  Cache-Control: no-cache
+/manifest.webmanifest
+  Cache-Control: no-cache
+/
+  Cache-Control: no-cache
+/*.html
+  Cache-Control: no-cache
