@@ -13,11 +13,13 @@ export default defineConfig(
   tseslint.configs.recommended,
   {
     files: ['**/*.{ts,tsx}'],
-    plugins: { 'react-hooks': reactHooks },
+    extends: [reactHooks.configs.flat.recommended],
     languageOptions: { globals: { ...globals.browser } },
     rules: {
-      ...reactHooks.configs.recommended.rules,
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', destructuredArrayIgnorePattern: '^_' },
+      ],
     },
   },
   {

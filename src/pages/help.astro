@@ -1,0 +1,262 @@
+---
+import Base from '../layouts/Base.astro';
+import { withBase } from '../lib/paths';
+import { SITE_NAME } from '../lib/site';
+
+const title = 'Help & FAQ — Room Planner';
+const description =
+  'How to use Room Planner: set room dimensions in feet, inches or metric, add doors and windows, place, rotate and lock furniture, save floor plans, share links and back up your data.';
+
+const units = [
+  { system: 'Feet & inches', example: `12'6"`, use: 'US residential' },
+  { system: 'Decimal feet', example: '12.5 ft', use: 'US commercial' },
+  { system: 'Inches', example: '150 in', use: 'Detailed work' },
+  { system: 'Meters', example: '3.8 m', use: 'International' },
+  { system: 'Centimeters', example: '380 cm', use: 'Precision metric' },
+];
+
+const shortcuts = [
+  { keys: ['Ctrl/⌘', 'Z'], action: 'Undo' },
+  { keys: ['Ctrl/⌘', 'Shift', 'Z'], action: 'Redo' },
+  { keys: ['Delete / Backspace'], action: 'Delete the selected item' },
+  { keys: ['Escape'], action: 'Deselect' },
+  { keys: ['Arrow keys'], action: 'Move the selected item by 3 inches (0.25 ft)' },
+  { keys: ['Shift', 'Arrow keys'], action: 'Move the selected item by 1 foot' },
+  { keys: ['R'], action: 'Rotate the selected item by 90°' },
+];
+
+const sections = [
+  { id: 'getting-started', label: 'Getting started' },
+  { id: 'units', label: 'Units & measurements' },
+  { id: 'doors-windows', label: 'Doors & windows' },
+  { id: 'furniture', label: 'Furniture' },
+  { id: 'rotation', label: 'Rotating items' },
+  { id: 'locking', label: 'Locking & hiding' },
+  { id: 'warnings', label: 'Overlap & boundary warnings' },
+  { id: 'projects', label: 'Saving & floor plans' },
+  { id: 'sharing', label: 'Share links' },
+  { id: 'export-import', label: 'Export & import' },
+  { id: 'privacy', label: 'Your data stays in your browser' },
+  { id: 'shortcuts', label: 'Keyboard shortcuts' },
+];
+---
+
+<Base title={title} description={description}>
+  <header class="bg-white border-b border-slate-200">
+    <div class="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
+      <a href={withBase('')} class="flex items-center gap-2 font-bold text-slate-800">
+        <img src={withBase('favicon.svg')} width="28" height="28" alt="" />
+        {SITE_NAME}
+      </a>
+      <a
+        href={withBase('')}
+        class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors"
+      >
+        Open the planner
+      </a>
+    </div>
+  </header>
+
+  <main class="max-w-3xl mx-auto px-4 py-10 text-slate-700 leading-relaxed">
+    <h1 class="text-3xl font-bold text-slate-900 mb-3">Help &amp; FAQ</h1>
+    <p class="text-lg text-slate-600 mb-8">
+      {SITE_NAME} is a free, drag-and-drop room layout tool. Draw your room to scale, add doors and windows, then
+      arrange furniture to see what fits — on desktop or phone, with no account.
+    </p>
+
+    <nav aria-label="Contents" class="mb-10 bg-white border border-slate-200 rounded-xl p-5">
+      <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">On this page</h2>
+      <ol class="grid sm:grid-cols-2 gap-x-6 gap-y-1 list-decimal list-inside text-sm">
+        {
+          sections.map((s) => (
+            <li>
+              <a href={`#${s.id}`} class="text-indigo-600 hover:text-indigo-800">
+                {s.label}
+              </a>
+            </li>
+          ))
+        }
+      </ol>
+    </nav>
+
+    <article class="space-y-10 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:mb-3 [&_h3]:font-semibold [&_h3]:text-slate-800 [&_h3]:mt-4 [&_h3]:mb-1 [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1">
+      <section id="getting-started">
+        <h2>Getting started: a two-step workflow</h2>
+        <p>The planner works in two steps. Switch between them any time with the <strong>Design Steps</strong> buttons.</p>
+        <h3>Step 1 — Room Setup (purple)</h3>
+        <ol>
+          <li><strong>Set dimensions</strong> — enter the room's width and length.</li>
+          <li><strong>Add doors</strong> — click “Add Door” and choose the wall, position, width and type.</li>
+          <li><strong>Add windows</strong> — click “Add Window” and set the wall, position and width.</li>
+          <li><strong>Fine-tune</strong> — drag the round door/window handles on the plan to slide them along the wall.</li>
+        </ol>
+        <p>While you set up the room, furniture is locked so you can't move it by accident.</p>
+        <h3>Step 2 — Furniture (green)</h3>
+        <ol>
+          <li><strong>Add items</strong> — click “Add Item”, then set the name, size and color.</li>
+          <li><strong>Drag to move</strong> — drag any piece on the plan to reposition it.</li>
+          <li><strong>Rotate</strong> — drag the circular handle above a selected piece.</li>
+          <li><strong>Edit details</strong> — select an item in the sidebar to change its size, position or rotation precisely.</li>
+          <li><strong>Lock</strong> — click the lock icon so a finished piece can't be moved.</li>
+        </ol>
+        <p>While arranging furniture, doors and windows are locked.</p>
+        <p>
+          On a phone, tap <strong>Edit Room</strong> or <strong>Edit Furniture</strong> to open the editor and
+          <strong>View</strong> to return to the plan. Pinch to zoom and drag the background to pan.
+        </p>
+      </section>
+
+      <section id="units">
+        <h2>Units &amp; measurements</h2>
+        <p>
+          Choose how measurements are shown with <strong>Display Units</strong> at the top of the sidebar. You can switch
+          at any time — your layout isn't changed, only how it's displayed.
+        </p>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm border border-slate-200 rounded-lg overflow-hidden mb-3">
+            <thead class="bg-slate-100 text-left">
+              <tr><th class="p-2">System</th><th class="p-2">Example</th><th class="p-2">Good for</th></tr>
+            </thead>
+            <tbody>
+              {
+                units.map((u) => (
+                  <tr class="border-t border-slate-200 bg-white">
+                    <td class="p-2">{u.system}</td>
+                    <td class="p-2 font-mono">{u.example}</td>
+                    <td class="p-2">{u.use}</td>
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
+        </div>
+        <p>
+          <strong>Tip:</strong> you can type a value in any unit and it is converted automatically — for example
+          <code>12'6"</code>, <code>12 ft 6 in</code>, <code>150in</code>, <code>3.5m</code>, <code>1m 20cm</code> or
+          <code>350cm</code>. A plain number uses the current display unit. Press Enter or click away to apply.
+        </p>
+      </section>
+
+      <section id="doors-windows">
+        <h2>Doors &amp; windows</h2>
+        <p>Add as many doors and windows as you need, on any wall.</p>
+        <ul>
+          <li><strong>Wall</strong> — top, right, bottom or left.</li>
+          <li><strong>Position</strong> — distance from the start of the wall (left end for top/bottom walls, top end for side walls).</li>
+          <li><strong>Width</strong> — the opening size; it can't exceed the wall.</li>
+          <li><strong>Door type</strong> — <em>swing in</em>, <em>swing out</em> or <em>sliding</em>. Swing doors show their swing arc so you can keep it clear of furniture; use <strong>Hinge</strong> to flip which side they open from.</li>
+        </ul>
+      </section>
+
+      <section id="furniture">
+        <h2>Furniture</h2>
+        <ul>
+          <li><strong>Size</strong> — set an exact width and depth for each piece.</li>
+          <li><strong>Position</strong> — drag on the plan, set X/Y in the sidebar, or nudge with the arrow keys.</li>
+          <li><strong>Color</strong> — pick one of 10 preset colors or enter any custom hex color.</li>
+          <li><strong>Name</strong> — click the item's name in the sidebar to rename it.</li>
+        </ul>
+      </section>
+
+      <section id="rotation">
+        <h2>Rotating items</h2>
+        <p>
+          Select a piece and drag the circular handle above it around the piece. When you let go close to a 15° step
+          (for example 45° or 90°) it snaps exactly onto it. You can also type an exact angle in the sidebar's
+          <strong>Rotation</strong> field, or press <kbd>R</kbd> to turn the selected item 90°.
+        </p>
+      </section>
+
+      <section id="locking">
+        <h2>Locking &amp; hiding</h2>
+        <ul>
+          <li><strong>Lock</strong> an item with its lock icon to stop it being moved, resized or rotated. Locked items have an amber border and 🔒 badge.</li>
+          <li><strong>Hide</strong> an item with the eye icon to compare layouts with and without it. Hidden items disappear from the plan and are shown dashed in the sidebar.</li>
+        </ul>
+      </section>
+
+      <section id="warnings">
+        <h2>Overlap &amp; boundary warnings</h2>
+        <p>
+          A piece gets a red border and ⚠️ badge when it overlaps another visible piece or sticks out of the room.
+          Rotation is taken into account, and pieces that only touch are fine.
+        </p>
+      </section>
+
+      <section id="projects">
+        <h2>Saving &amp; floor plans</h2>
+        <ul>
+          <li><strong>Auto-save</strong> — every change is saved automatically in your browser; the header shows when it was last saved.</li>
+          <li><strong>My Floor Plans</strong> — click the folder icon to create, open, rename, duplicate or delete plans.</li>
+          <li><strong>Rename</strong> — click the plan's name in the header to rename it.</li>
+          <li><strong>Undo / redo</strong> — use the arrow buttons in the header or <kbd>Ctrl/⌘</kbd>+<kbd>Z</kbd>.</li>
+        </ul>
+      </section>
+
+      <section id="sharing">
+        <h2>Share links</h2>
+        <p>
+          Click <strong>Share / Save</strong> to get a link to your layout. Anyone who opens it sees exactly your layout,
+          saved as a new plan in their browser. The link is a <em>snapshot</em>: changes you make afterwards aren't
+          included, so share a new link after editing.
+        </p>
+        <p>The layout is stored inside the link itself (after the <code>#</code>), so it is never uploaded to a server.</p>
+      </section>
+
+      <section id="export-import">
+        <h2>Export &amp; import</h2>
+        <ul>
+          <li><strong>Export plans</strong> — in My Floor Plans, select one or more plans and click <strong>Export</strong> to download a JSON backup.</li>
+          <li><strong>Import plans</strong> — paste an exported file's contents into <strong>Import Floor Plan(s)</strong>.</li>
+          <li><strong>Layout JSON</strong> — the Share dialog also shows the current layout as JSON you can copy, and accepts pasted JSON to load a layout.</li>
+        </ul>
+      </section>
+
+      <section id="privacy">
+        <h2>Your data stays in your browser</h2>
+        <p>
+          There's no account and no server-side storage: your floor plans live in your browser's local storage on this
+          device. Clearing site data removes them, and they don't sync between devices — use share links or JSON export
+          to move a plan or keep a backup.
+        </p>
+      </section>
+
+      <section id="shortcuts">
+        <h2>Keyboard shortcuts</h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+            <thead class="bg-slate-100 text-left">
+              <tr><th class="p-2">Shortcut</th><th class="p-2">Action</th></tr>
+            </thead>
+            <tbody>
+              {
+                shortcuts.map((s) => (
+                  <tr class="border-t border-slate-200 bg-white">
+                    <td class="p-2 whitespace-nowrap">
+                      {s.keys.map((k, i) => (
+                        <>
+                          {i > 0 && ' + '}
+                          <kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded-sm text-xs font-mono">{k}</kbd>
+                        </>
+                      ))}
+                    </td>
+                    <td class="p-2">{s.action}</td>
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </article>
+
+    <p class="mt-12 text-center">
+      <a
+        href={withBase('')}
+        class="inline-block px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
+      >
+        Start planning your room
+      </a>
+    </p>
+  </main>
+</Base>
