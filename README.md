@@ -8,7 +8,7 @@
 
 A powerful, intuitive tool for planning room layouts with furniture, doors, and windows. Drag, drop, and arrange items to create your ideal space.
 
-**[🚀 Try Room Planner Now →](https://roomplanner.andrechek.com/)**
+**[🚀 Try Room Planner Now →](https://room-planner.andrechek.com/)**
 
 </div>
 
@@ -173,7 +173,7 @@ on port 8787, which also exercises the CSP headers), set `E2E_BASE_URL`:
 
 The public site URL used for canonical links, Open Graph tags, the sitemap and
 `robots.txt` comes from `SITE_URL` at build time (default
-`https://roomplanner.andrechek.com`), e.g. `SITE_URL=https://example.com pnpm build`.
+`https://room-planner.andrechek.com`), e.g. `SITE_URL=https://example.com pnpm build`.
 
 ### Analytics
 

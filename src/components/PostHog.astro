@@ -37,14 +37,17 @@ const appVersion = sha ? `${pkg.version}+${sha.trim().slice(0, 7)}` : pkg.versio
       person_profiles: 'identified_only',
       capture_exceptions: true,
       respect_dnt: true,
-      opt_out_capturing_by_default: ls('rp:analytics-optout') === '1',
+      // A `#rp-migrate=` arrival (legacy-domain bridge) still has the visitor's real preference in the
+      // URL payload: stay opted out until src/lib/migrate.ts has imported it.
+      opt_out_capturing_by_default:
+        ls('rp:analytics-optout') === '1' || location.hash.startsWith('#rp-migrate'),
       session_recording: { maskAllInputs: true },
       debug,
       loaded: (ph) =>
         ph.register({
           app_version: appVersion,
           environment:
-            host === 'roomplanner.andrechek.com'
+            host === 'room-planner.andrechek.com'
               ? 'production'
               : host.endsWith('.workers.dev')
                 ? 'preview'

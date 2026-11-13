@@ -11,7 +11,7 @@ import { pwaOptions } from './pwa-options.mjs';
  * sitemap, robots.txt) is derived from this one value, so moving to a new
  * domain is a matter of setting SITE_URL at build time.
  */
-const SITE_URL = process.env.SITE_URL || 'https://roomplanner.andrechek.com';
+const SITE_URL = process.env.SITE_URL || 'https://room-planner.andrechek.com';
 
 export default defineConfig({
   site: SITE_URL,
