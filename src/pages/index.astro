@@ -1,0 +1,40 @@
+---
+import PlannerApp from '../components/PlannerApp';
+import Base from '../layouts/Base.astro';
+import { withBase } from '../lib/paths';
+import { SITE_NAME } from '../lib/site';
+---
+
+<Base app structuredData>
+  <div id="app">
+    <PlannerApp client:only="react">
+      <!-- Static shell: what crawlers and no-JS visitors see; replaced once the planner mounts. -->
+      <div slot="fallback" class="h-full flex items-center justify-center bg-slate-50 p-6">
+        <main class="max-w-md text-center space-y-4">
+          <img src={withBase('favicon.svg')} width="72" height="72" alt="" class="mx-auto" />
+          <h1 class="text-2xl font-bold text-slate-800">{SITE_NAME}</h1>
+          <p class="text-slate-600">
+            A free online room layout and furniture planner. Set your room's dimensions, add doors
+            and windows, then drag, rotate and arrange furniture to scale — right in your browser.
+          </p>
+          <p class="text-sm text-slate-500" data-loading>
+            Loading the planner…
+          </p>
+          <noscript>
+            <p class="text-sm text-amber-700">
+              Room Planner needs JavaScript to run. Please enable it and reload.
+            </p>
+          </noscript>
+          <p>
+            <a
+              href={withBase('help/')}
+              class="text-sm font-medium text-indigo-600 hover:text-indigo-800 underline"
+            >
+              How to use Room Planner
+            </a>
+          </p>
+        </main>
+      </div>
+    </PlannerApp>
+  </div>
+</Base>

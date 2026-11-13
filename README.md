@@ -82,13 +82,13 @@ Add and arrange your furniture:
 
 Switch between measurement systems anytime:
 
-| System | Example | Use Case |
-|--------|---------|----------|
-| Feet & Inches | `12'6"` | US residential |
-| Decimal Feet | `12.5 ft` | US commercial |
-| Inches | `150 in` | Detailed work |
-| Meters | `3.8 m` | International |
-| Centimeters | `380 cm` | Precision metric |
+| System        | Example   | Use Case         |
+| ------------- | --------- | ---------------- |
+| Feet & Inches | `12'6"`   | US residential   |
+| Decimal Feet  | `12.5 ft` | US commercial    |
+| Inches        | `150 in`  | Detailed work    |
+| Meters        | `3.8 m`   | International    |
+| Centimeters   | `380 cm`  | Precision metric |
 
 **Tip:** You can type values with any unit suffix and they'll convert automatically!
 
@@ -101,23 +101,23 @@ Switch between measurement systems anytime:
 
 ### Keyboard Shortcuts
 
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl/⌘ + Z` | Undo |
-| `Ctrl/⌘ + Shift + Z` | Redo |
-| `Delete` / `Backspace` | Delete selected item |
-| `Escape` | Deselect item |
-| `Arrow Keys` | Move selected item (0.25 ft) |
-| `Shift + Arrow Keys` | Move selected item (1 ft) |
-| `R` | Rotate selected item 90° |
+| Shortcut               | Action                       |
+| ---------------------- | ---------------------------- |
+| `Ctrl/⌘ + Z`           | Undo                         |
+| `Ctrl/⌘ + Shift + Z`   | Redo                         |
+| `Delete` / `Backspace` | Delete selected item         |
+| `Escape`               | Deselect item                |
+| `Arrow Keys`           | Move selected item (0.25 ft) |
+| `Shift + Arrow Keys`   | Move selected item (1 ft)    |
+| `R`                    | Rotate selected item 90°     |
 
 ### Visual Indicators
 
-| Indicator | Meaning |
-|-----------|---------|
-| 🔴 Red border + ⚠️ | Furniture overlaps another item or extends outside room |
-| 🟡 Amber border + 🔒 | Item is locked (cannot be moved or resized) |
-| 👁️ Dashed border | Item is hidden (won't appear in final layout) |
+| Indicator            | Meaning                                                 |
+| -------------------- | ------------------------------------------------------- |
+| 🔴 Red border + ⚠️   | Furniture overlaps another item or extends outside room |
+| 🟡 Amber border + 🔒 | Item is locked (cannot be moved or resized)             |
+| 👁️ Dashed border     | Item is hidden (won't appear in final layout)           |
 
 ---
 
@@ -125,100 +125,76 @@ Switch between measurement systems anytime:
 
 ### Prerequisites
 
-- **Node.js** 16.0 or higher
-- **npm** or **yarn**
+- **Node.js** 22 or higher (see `.nvmrc`)
+- **pnpm** (the version is pinned in `package.json` → `packageManager`; `corepack enable` picks it up)
 
 ### Getting Started
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/room-planner.git
-cd room-planner
-
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
+git clone https://github.com/EricAndrechek/Room-Planner.git
+cd Room-Planner
+pnpm install
+pnpm dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173) in your browser.
+Open [http://localhost:4321](http://localhost:4321) in your browser.
 
-### Build for Production
+### Scripts
 
-```bash
-npm run build
-```
+| Command         | What it does                                            |
+| --------------- | ------------------------------------------------------- |
+| `pnpm dev`      | Astro dev server                                        |
+| `pnpm build`    | Static build into `dist/`                               |
+| `pnpm preview`  | Serve `dist/` locally                                   |
+| `pnpm check`    | Type-check (`astro check`, TypeScript strict)           |
+| `pnpm lint`     | ESLint (typescript-eslint + react-hooks)                |
+| `pnpm format`   | Prettier (with `prettier-plugin-astro`)                 |
+| `pnpm test`     | Vitest unit tests (`src/**/*.test.ts`)                  |
+| `pnpm test:e2e` | Playwright smoke tests (Chromium) against a fresh build |
 
-The optimized build will be in the `dist` folder.
+The public site URL used for canonical links, Open Graph tags, the sitemap and
+`robots.txt` comes from `SITE_URL` at build time (default
+`https://roomplanner.andrechek.com`), e.g. `SITE_URL=https://example.com pnpm build`.
 
 ### Project Structure
 
 ```
-room-planner/
-├── public/
-│   └── manifest.json      # PWA manifest
-├── src/
-│   ├── App.jsx           # Main application component (~3800 lines)
-│   ├── main.jsx          # React entry point
-│   ├── index.css         # Tailwind CSS + custom styles
-│   └── Knob.js           # Rotation control component
-├── index.html            # HTML template
-├── package.json          # Dependencies and scripts
-├── vite.config.js        # Vite configuration
-├── tailwind.config.js    # Tailwind configuration
-└── postcss.config.js     # PostCSS configuration
+src/
+├── pages/                 # index (planner island), help, 404, robots.txt
+├── layouts/Base.astro     # <head>: SEO, Open Graph, icons, JSON-LD
+├── components/
+│   ├── PlannerApp.tsx     # client-only island root: boot + ErrorBoundary
+│   ├── ErrorBoundary.tsx
+│   └── planner/           # Planner (state orchestration), Header, Sidebar,
+│                          # RoomSetupPanel, FurniturePanel/Card, RoomCanvas,
+│                          # FurniturePiece, Openings, modals, ColorPicker...
+├── hooks/                 # useHistory, useProjects (autosave), usePanZoom,
+│                          # usePointerDrag, useRotationDrag, useKeyboardShortcuts...
+├── lib/                   # pure, unit-tested logic: units, geometry, layout,
+│                          # share, storage, projects, boot, analytics seam
+├── styles/global.css      # Tailwind v4 + app styles
+└── types.ts
+e2e/                       # Playwright specs
 ```
-
-### Key Components
-
-| Component/Function | Purpose |
-|-------------------|---------|
-| `RoomSimulator` | Main component containing all state and logic |
-| `DimensionInput` | Smart input that parses various unit formats |
-| `ColorPicker` | Preset and custom color selection |
-| `Modal` | Reusable modal dialog |
-| `Tooltip` | Hover tooltips for buttons |
 
 ### Architecture Notes
 
-- All measurements are stored internally in **feet**, converted for display based on unit system
+- All measurements are stored internally in **feet**, converted for display based on the unit system
 - Colors are stored as **hex values** for consistent sharing across browsers
-- State is managed with React hooks; projects persist to `localStorage`
-- The app is primarily a single component (`App.jsx`) for simplicity
+- Persistence is `localStorage` in the same keys/format the app has always used
+  (`room-planner-projects`, `room-sim-v3-*`), plus a `room-planner-schema` version
+  marker; `src/lib/storage.ts` documents the format and its migrations
+- Share links put a deflate-compressed, base64url payload in the URL **fragment**
+  (`#s=…`), so layouts never reach a server; old `?config=` links still open
+- `src/lib/analytics.ts` exposes `track()` / `captureError()` (currently no-ops)
 
 ---
 
 ## 🚢 Deployment
 
-Build and deploy the `dist` folder to any static host:
-
-**Netlify:**
-
-```bash
-npm run build
-npx netlify-cli deploy --prod --dir=dist
-```
-
-**Vercel:**
-
-```bash
-npm run build
-npx vercel --prod
-```
-
-**GitHub Pages:**
-
-1. Add to `vite.config.js`:
-
-   ```js
-   export default defineConfig({
-     base: '/room-planner/',
-     // ... other config
-   })
-   ```
-
-2. Build and deploy to `gh-pages` branch
+`pnpm build` produces a fully static site in `dist/`; deploy that folder to any
+static host. If the site is served from a sub-path, set Astro's `base` in
+`astro.config.mjs`; all internal links are base-aware.
 
 ---
 
@@ -245,19 +221,21 @@ Contributions are welcome! Here's how to get started:
 - [ ] Export to CAD formats (DXF, SVG)
 - [ ] Reusable furniture library
 - [x] Reloading the page with a shared link causes a duplicate floor plan to be added with the same name
-- [ ] Refactor `App.jsx` into smaller components for maintainability...
+- [x] Refactor `App.jsx` into smaller components for maintainability
 
 ---
 
 ## 🛠️ Technology Stack
 
-| Technology | Purpose |
-|------------|---------|
-| [React 18](https://react.dev) | UI framework with hooks |
-| [Vite](https://vitejs.dev) | Fast build tool and dev server |
-| [Tailwind CSS](https://tailwindcss.com) | Utility-first styling |
-| [Lucide React](https://lucide.dev) | Beautiful icon library |
-| LocalStorage | Client-side persistence |
+| Technology                                                          | Purpose                     |
+| ------------------------------------------------------------------- | --------------------------- |
+| [Astro](https://astro.build)                                        | Static pages + React island |
+| [React 19](https://react.dev)                                       | UI framework with hooks     |
+| [TypeScript](https://www.typescriptlang.org)                        | Strict typing               |
+| [Tailwind CSS 4](https://tailwindcss.com)                           | Utility-first styling       |
+| [Vitest](https://vitest.dev) / [Playwright](https://playwright.dev) | Unit / end-to-end tests     |
+| [Lucide React](https://lucide.dev)                                  | Beautiful icon library      |
+| LocalStorage                                                        | Client-side persistence     |
 
 ---
 
@@ -276,9 +254,9 @@ All AI-generated code was reviewed, tested, and refined by a human developer. Th
 
 ## 🙏 Acknowledgments
 
-- **[Knobs](https://jherrm.github.io/knobs/)** by [@jherrm](https://github.com/jherrm/knobs) - Rotation knob component inspiration
+- **[Knobs](https://jherrm.github.io/knobs/)** by [@jherrm](https://github.com/jherrm/knobs) - Original rotation knob inspiration
 - Icons by [Lucide](https://lucide.dev)
-- Built with [Vite](https://vitejs.dev) + [React](https://react.dev)
+- Built with [Astro](https://astro.build) + [React](https://react.dev)
 - Styled with [Tailwind CSS](https://tailwindcss.com)
 
 ---
