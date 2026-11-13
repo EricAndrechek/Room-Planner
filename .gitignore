@@ -36,5 +36,3 @@ test-results/
 .env
 .env.*
 !.env.example
-legacy/worker-configuration.d.ts
-legacy/worker-configuration.d.ts

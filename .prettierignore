@@ -9,5 +9,3 @@ public
 .github
 src/lib/__fixtures__
 brand/*.svg
-legacy/worker-configuration.d.ts
-legacy/worker-configuration.d.ts

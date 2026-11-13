@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { captureError, track } from '../lib/analytics';
 import { boot, bootFromStorage, type BootResult } from '../lib/boot';
-import { hasMigrationHash, importMigration } from '../lib/migrate';
 import { hasShareLink } from '../lib/share';
 import { getBrowserStorage } from '../lib/storage';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -16,7 +15,7 @@ const storage = typeof window === 'undefined' ? null : getBrowserStorage();
  */
 function PlannerBoot() {
   const [result, setResult] = useState<BootResult | null>(() =>
-    storage && !hasMigrationHash(window.location.hash) && !hasShareLink(window.location.href)
+    storage && !hasShareLink(window.location.href)
       ? { state: bootFromStorage(storage), shared: null }
       : null,
   );
@@ -24,12 +23,7 @@ function PlannerBoot() {
   useEffect(() => {
     if (result || !storage) return;
     let cancelled = false;
-    // Data carried over from the legacy domain must be in storage before anything reads it; it also
-    // restores the originally requested URL (share link, ?config=) that boot() then picks up.
-    importMigration(window.location, storage, (url) =>
-      window.history.replaceState(window.history.state, '', url),
-    )
-      .then(() => boot(window.location.href, storage))
+    boot(window.location.href, storage)
       .then((r) => {
         if (cancelled) return;
         if (r.shared) {

@@ -14,7 +14,6 @@ export default defineConfig(
       'playwright-report/',
       'test-results/',
       '.wrangler/',
-      'legacy/worker-configuration.d.ts',
     ],
   },
   js.configs.recommended,
@@ -33,10 +32,5 @@ export default defineConfig(
   {
     files: ['*.{js,mjs,ts}', 'e2e/**/*.ts', 'brand/**/*.mjs'],
     languageOptions: { globals: { ...globals.node } },
-  },
-  {
-    // The legacy Worker runs on workerd: Web APIs only, no DOM.
-    files: ['legacy/**/*.ts'],
-    languageOptions: { globals: { ...globals.serviceworker } },
   },
 );
