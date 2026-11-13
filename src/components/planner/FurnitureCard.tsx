@@ -115,7 +115,7 @@ export const FurnitureCard = memo(function FurnitureCard({
                 e.stopPropagation();
                 onToggleLock(item.id);
               }}
-              className={`p-1.5 rounded-sm transition-colors flex items-center justify-center ${isItemLocked ? 'text-amber-600 bg-amber-50 hover:bg-amber-100' : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'}`}
+              className={`p-1.5 rounded-sm transition-colors flex items-center justify-center ${isItemLocked ? 'text-amber-600 bg-amber-50 hover:bg-amber-100' : 'text-slate-500 hover:text-amber-600 hover:bg-amber-50'}`}
               aria-label={isItemLocked ? `Unlock ${item.label}` : `Lock ${item.label}`}
             >
               {isItemLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
@@ -128,7 +128,7 @@ export const FurnitureCard = memo(function FurnitureCard({
                 e.stopPropagation();
                 onToggleVisibility(item.id);
               }}
-              className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-sm transition-colors flex items-center justify-center"
+              className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-sm transition-colors flex items-center justify-center"
               aria-label={!hidden ? `Hide ${item.label}` : `Show ${item.label}`}
             >
               {!hidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
@@ -141,7 +141,7 @@ export const FurnitureCard = memo(function FurnitureCard({
                 e.stopPropagation();
                 onDelete(item.id);
               }}
-              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-sm transition-colors flex items-center justify-center"
+              className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-sm transition-colors flex items-center justify-center"
               aria-label={`Delete ${item.label}`}
             >
               <Trash2 className="w-3.5 h-3.5" />

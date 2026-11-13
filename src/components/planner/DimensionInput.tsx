@@ -85,7 +85,7 @@ export function DimensionInput({
           aria-label={label || placeholder}
         />
         {suffix && (
-          <span className="absolute right-1.5 text-[10px] text-slate-400 pointer-events-none select-none bg-white px-0.5">
+          <span className="absolute right-1.5 text-[10px] text-slate-500 pointer-events-none select-none bg-white px-0.5">
             {suffix}
           </span>
         )}

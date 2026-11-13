@@ -84,7 +84,7 @@ export function Header(props: HeaderProps) {
             <button
               type="button"
               onClick={() => setEditingName(props.projectName)}
-              className="text-left group hover:bg-slate-50 rounded-sm px-1 -mx-1 transition-colors flex items-center justify-center"
+              className="text-left group hover:bg-slate-50 rounded-sm px-1 -mx-1 min-h-6 transition-colors flex items-center justify-center"
               title="Click to rename"
             >
               <h1 className="text-sm font-bold text-slate-800 leading-tight truncate group-hover:text-indigo-600 transition-colors">
@@ -107,7 +107,7 @@ export function Header(props: HeaderProps) {
 
       <div className="flex items-center gap-1 sm:gap-2">
         <div
-          className="hidden sm:flex items-center gap-1.5 text-[10px] text-slate-400"
+          className="hidden sm:flex items-center gap-1.5 text-[10px] text-slate-500"
           data-testid="save-status"
         >
           {props.saveStatus === 'saved' && props.lastSavedAt ? (
@@ -160,7 +160,7 @@ export function Header(props: HeaderProps) {
         <Tooltip text="Help & FAQ">
           <a
             href={props.helpHref}
-            className="hidden sm:flex p-1.5 sm:p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors items-center justify-center"
+            className="hidden sm:flex p-1.5 sm:p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-600 transition-colors items-center justify-center"
             aria-label="Help and FAQ"
           >
             <CircleHelp className="w-4 h-4" />
@@ -171,10 +171,9 @@ export function Header(props: HeaderProps) {
           type="button"
           onClick={props.onShare}
           className="flex items-center justify-center gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs sm:text-sm font-medium transition-colors shadow-xs"
-          aria-label="Share and save layout"
         >
-          <Share2 className="w-4 h-4 shrink-0" />
-          <span className="hidden sm:inline">Share / Save</span>
+          <Share2 className="w-4 h-4 shrink-0" aria-hidden="true" />
+          <span className="sr-only sm:not-sr-only">Share / Save</span>
         </button>
       </div>
     </div>

@@ -80,7 +80,7 @@ export class ErrorBoundary extends Component<Props, State> {
               Reload
             </button>
           </div>
-          <details className="text-left text-xs text-slate-400">
+          <details className="text-left text-xs text-slate-500">
             <summary className="cursor-pointer">Error details</summary>
             <pre className="mt-2 whitespace-pre-wrap break-words">{this.state.error.message}</pre>
           </details>

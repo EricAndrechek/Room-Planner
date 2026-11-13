@@ -98,7 +98,7 @@ export function Sidebar({
       {/* Design Mode Switcher */}
       <div className="bg-white p-4 border-b border-slate-200">
         <div className="flex items-center gap-2 mb-3">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
             Design Steps
           </span>
         </div>
@@ -147,7 +147,7 @@ export function Sidebar({
       </div>
 
       <div className="bg-slate-50 p-3 text-xs text-slate-600 border-b border-slate-100 flex gap-2 items-center">
-        <Info className="w-4 h-4 shrink-0 text-slate-400" />
+        <Info className="w-4 h-4 shrink-0 text-slate-500" />
         <p>
           You can type values with units (e.g., <strong>12&apos;6&quot;</strong>,{' '}
           <strong>150cm</strong>, <strong>1.5m</strong>)
@@ -160,7 +160,7 @@ export function Sidebar({
         <InstallButton variant="sidebar" />
         <a
           href={helpHref}
-          className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400 hover:text-indigo-600 transition-colors"
+          className="flex items-center justify-center gap-1.5 text-[11px] text-slate-500 hover:text-indigo-600 transition-colors"
         >
           <CircleHelp className="w-3.5 h-3.5" />
           Help &amp; FAQ

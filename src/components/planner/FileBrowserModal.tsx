@@ -137,7 +137,7 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
                 </>
               )}
             </button>
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-slate-500">
               {projects.length} plan{projects.length !== 1 ? 's' : ''}
             </span>
           </div>
@@ -146,7 +146,7 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
         {/* Project List */}
         <div className="space-y-2 max-h-64 overflow-y-auto">
           {projects.length === 0 ? (
-            <div className="text-center py-8 text-slate-400">
+            <div className="text-center py-8 text-slate-500">
               <FileText className="w-10 h-10 mx-auto mb-2 opacity-50" />
               <p className="text-sm">No saved floor plans yet</p>
               <p className="text-xs mt-1">Save your current plan or create a new one</p>
@@ -172,7 +172,7 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
                     {isSelected ? (
                       <CheckSquare className="w-4 h-4 text-indigo-600" />
                     ) : (
-                      <Square className="w-4 h-4 text-slate-400" />
+                      <Square className="w-4 h-4 text-slate-500" />
                     )}
                   </div>
 
@@ -204,7 +204,7 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
                             </span>
                           )}
                         </div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">
+                        <div className="text-[10px] text-slate-500 mt-0.5">
                           {project.data?.roomDims && (
                             <span>
                               {feetToDisplay(project.data.roomDims.width, unitSystem)} ×{' '}
