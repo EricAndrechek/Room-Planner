@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Astro / test output
+.astro/
+playwright-report/
+test-results/

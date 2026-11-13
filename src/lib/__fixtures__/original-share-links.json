@@ -1,0 +1,186 @@
+{
+  "_comment": "Share links + JSON export produced by the ORIGINAL app for the layout in original-storage.json. 'emojiName' shows the original btoa() encoder silently producing an empty link for a non-Latin-1 name.",
+  "ftIn": {
+    "url": "http://localhost:5199/?config=eyJuYW1lIjoiQ2Fm6SBQbGFuIiwidW5pdFN5c3RlbSI6ImZ0LWluIiwicm9vbURpbXMiOnsid2lkdGgiOjE0LjUsImhlaWdodCI6MTF9LCJkb29ycyI6W3siaWQiOjEsIndpZHRoIjozLCJwb3NpdGlvbiI6Niwid2FsbCI6ImJvdHRvbSIsImhpbmdlIjoicmlnaHQiLCJ0eXBlIjoic3dpbmctaW4ifSx7ImlkIjoxNzk0NTkzMzYxNTMzLCJ3aWR0aCI6MywicG9zaXRpb24iOjIsIndhbGwiOiJyaWdodCIsImhpbmdlIjoibGVmdCIsInR5cGUiOiJzbGlkaW5nIn1dLCJ3aW5kb3dzIjpbeyJpZCI6MSwid2lkdGgiOjQsInBvc2l0aW9uIjo0LCJ3YWxsIjoidG9wIn0seyJpZCI6MTc5NDU5MzM2MTU4Niwid2lkdGgiOjMsInBvc2l0aW9uIjoyLCJ3YWxsIjoidG9wIn1dLCJpdGVtcyI6W3siaWQiOjEsImxhYmVsIjoiQmVkIiwid2lkdGgiOjYsImhlaWdodCI6NCwieCI6Mi43MTQyODYsInkiOjIuMzU3MTQzLCJyb3RhdGlvbiI6MCwiY29sb3IiOiIjOTNjNWZkIiwidmlzaWJsZSI6dHJ1ZX0seyJpZCI6MiwibGFiZWwiOiJEZXNrIiwid2lkdGgiOjQsImhlaWdodCI6MiwieCI6OSwieSI6Miwicm90YXRpb24iOjkwLCJjb2xvciI6IiMxMjNhYmMiLCJ2aXNpYmxlIjp0cnVlfSx7ImlkIjozLCJsYWJlbCI6IldhcmRyb2JlIiwid2lkdGgiOjMsImhlaWdodCI6MiwieCI6MiwieSI6OCwicm90YXRpb24iOjAsImNvbG9yIjoiI2ZjZDM0ZCIsInZpc2libGUiOnRydWUsImxvY2tlZCI6dHJ1ZX0seyJpZCI6NCwibGFiZWwiOiJSdWciLCJ3aWR0aCI6NSwiaGVpZ2h0Ijo4LCJ4Ijo2LCJ5Ijo1LCJyb3RhdGlvbiI6MCwiY29sb3IiOiIjZmVjYWNhIiwidmlzaWJsZSI6ZmFsc2V9XX0%3D",
+    "json": {
+      "name": "Café Plan",
+      "unitSystem": "ft-in",
+      "roomDims": {
+        "width": 14.5,
+        "height": 11
+      },
+      "doors": [
+        {
+          "id": 1,
+          "width": 3,
+          "position": 6,
+          "wall": "bottom",
+          "hinge": "right",
+          "type": "swing-in"
+        },
+        {
+          "id": 1794593361533,
+          "width": 3,
+          "position": 2,
+          "wall": "right",
+          "hinge": "left",
+          "type": "sliding"
+        }
+      ],
+      "windows": [
+        {
+          "id": 1,
+          "width": 4,
+          "position": 4,
+          "wall": "top"
+        },
+        {
+          "id": 1794593361586,
+          "width": 3,
+          "position": 2,
+          "wall": "top"
+        }
+      ],
+      "items": [
+        {
+          "id": 1,
+          "label": "Bed",
+          "width": 6,
+          "height": 4,
+          "x": 2.714286,
+          "y": 2.357143,
+          "rotation": 0,
+          "color": "#93c5fd",
+          "visible": true
+        },
+        {
+          "id": 2,
+          "label": "Desk",
+          "width": 4,
+          "height": 2,
+          "x": 9,
+          "y": 2,
+          "rotation": 90,
+          "color": "#123abc",
+          "visible": true
+        },
+        {
+          "id": 3,
+          "label": "Wardrobe",
+          "width": 3,
+          "height": 2,
+          "x": 2,
+          "y": 8,
+          "rotation": 0,
+          "color": "#fcd34d",
+          "visible": true,
+          "locked": true
+        },
+        {
+          "id": 4,
+          "label": "Rug",
+          "width": 5,
+          "height": 8,
+          "x": 6,
+          "y": 5,
+          "rotation": 0,
+          "color": "#fecaca",
+          "visible": false
+        }
+      ]
+    }
+  },
+  "meters": {
+    "url": "http://localhost:5199/?config=eyJuYW1lIjoiQ2Fm6SBQbGFuIiwidW5pdFN5c3RlbSI6Im0iLCJyb29tRGltcyI6eyJ3aWR0aCI6NC40MTk2LCJoZWlnaHQiOjMuMzUyOH0sImRvb3JzIjpbeyJpZCI6MSwid2lkdGgiOjAuOTE0NCwicG9zaXRpb24iOjEuODI4OCwid2FsbCI6ImJvdHRvbSIsImhpbmdlIjoicmlnaHQiLCJ0eXBlIjoic3dpbmctaW4ifSx7ImlkIjoxNzk0NTkzMzYxNTMzLCJ3aWR0aCI6MC45MTQ0LCJwb3NpdGlvbiI6MC42MDk2LCJ3YWxsIjoicmlnaHQiLCJoaW5nZSI6ImxlZnQiLCJ0eXBlIjoic2xpZGluZyJ9XSwid2luZG93cyI6W3siaWQiOjEsIndpZHRoIjoxLjIxOTIsInBvc2l0aW9uIjoxLjIxOTIsIndhbGwiOiJ0b3AifSx7ImlkIjoxNzk0NTkzMzYxNTg2LCJ3aWR0aCI6MC45MTQ0LCJwb3NpdGlvbiI6MC42MDk2LCJ3YWxsIjoidG9wIn1dLCJpdGVtcyI6W3siaWQiOjEsImxhYmVsIjoiQmVkIiwid2lkdGgiOjEuODI4OCwiaGVpZ2h0IjoxLjIxOTIsIngiOjAuODI3MzE0LCJ5IjowLjcxODQ1Nywicm90YXRpb24iOjAsImNvbG9yIjoiIzkzYzVmZCIsInZpc2libGUiOnRydWV9LHsiaWQiOjIsImxhYmVsIjoiRGVzayIsIndpZHRoIjoxLjIxOTIsImhlaWdodCI6MC42MDk2LCJ4IjoyLjc0MzIsInkiOjAuNjA5Niwicm90YXRpb24iOjkwLCJjb2xvciI6IiMxMjNhYmMiLCJ2aXNpYmxlIjp0cnVlfSx7ImlkIjozLCJsYWJlbCI6IldhcmRyb2JlIiwid2lkdGgiOjAuOTE0NCwiaGVpZ2h0IjowLjYwOTYsIngiOjAuNjA5NiwieSI6Mi40Mzg0LCJyb3RhdGlvbiI6MCwiY29sb3IiOiIjZmNkMzRkIiwidmlzaWJsZSI6dHJ1ZSwibG9ja2VkIjp0cnVlfSx7ImlkIjo0LCJsYWJlbCI6IlJ1ZyIsIndpZHRoIjoxLjUyNCwiaGVpZ2h0IjoyLjQzODQsIngiOjEuODI4OCwieSI6MS41MjQsInJvdGF0aW9uIjowLCJjb2xvciI6IiNmZWNhY2EiLCJ2aXNpYmxlIjpmYWxzZX1dfQ%3D%3D",
+    "json": {
+      "name": "Café Plan",
+      "unitSystem": "m",
+      "roomDims": {
+        "width": 4.4196,
+        "height": 3.3528
+      },
+      "doors": [
+        {
+          "id": 1,
+          "width": 0.9144,
+          "position": 1.8288,
+          "wall": "bottom",
+          "hinge": "right",
+          "type": "swing-in"
+        },
+        {
+          "id": 1794593361533,
+          "width": 0.9144,
+          "position": 0.6096,
+          "wall": "right",
+          "hinge": "left",
+          "type": "sliding"
+        }
+      ],
+      "windows": [
+        {
+          "id": 1,
+          "width": 1.2192,
+          "position": 1.2192,
+          "wall": "top"
+        },
+        {
+          "id": 1794593361586,
+          "width": 0.9144,
+          "position": 0.6096,
+          "wall": "top"
+        }
+      ],
+      "items": [
+        {
+          "id": 1,
+          "label": "Bed",
+          "width": 1.8288,
+          "height": 1.2192,
+          "x": 0.827314,
+          "y": 0.718457,
+          "rotation": 0,
+          "color": "#93c5fd",
+          "visible": true
+        },
+        {
+          "id": 2,
+          "label": "Desk",
+          "width": 1.2192,
+          "height": 0.6096,
+          "x": 2.7432,
+          "y": 0.6096,
+          "rotation": 90,
+          "color": "#123abc",
+          "visible": true
+        },
+        {
+          "id": 3,
+          "label": "Wardrobe",
+          "width": 0.9144,
+          "height": 0.6096,
+          "x": 0.6096,
+          "y": 2.4384,
+          "rotation": 0,
+          "color": "#fcd34d",
+          "visible": true,
+          "locked": true
+        },
+        {
+          "id": 4,
+          "label": "Rug",
+          "width": 1.524,
+          "height": 2.4384,
+          "x": 1.8288,
+          "y": 1.524,
+          "rotation": 0,
+          "color": "#fecaca",
+          "visible": false
+        }
+      ]
+    }
+  },
+  "emojiName": {
+    "url": "http://localhost:5199/?config="
+  }
+}
