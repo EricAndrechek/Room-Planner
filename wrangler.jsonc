@@ -11,7 +11,7 @@
     "not_found_handling": "404-page",
     // Static requests are served by the assets layer without invoking the Worker (free, no CPU).
     // Only the PostHog reverse proxy runs Worker code.
-    "run_worker_first": ["/ingest/*"],
+    "run_worker_first": ["/rpq/*"],
   },
   // Custom domain. Cloudflare creates the DNS record itself, so any existing
   // `roomplanner` CNAME must be deleted first (see docs/DEPLOY.md).

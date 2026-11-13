@@ -95,7 +95,7 @@ test('the whole app works offline', async ({ page, context }) => {
     return urls;
   });
   expect(cached.length).toBeGreaterThan(8);
-  expect(cached.filter((u) => u.startsWith('/ingest'))).toEqual([]);
+  expect(cached.filter((u) => u.startsWith('/rpq'))).toEqual([]);
   expect(cached.filter((u) => /og-image|screenshots|\.map$/.test(u))).toEqual([]);
   expect(cached).toEqual(expect.arrayContaining(['/', '/help/', '/manifest.webmanifest']));
 

@@ -11,11 +11,11 @@
 #        'unsafe-inline' is the pragmatic choice for a static, client-only app with no
 #        user-generated HTML. Tighten to hashes if the built HTML has no inline scripts
 #        (check: grep '<script' dist/**/*.html). No 'unsafe-eval'.
-#        PostHog's SDK/recorder load from same-origin /ingest/static/ (covered by 'self').
+#        PostHog's SDK/recorder load from same-origin /rpq/static/ (covered by 'self').
 #  - style-src 'self' 'unsafe-inline'   Astro scoped styles and React inline style="" attributes.
 #  - img-src 'self' data: blob:         canvas exports, data-URI icons, blob previews.
 #  - font-src 'self' data:
-#  - connect-src 'self' + PostHog hosts  analytics/replay go to same-origin /ingest; the
+#  - connect-src 'self' + PostHog hosts  analytics/replay go to same-origin /rpq; the
 #        explicit us.i / us-assets.i hosts are a fallback if api_host is ever changed.
 #        (us.posthog.com is the UI host, only linked to, not fetched.)
 #  - worker-src 'self' blob:            service worker (/sw.js) and PostHog replay web worker (blob:).

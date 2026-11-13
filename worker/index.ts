@@ -1,10 +1,10 @@
-import { mapIngestPath } from './proxy.ts';
+import { mapProxyPath } from './proxy.ts';
 
 const PH_BEARER = /^Bearer ph[csx]_/;
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const target = mapIngestPath(new URL(request.url));
+    const target = mapProxyPath(new URL(request.url));
     // Everything that is not the PostHog proxy is a static asset.
     if (!target) return env.ASSETS.fetch(request);
 
