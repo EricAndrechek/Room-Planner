@@ -7,6 +7,13 @@ const ANALYTICS_HOST = /(^|\.)(posthog\.com|cloudflareinsights\.com)$/;
 
 /** True when a console error is just a blocked/failed request to a tolerated analytics host. */
 export function isBlockedAnalytics(m: ConsoleMessage): boolean {
+  // Firefox reports a blocked/tampered beacon as "[JavaScript Error: Cross-Origin Request Blocked ...
+  // https://static.cloudflareinsights.com/..." or an SRI mismatch, with no resource location.
+  if (
+    /cross-origin request blocked|integrity attribute/i.test(m.text()) &&
+    /(posthog\.com|cloudflareinsights\.com)/.test(m.text())
+  )
+    return true;
   if (!/^Failed to load resource/.test(m.text())) return false;
   try {
     return ANALYTICS_HOST.test(new URL(m.location().url).hostname);
@@ -17,7 +24,7 @@ export function isBlockedAnalytics(m: ConsoleMessage): boolean {
 
 /** Console messages that count as problems: errors and CSP violations, minus blocked analytics. */
 export function isProblem(m: ConsoleMessage): boolean {
-  const csp = /content security policy|refused to/i.test(m.text());
+  const csp = /content[- ]security[- ]policy|refused to/i.test(m.text());
   if (csp) return true; // a CSP violation is always a problem, even for analytics hosts
   return m.type() === 'error' && !isBlockedAnalytics(m);
 }

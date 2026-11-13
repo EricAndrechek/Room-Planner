@@ -1,0 +1,88 @@
+name: Cross-browser
+
+# Advisory only: NOT a required check (the ruleset requires just `ci`). Never name a job `ci`.
+on:
+  pull_request:
+  schedule:
+    - cron: '17 6 * * *' # daily, post-deploy smoke against production
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'URL to test (e.g. a Workers Builds preview). Empty = production.'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cross-browser-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  browsers:
+    name: ${{ matrix.project }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: webkit
+            browser: webkit
+          - project: firefox
+            browser: firefox
+          - project: mobile-safari
+            browser: webkit
+          - project: mobile-chrome
+            browser: chromium
+    env:
+      # PRs: empty -> Playwright builds and serves the local checkout. Otherwise the target URL.
+      E2E_BASE_URL: >-
+        ${{ github.event_name == 'pull_request' && '' ||
+        inputs.base_url != '' && inputs.base_url ||
+        'https://room-planner.andrechek.com' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Playwright ${{ matrix.browser }} (with system deps)
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Install Playwright system deps only (browser cached)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps ${{ matrix.browser }}
+
+      - name: Run e2e (${{ matrix.project }}) against ${{ env.E2E_BASE_URL || 'the local build' }}
+        run: pnpm exec playwright test --project=${{ matrix.project }}
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-${{ matrix.project }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
