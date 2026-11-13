@@ -1,10 +1,10 @@
 // Captures the web-app-manifest screenshots (public/screenshots/*.webp) from the built app.
-//   pnpm build && pnpm exec astro preview --port 4329 &   then   pnpm screenshots
+//   pnpm build && pnpm exec astro preview --port 43291 &   then   pnpm screenshots
 // Seeds localStorage (current schema) with a furnished living room, so the output is deterministic.
 import { chromium } from '@playwright/test';
 import sharp from 'sharp';
 
-const BASE = process.env.BASE_URL ?? 'http://localhost:4329';
+const BASE = process.env.BASE_URL ?? 'http://localhost:43291';
 const OUT = new URL('../public/screenshots/', import.meta.url);
 
 const item = (id, label, width, height, x, y, color, rotation = 0) => ({
