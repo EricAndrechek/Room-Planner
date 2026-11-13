@@ -1,8 +1,9 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { isProblem } from './problems';
+import { isNarrow, openStep } from './ui';
 import fs from 'node:fs';
 
-// Service workers and offline mode are Chromium features; this runs against `astro preview`
+// Service workers and offline mode, in every engine; this runs against `astro preview`
 // by default and against `wrangler dev` (which applies public/_headers) via E2E_BASE_URL.
 
 const legacyLink: string = JSON.parse(
@@ -70,11 +71,7 @@ test('manifest is valid and the app is installable', async ({ page, browserName 
   );
 });
 
-test('the whole app works offline', async ({ page, context, isMobile }) => {
-  test.skip(
-    isMobile,
-    'drives the desktop sidebar tabs; the service worker is the same engine path',
-  );
+test('the whole app works offline', async ({ page, context }) => {
   test.slow(); // WebKit/Firefox service workers are slower to install under load
   const problems: string[] = [];
   watchProblems(context, problems);
@@ -111,7 +108,7 @@ test('the whole app works offline', async ({ page, context, isMobile }) => {
   await page.reload();
   await ready(page);
   await expect(page.getByRole('heading', { name: 'Offline plan' })).toBeVisible();
-  await page.getByRole('button', { name: '2. Furniture' }).click();
+  await openStep(page, 'furniture');
   await page.getByRole('button', { name: 'Add Item' }).click();
   await expect(page.getByRole('button', { name: /^New Item,/ })).toBeVisible();
   await expect(page.getByTestId('save-status')).toContainText('Saved');
@@ -130,10 +127,11 @@ test('the whole app works offline', async ({ page, context, isMobile }) => {
   await expect(page.getByRole('heading', { name: 'Café Plan' })).toBeVisible();
   expect(new URL(page.url()).search).toBe('');
 
-  // A #s= share link loads offline.
-  await page.goto('/');
+  // A #s= share link loads offline, opened fresh (from another page, as a clicked link would).
+  // Not goto('/') + goto(link) + reload(): the hash change is same-document, and the reload could
+  // race the first page's own boot (its history.replaceState aborted the reload under load).
+  await page.goto('about:blank');
   await page.goto(shareUrl);
-  await page.reload();
   await ready(page);
   await expect(page.getByTestId('room')).toBeVisible();
 
@@ -148,13 +146,11 @@ test('the whole app works offline', async ({ page, context, isMobile }) => {
   await context.setOffline(false);
 });
 
-test('install button appears on beforeinstallprompt and hides once installed', async ({
-  page,
-  isMobile,
-}) => {
-  test.skip(isMobile, 'on narrow layouts the install button lives in the collapsed sidebar sheet');
+test('install button appears on beforeinstallprompt and hides once installed', async ({ page }) => {
   await page.goto('/');
   await ready(page);
+  // Desktop: in the header. Phones: at the bottom of the sidebar sheet, so open that first.
+  if (isNarrow(page)) await openStep(page, 'room');
   await expect(page.getByRole('button', { name: 'Install app' })).toHaveCount(0);
   await page.evaluate(() => {
     const e = new Event('beforeinstallprompt', { cancelable: true });
@@ -176,8 +172,7 @@ test('install button appears on beforeinstallprompt and hides once installed', a
   await expect(button).toHaveCount(0);
 });
 
-test('asks for persistent storage once, after the first save', async ({ page, isMobile }) => {
-  test.skip(isMobile, 'drives the desktop sidebar tabs');
+test('asks for persistent storage once, after the first save', async ({ page }) => {
   await page.addInitScript(() => {
     (window as unknown as { __persistCalls: number }).__persistCalls = 0;
     // Patch the prototype: WebKit hands out per-access wrappers / ignores instance assignment.
@@ -200,7 +195,7 @@ test('asks for persistent storage once, after the first save', async ({ page, is
   const calls = () =>
     page.evaluate(() => (window as unknown as { __persistCalls: number }).__persistCalls);
   await expect.poll(calls).toBe(1);
-  await page.getByRole('button', { name: '2. Furniture' }).click();
+  await openStep(page, 'furniture');
   await page.getByRole('button', { name: 'Add Item' }).click();
   await expect(page.getByTestId('save-status')).toContainText('Saved');
   expect(await calls()).toBe(1);

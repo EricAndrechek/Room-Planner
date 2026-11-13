@@ -38,10 +38,11 @@ jobs:
             browser: chromium
     env:
       # PRs: empty -> Playwright builds and serves the local checkout. Otherwise the target URL.
+      # (Not `pull_request && '' || ...`: '' is falsy in expressions, so that form always fell
+      # through to production and PR runs never tested the PR.)
       E2E_BASE_URL: >-
-        ${{ github.event_name == 'pull_request' && '' ||
-        inputs.base_url != '' && inputs.base_url ||
-        'https://room-planner.andrechek.com' }}
+        ${{ github.event_name != 'pull_request' &&
+        (inputs.base_url || 'https://room-planner.andrechek.com') || '' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -65,13 +66,34 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ steps.pw.outputs.version }}
 
+      # Downloads retried: a CDN/apt blip should not turn into a failure email.
       - name: Install Playwright ${{ matrix.browser }} (with system deps)
         if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
+        run: |
+          for i in 1 2 3; do
+            pnpm exec playwright install --with-deps ${{ matrix.browser }} && exit 0
+            echo "::warning::playwright install failed (attempt $i), retrying"; sleep 20
+          done
+          exit 1
 
       - name: Install Playwright system deps only (browser cached)
         if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps ${{ matrix.browser }}
+        run: |
+          for i in 1 2 3; do
+            pnpm exec playwright install-deps ${{ matrix.browser }} && exit 0
+            echo "::warning::playwright install-deps failed (attempt $i), retrying"; sleep 20
+          done
+          exit 1
+
+      # Remote target (schedule/dispatch): ride out a brief outage or network blip before testing,
+      # so only a site that stays down fails the run. Each failing test also gets one retry
+      # (playwright.config.ts: retries 1 on CI); a test that passes on retry is reported as flaky,
+      # not failed.
+      - name: Wait for ${{ env.E2E_BASE_URL }} to respond
+        if: env.E2E_BASE_URL != ''
+        run: >-
+          curl --fail --silent --show-error --location --output /dev/null
+          --retry 6 --retry-all-errors --retry-delay 10 --max-time 30 "$E2E_BASE_URL"
 
       - name: Run e2e (${{ matrix.project }}) against ${{ env.E2E_BASE_URL || 'the local build' }}
         run: pnpm exec playwright test --project=${{ matrix.project }}

@@ -5,8 +5,16 @@ import type { ConsoleMessage } from '@playwright/test';
 // surfaces as a console "Failed to load resource" error — expected, not a site bug.
 const ANALYTICS_HOST = /(^|\.)(posthog\.com|cloudflareinsights\.com)$/;
 
+/**
+ * PostHog finds the widest cookie domain it may use by trying to set a throwaway `dmn_chk_<uuid>`
+ * cookie on each parent domain, starting at the public suffix (`.com`). Browsers refuse that one;
+ * Firefox logs the refusal as an error. Harmless and expected: PostHog then uses the next level.
+ */
+const POSTHOG_DOMAIN_PROBE = /Cookie “dmn_chk_[\w-]+” has been rejected for invalid domain/;
+
 /** True when a console error is just a blocked/failed request to a tolerated analytics host. */
 export function isBlockedAnalytics(m: ConsoleMessage): boolean {
+  if (POSTHOG_DOMAIN_PROBE.test(m.text())) return true;
   // Firefox reports a blocked/tampered beacon as "[JavaScript Error: Cross-Origin Request Blocked ...
   // https://static.cloudflareinsights.com/..." or an SRI mismatch, with no resource location.
   if (

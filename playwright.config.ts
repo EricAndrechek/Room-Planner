@@ -2,7 +2,8 @@ import { defineConfig, devices } from '@playwright/test';
 
 const PORT = Number(process.env.E2E_PORT ?? 43291);
 // Set E2E_BASE_URL to test an already-running server (e.g. `wrangler dev`); no webServer is started.
-const EXTERNAL_BASE_URL = process.env.E2E_BASE_URL;
+// Empty counts as unset (the cross-browser workflow sets it to '' on PRs).
+const EXTERNAL_BASE_URL = process.env.E2E_BASE_URL || undefined;
 
 export default defineConfig({
   testDir: 'e2e',
