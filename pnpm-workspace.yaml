@@ -2,3 +2,7 @@ allowBuilds:
   esbuild: true
   workerd: true
   sharp: true
+
+overrides:
+  # GHSA (Dependabot alert #40): minimatch <11.0.1 ReDoS via globparts; dev-only, pulled in by eslint.
+  'minimatch@>=7 <11.0.1': '^11.0.1'
