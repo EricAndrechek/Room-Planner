@@ -152,20 +152,20 @@ Open [http://localhost:4321](http://localhost:4321) in your browser.
 
 ### Scripts
 
-| Command            | What it does                                                                  |
-| ------------------ | ----------------------------------------------------------------------------- |
-| `pnpm dev`         | Astro dev server                                                              |
-| `pnpm build`       | Static build into `dist/` (also generates the service worker and manifest)    |
-| `pnpm preview`     | Serve `dist/` locally                                                         |
-| `pnpm check`       | Type-check (`astro check` plus the Worker, TypeScript strict)                 |
-| `pnpm lint`        | ESLint (typescript-eslint + react-hooks)                                      |
-| `pnpm format`      | Prettier (with `prettier-plugin-astro`)                                       |
-| `pnpm test`        | Vitest unit tests plus the Worker proxy tests                                 |
-| `pnpm test:e2e`    | Playwright specs (Chromium) against a fresh build on port 43291               |
-| `pnpm assets`      | Regenerate icons and social images from `brand/`                              |
-| `pnpm screenshots` | Regenerate the PWA manifest screenshots (needs a running preview server)      |
-| `pnpm dev:worker`  | Build, then run the Cloudflare Worker locally with `wrangler dev`             |
-| `pnpm deploy`      | `wrangler deploy` (normally done by CI; see [docs/DEPLOY.md](docs/DEPLOY.md)) |
+| Command            | What it does                                                                                         |
+| ------------------ | ---------------------------------------------------------------------------------------------------- |
+| `pnpm dev`         | Astro dev server                                                                                     |
+| `pnpm build`       | Static build into `dist/` (also generates the service worker and manifest)                           |
+| `pnpm preview`     | Serve `dist/` locally                                                                                |
+| `pnpm check`       | Type-check (`astro check` plus the Worker, TypeScript strict)                                        |
+| `pnpm lint`        | ESLint (typescript-eslint + react-hooks)                                                             |
+| `pnpm format`      | Prettier (with `prettier-plugin-astro`)                                                              |
+| `pnpm test`        | Vitest unit tests plus the Worker proxy tests                                                        |
+| `pnpm test:e2e`    | Playwright specs (Chromium) against a fresh build on port 43291                                      |
+| `pnpm assets`      | Regenerate icons and social images from `brand/`                                                     |
+| `pnpm screenshots` | Regenerate the PWA manifest screenshots (needs a running preview server)                             |
+| `pnpm dev:worker`  | Build, then run the Cloudflare Worker locally with `wrangler dev`                                    |
+| `pnpm deploy`      | `wrangler deploy` (normally done by Cloudflare Workers Builds; see [docs/DEPLOY.md](docs/DEPLOY.md)) |
 
 To run the e2e suite against an already-running server (for example `wrangler dev`
 on port 8787, which also exercises the CSP headers), set `E2E_BASE_URL`:
@@ -175,22 +175,18 @@ The public site URL used for canonical links, Open Graph tags, the sitemap and
 `robots.txt` comes from `SITE_URL` at build time (default
 `https://roomplanner.andrechek.com`), e.g. `SITE_URL=https://example.com pnpm build`.
 
-### Environment
+### Analytics
 
-Copy `.env.example` to `.env` to configure the build. All variables are optional:
-without `PUBLIC_POSTHOG_KEY`, analytics is disabled entirely.
+Anonymous, cookieless analytics and error tracking come from PostHog's web snippet
+(`src/components/PostHog.astro`), sent through the same-origin `/rpq` reverse proxy
+(`worker/proxy.ts`). There is no build-time configuration: the project token is a public
+client token, and the `environment` property (`production` / `preview` / `development`) is
+derived from the hostname at runtime. Analytics is off under automation (`navigator.webdriver`)
+and on `localhost`. To debug it, run `localStorage['rp:analytics-debug']='1'` in the browser
+console and reload (works on localhost too; enables `debug` logging). In `pnpm dev`, `/rpq` is
+proxied to PostHog; with `wrangler dev` the Worker does it.
 
-| Variable              | Purpose                                             |
-| --------------------- | --------------------------------------------------- |
-| `PUBLIC_POSTHOG_KEY`  | PostHog project token (public; ships in the bundle) |
-| `PUBLIC_POSTHOG_HOST` | Defaults to the same-origin `/ingest` reverse proxy |
-| `PUBLIC_DEPLOY_ENV`   | `production` (default) or `preview`                 |
-
-Analytics never runs on `localhost` unless you opt in for debugging: open the
-browser console and run `localStorage['rp:analytics-debug']='1'`, then reload.
-In `pnpm dev`, `/ingest` is proxied to PostHog; with `wrangler dev` the Worker does it.
-
-Deployment, secrets, and the domain cutover are documented in [docs/DEPLOY.md](docs/DEPLOY.md).
+Deployment and the domain cutover are documented in [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ### Project Structure
 
@@ -207,7 +203,7 @@ src/
 ├── hooks/                 # useHistory, useProjects (autosave), usePanZoom,
 │                          # usePointerDrag, useRotationDrag, useKeyboardShortcuts...
 ├── lib/                   # pure, unit-tested logic: units, geometry, layout,
-│                          # share, storage, projects, boot, analytics seam
+│                          # share, storage, projects, boot, analytics facade
 ├── styles/global.css      # Tailwind v4 + app styles
 └── types.ts
 e2e/                       # Playwright specs
@@ -222,14 +218,15 @@ e2e/                       # Playwright specs
   marker; `src/lib/storage.ts` documents the format and its migrations
 - Share links put a deflate-compressed, base64url payload in the URL **fragment**
   (`#s=…`), so layouts never reach a server; old `?config=` links still open
-- `src/lib/analytics.ts` wraps a lazily loaded `posthog-js` (events queue until it loads; a no-op without a key)
+- `src/lib/analytics.ts` is a typed facade over the PostHog web snippet's `window.posthog` (calls queue until the SDK loads; harmless no-ops when analytics is off)
 - `src/lib/pwa.ts` / `pwa-options.mjs` configure the service worker via `@vite-pwa/astro`
 
 ---
 
 ## 🚢 Deployment
 
-The site is deployed as a Cloudflare Worker serving the static `dist/` (see
+The site is deployed as a Cloudflare Worker serving the static `dist/`. Cloudflare Workers
+Builds builds and deploys `main` on every push and builds a preview for each PR branch (see
 [docs/DEPLOY.md](docs/DEPLOY.md)). `pnpm build` itself produces a fully static site in
 `dist/` that any static host can serve. If the site is served from a sub-path, set Astro's `base` in
 `astro.config.mjs`; all internal links are base-aware.
