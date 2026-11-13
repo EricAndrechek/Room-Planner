@@ -3,6 +3,7 @@ import {
   Check,
   CircleHelp,
   Edit3,
+  FileDown,
   FolderOpen,
   Maximize2,
   Redo2,
@@ -36,9 +37,10 @@ interface HeaderProps {
   onZoomOut: () => void;
   onFit: () => void;
   onShare: () => void;
+  onExport: () => void;
 }
 
-/** Top bar: plan name (click to rename), save status, undo/redo, zoom, share. */
+/** Top bar: plan name (click to rename), save status, undo/redo, zoom, export, share. */
 export function Header(props: HeaderProps) {
   const [editingName, setEditingName] = useState<string | null>(null);
   const now = useNow();
@@ -165,6 +167,18 @@ export function Header(props: HeaderProps) {
           >
             <CircleHelp className="w-4 h-4" />
           </a>
+        </Tooltip>
+
+        <Tooltip text="Export PNG / PDF / Print">
+          <button
+            type="button"
+            onClick={props.onExport}
+            className="flex items-center justify-center gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs sm:text-sm font-medium transition-colors"
+            aria-label="Export as image or PDF"
+          >
+            <FileDown className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">Export</span>
+          </button>
         </Tooltip>
 
         <button

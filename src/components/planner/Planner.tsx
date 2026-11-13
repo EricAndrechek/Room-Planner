@@ -49,6 +49,7 @@ import type {
   UnitSystem,
 } from '../../types';
 import { ColorPicker } from './ColorPicker';
+import { ExportModal } from './ExportModal';
 import { FileBrowserModal } from './FileBrowserModal';
 import { FurniturePanel } from './FurniturePanel';
 import { Header } from './Header';
@@ -82,6 +83,7 @@ export function Planner({ storage, initial }: PlannerProps) {
 
   const [selection, setSelection] = useState<Selection | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [colorPickerItemId, setColorPickerItemId] = useState<Id | null>(null);
   const [roomSetupExpanded, setRoomSetupExpanded] = useState(false);
@@ -380,7 +382,7 @@ export function Planner({ storage, initial }: PlannerProps) {
         return true;
       },
     },
-    !shareOpen && !filesOpen,
+    !shareOpen && !filesOpen && !exportOpen,
   );
 
   // --- Projects --------------------------------------------------------------------------
@@ -453,6 +455,7 @@ export function Planner({ storage, initial }: PlannerProps) {
         onZoomOut={zoomOut}
         onFit={fitToView}
         onShare={() => setShareOpen(true)}
+        onExport={() => setExportOpen(true)}
       />
 
       <div className="flex flex-1 overflow-hidden relative">
@@ -576,6 +579,14 @@ export function Planner({ storage, initial }: PlannerProps) {
         onClose={() => setShareOpen(false)}
         config={shareConfig}
         onImport={importConfig}
+      />
+
+      <ExportModal
+        isOpen={exportOpen}
+        onClose={() => setExportOpen(false)}
+        layout={layout}
+        unitSystem={unitSystem}
+        projectName={projectName}
       />
 
       <FileBrowserModal
