@@ -6,19 +6,25 @@
   "description": "A visual room planning tool for designing and visualizing room layouts",
   "packageManager": "pnpm@12.4.1",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.23.4"
   },
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "check": "astro check",
+    "check": "astro check && pnpm check:worker",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "vitest run",
+    "test": "vitest run && pnpm test:worker",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "check:worker": "tsc -p worker/tsconfig.json",
+    "test:worker": "node --test worker/proxy.test.ts",
+    "assets": "node brand/generate.mjs",
+    "deploy": "wrangler deploy",
+    "dev:worker": "pnpm build && wrangler dev",
+    "cf:types": "wrangler types worker/worker-configuration.d.ts"
   },
   "dependencies": {
     "@astrojs/react": "^7.1.8",
@@ -33,16 +39,21 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.12",
     "@eslint/js": "^10.0.1",
+    "@fontsource/inter": "^5.3.0",
     "@playwright/test": "^1.65.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "eslint": "^10.14.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.14.0",
+    "opentype.js": "^2.0.0",
     "prettier": "^3.10.1",
     "prettier-plugin-astro": "^1.1.2",
+    "sharp": "^0.35.5",
+    "svgo": "^4.1.0",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.72.2",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.0",
+    "wrangler": "^4.161.0"
   }
 }
