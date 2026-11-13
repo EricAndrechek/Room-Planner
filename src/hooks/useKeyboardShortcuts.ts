@@ -8,7 +8,8 @@ export interface ShortcutHandlers {
   deselect: () => void;
   /** Move the selected item by (dx, dy) feet; true if an item was moved. */
   nudge: (dx: number, dy: number) => boolean;
-  rotateSelected: () => boolean;
+  /** Rotate the selected item 90deg: `1` clockwise, `-1` counter-clockwise. */
+  rotateSelected: (direction?: 1 | -1) => boolean;
 }
 
 const isTyping = (target: EventTarget | null) => {
@@ -23,7 +24,7 @@ const isTyping = (target: EventTarget | null) => {
 
 /**
  * Global shortcuts: Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z redo, Delete/Backspace
- * delete, Escape deselect, arrows nudge 0.25 ft (Shift: 1 ft), R rotate 90deg.
+ * delete, Escape deselect, arrows nudge 0.25 ft (Shift: 1 ft), R rotate 90deg (Shift+R: back).
  * Ignored while typing in a form field or when `enabled` is false.
  */
 export function useKeyboardShortcuts(handlers: ShortcutHandlers, enabled = true) {
@@ -66,7 +67,7 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers, enabled = true)
         return;
       }
       if (!mod && !e.altKey && (key === 'r' || key === 'R')) {
-        if (h.rotateSelected()) e.preventDefault();
+        if (h.rotateSelected(e.shiftKey ? -1 : 1)) e.preventDefault();
       }
     };
     window.addEventListener('keydown', onKeyDown);
