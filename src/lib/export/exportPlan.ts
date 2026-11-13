@@ -38,8 +38,37 @@ const downloadBlob = (blob: Blob, filename: string) => {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  // Give the browser a moment to start the download before revoking.
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  // Keep the URL alive while the browser may still be asking "Download this file?" (Safari can ask
+  // before it reads the blob); revoking early turns a slow confirmation into a failed download.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+};
+
+/** iPhone, iPod or iPad (iPadOS reports itself as a Mac, so also: a Mac with a touch screen). */
+const isIOS = (): boolean =>
+  /iP(hone|od|ad)/.test(navigator.userAgent) ||
+  (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+
+/**
+ * Hand a generated file to the user. On iOS this opens the share sheet (Save Image, Save to Files,
+ * AirDrop, Print): a blob `<a download>` there only lands in Files > Downloads behind a confirmation,
+ * and does nothing useful in a home-screen (standalone) web app. Everywhere else, and whenever
+ * sharing is unavailable or refused (e.g. the click's user activation expired during rendering),
+ * it is a regular download.
+ */
+export const saveFile = async (blob: Blob, filename: string): Promise<void> => {
+  if (isIOS() && typeof navigator.canShare === 'function') {
+    const file = new File([blob], filename, { type: blob.type });
+    if (navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file] });
+        return;
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return; // user dismissed it
+        // NotAllowedError / anything else: fall back to the download below.
+      }
+    }
+  }
+  downloadBlob(blob, filename);
 };
 
 const loadSvgImage = async (svg: string): Promise<HTMLImageElement> => {
@@ -114,13 +143,13 @@ export const renderPdf = (scene: Scene, paper: Paper): Promise<Uint8Array> =>
 
 export const downloadPng = async (input: PlanInput): Promise<void> => {
   const scene = buildPlanScene(input);
-  downloadBlob(await renderPng(scene), `${exportBaseName(input.title)}.png`);
+  await saveFile(await renderPng(scene), `${exportBaseName(input.title)}.png`);
 };
 
 export const downloadPdf = async (input: PlanInput, paper: Paper): Promise<void> => {
   const scene = buildPlanScene(input);
   const pdf = await renderPdf(scene, paper);
-  downloadBlob(
+  await saveFile(
     new Blob([pdf as BlobPart], { type: 'application/pdf' }),
     `${exportBaseName(input.title)}.pdf`,
   );
