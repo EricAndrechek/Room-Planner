@@ -1,54 +1,143 @@
-# Deploy to GitHub Pages
+# Deploys to Cloudflare Workers (static assets + PostHog proxy Worker).
+# Required repo secrets: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID.
+# Optional: POSTHOG_CLI_API_KEY (+ repo variable POSTHOG_CLI_PROJECT_ID) for source maps.
+# Without the Cloudflare secrets every job here no-ops with a notice (stays green).
 name: Deploy
 
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: false
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-
   deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    needs: build
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: https://roomplanner.andrechek.com
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+      POSTHOG_CLI_PROJECT_ID: ${{ vars.POSTHOG_CLI_PROJECT_ID }}
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Check Cloudflare secrets
+        id: cf
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=Deploy skipped::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set; skipping deploy. See docs/DEPLOY.md."
+          fi
+
+      - if: steps.cf.outputs.enabled == 'true'
+        uses: actions/checkout@v7
+      - if: steps.cf.outputs.enabled == 'true'
+        uses: pnpm/action-setup@v6
+      - if: steps.cf.outputs.enabled == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - if: steps.cf.outputs.enabled == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: steps.cf.outputs.enabled == 'true'
+        run: pnpm build
+
+      # Optional: upload source maps to PostHog error tracking BEFORE deploying.
+      # Requires the build to emit maps (build.sourcemap: 'hidden'); .assetsignore keeps *.map off the CDN.
+      - name: PostHog source maps
+        if: steps.cf.outputs.enabled == 'true' && env.POSTHOG_CLI_API_KEY != '' && env.POSTHOG_CLI_PROJECT_ID != ''
+        run: |
+          npm install -g @posthog/cli
+          posthog-cli sourcemap inject --directory dist
+          posthog-cli sourcemap upload --directory dist --release-version "$GITHUB_SHA"
+
+      - name: Deploy to Cloudflare
+        if: steps.cf.outputs.enabled == 'true'
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
+
+  preview:
+    # Same-repo PRs only: forks do not get secrets.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    concurrency:
+      group: preview-${{ github.event.number }}
+      cancel-in-progress: true
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Check Cloudflare secrets
+        id: cf
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=Preview skipped::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set; skipping preview. See docs/DEPLOY.md."
+          fi
+
+      - if: steps.cf.outputs.enabled == 'true'
+        uses: actions/checkout@v7
+      - if: steps.cf.outputs.enabled == 'true'
+        uses: pnpm/action-setup@v6
+      - if: steps.cf.outputs.enabled == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - if: steps.cf.outputs.enabled == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: steps.cf.outputs.enabled == 'true'
+        run: pnpm build
+
+      # Uploads a version WITHOUT deploying it; the alias URL is stable per PR.
+      - name: Upload preview version
+        id: upload
+        if: steps.cf.outputs.enabled == 'true'
+        env:
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-output.ndjson
+          PR_NUMBER: ${{ github.event.number }}
+        run: |
+          pnpm exec wrangler versions upload --preview-alias "pr-${PR_NUMBER}" --message "PR #${PR_NUMBER} ${GITHUB_SHA::7}" | tee "$RUNNER_TEMP/upload.log"
+          url=$(jq -r 'select(.type=="version-upload") | .preview_alias_url // .preview_url // empty' "$WRANGLER_OUTPUT_FILE_PATH" | tail -n1)
+          if [ -z "$url" ]; then
+            url=$(grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' "$RUNNER_TEMP/upload.log" | head -n1 || true)
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Comment preview URL
+        if: steps.cf.outputs.enabled == 'true' && steps.upload.outputs.url != ''
+        uses: actions/github-script@v9
+        env:
+          PREVIEW_URL: ${{ steps.upload.outputs.url }}
+        with:
+          script: |
+            const marker = '<!-- room-planner-preview -->';
+            const body = `${marker}\n**Preview:** ${process.env.PREVIEW_URL}\n\nCommit ${context.sha.slice(0, 7)}. Previews are public workers.dev URLs; the custom domain is production only.`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
