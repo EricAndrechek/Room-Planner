@@ -7,3 +7,5 @@ test-results
 public
 .github
 src/lib/__fixtures__
+worker/worker-configuration.d.ts
+brand/*.svg

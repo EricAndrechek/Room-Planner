@@ -7,7 +7,14 @@ import tseslint from 'typescript-eslint';
 
 export default defineConfig(
   {
-    ignores: ['dist/', '.astro/', 'node_modules/', 'playwright-report/', 'test-results/'],
+    ignores: [
+      'worker/worker-configuration.d.ts',
+      'dist/',
+      '.astro/',
+      'node_modules/',
+      'playwright-report/',
+      'test-results/',
+    ],
   },
   js.configs.recommended,
   tseslint.configs.recommended,
@@ -23,7 +30,7 @@ export default defineConfig(
     },
   },
   {
-    files: ['*.{js,mjs,ts}', 'e2e/**/*.ts'],
+    files: ['*.{js,mjs,ts}', 'e2e/**/*.ts', 'brand/**/*.mjs', 'worker/**/*.ts'],
     languageOptions: { globals: { ...globals.node } },
   },
 );

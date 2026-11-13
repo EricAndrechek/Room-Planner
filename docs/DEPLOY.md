@@ -14,12 +14,12 @@ committed; it comes from `CLOUDFLARE_ACCOUNT_ID`.
 Dashboard > My Profile > API Tokens > Create Token (start from the "Edit Cloudflare Workers"
 template, then restrict). Permissions:
 
-| Scope | Permission |
-| --- | --- |
-| Account | Workers Scripts: Edit |
-| Zone (andrechek.com) | Workers Routes: Edit |
+| Scope                | Permission                                       |
+| -------------------- | ------------------------------------------------ |
+| Account              | Workers Scripts: Edit                            |
+| Zone (andrechek.com) | Workers Routes: Edit                             |
 | Zone (andrechek.com) | DNS: Edit (custom domains create the DNS record) |
-| Zone (andrechek.com) | Zone: Read |
+| Zone (andrechek.com) | Zone: Read                                       |
 
 Resources: Account = the personal account; Zone = `andrechek.com` only. (The Wrangler docs list the
 exact set under "Roles and permissions"; if `wrangler deploy` reports a 403 for the custom domain,

@@ -16,7 +16,7 @@ const out = (f, d) => writeFile(path.join(pub, f), d);
 const png = (buf, size, w = size, h = size) =>
   sharp(buf, { density: 384 })
     .resize(w, h)
-    .png({ compressionLevel: 9, effort: 10, palette: false, })
+    .png({ compressionLevel: 9, effort: 10, palette: false })
     .toBuffer();
 
 // --- og-image.svg: bake the wordmark/tagline into outlines (Inter, OFL) ---
@@ -61,7 +61,10 @@ await out('maskable-icon-512x512.png', await png(Buffer.from(await src('logo-mas
 await out('apple-touch-icon.png', await png(Buffer.from(await src('logo-apple.svg')), 180));
 await out(
   'og-image.png',
-  await sharp(Buffer.from(og), { density: 72 }).resize(1200, 630).png({ compressionLevel: 9, effort: 10, palette: false, }).toBuffer(),
+  await sharp(Buffer.from(og), { density: 72 })
+    .resize(1200, 630)
+    .png({ compressionLevel: 9, effort: 10, palette: false })
+    .toBuffer(),
 );
 
 // --- favicon.ico (16/32 from the chunky small design, 48 from the master), PNG-in-ICO ---
@@ -76,8 +79,12 @@ head.writeUInt16LE(frames.length, 4);
 let off = head.length;
 frames.forEach(([s, b], i) => {
   const o = 6 + 16 * i;
-  head[o] = s; head[o + 1] = s; head.writeUInt16LE(1, o + 4); head.writeUInt16LE(32, o + 6);
-  head.writeUInt32LE(b.length, o + 8); head.writeUInt32LE(off, o + 12);
+  head[o] = s;
+  head[o + 1] = s;
+  head.writeUInt16LE(1, o + 4);
+  head.writeUInt16LE(32, o + 6);
+  head.writeUInt32LE(b.length, o + 8);
+  head.writeUInt32LE(off, o + 12);
   off += b.length;
 });
 await out('favicon.ico', Buffer.concat([head, ...frames.map(([, b]) => b)]));
