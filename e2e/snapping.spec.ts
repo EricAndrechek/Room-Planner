@@ -233,7 +233,10 @@ test('snapping adds no noticeable cost to a drag among 30 pieces', async ({ page
     localStorage.setItem('room-sim-v3-mode', 'furniture');
   }, many);
 
-  /** Median ms per pointer move (handler, React render, layout, next frame) over 60 moves. */
+  /**
+   * Median main-thread ms per pointer move (handler, React render and commit) over 60 moves. Paint
+   * is left out: on CI's software-rendered Linux WebKit it dominates and says nothing about phones.
+   */
   const measure = async (snap: boolean) => {
     await page.addInitScript(
       (on) => localStorage.setItem('room-planner-pref-snap', on),
@@ -262,8 +265,11 @@ test('snapping adds no noticeable cost to a drag among 30 pieces', async ({ page
               buttons: 1,
             }),
           );
-          await new Promise((r) => requestAnimationFrame(() => r(null)));
+          // React renders on a scheduler task after the event: let it run, then take the time.
+          await new Promise((r) => setTimeout(r, 0));
+          await new Promise((r) => setTimeout(r, 0));
           times.push(performance.now() - t0);
+          await new Promise((r) => requestAnimationFrame(() => r(null)));
         }
         times.sort((a, b) => a - b);
         return times[30]!;
@@ -279,7 +285,7 @@ test('snapping adds no noticeable cost to a drag among 30 pieces', async ({ page
     type: 'drag ms per move (median)',
     description: `snap off ${off.toFixed(1)}, snap on ${on.toFixed(1)}`,
   });
-  // Relative to the same drag without snapping, so a slow (CI, software-rendered) browser does not
-  // fail it: snapping, guides and measurements must not make a move noticeably slower.
-  expect(on).toBeLessThan(off * 1.5 + 8);
+  // Relative to the same drag without snapping, so a slow CI machine does not fail it: snapping,
+  // guides and measurements must not make a move noticeably slower.
+  expect(on).toBeLessThan(off * 1.5 + 4);
 });

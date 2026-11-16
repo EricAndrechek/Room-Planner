@@ -43,11 +43,12 @@ function GuideLine({ g, zoom }: { g: Guide; zoom: number }) {
     g.axis === 'x'
       ? { left: px(g.pos) + offset, top: start, width, height: length }
       : { top: px(g.pos) + offset, left: start, height: width, width: length };
+  // Dashed center guides use a border (cheap to paint, even across the whole room).
   const stroke: CSSProperties =
     g.kind === 'center'
-      ? {
-          backgroundImage: `repeating-linear-gradient(${g.axis === 'x' ? '180deg' : '90deg'}, ${GUIDE} 0 ${4 / zoom}px, transparent ${4 / zoom}px ${7 / zoom}px)`,
-        }
+      ? g.axis === 'x'
+        ? { borderLeft: `${width}px dashed ${GUIDE}` }
+        : { borderTop: `${width}px dashed ${GUIDE}` }
       : { backgroundColor: GUIDE };
   return (
     <div
