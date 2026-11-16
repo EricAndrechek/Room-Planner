@@ -7,7 +7,7 @@
 import type { CSSProperties } from 'react';
 import type { Door, Layout, RoomDims, RoomWindow, Wall } from '../types';
 import { PIXELS_PER_UNIT as P, WALL_OPTIONS } from './constants';
-import { isHorizontalWall, wallLength, type Point } from './geometry';
+import { checkItemsCollision, isHorizontalWall, wallLength, type Point } from './geometry';
 import { clamp } from './units';
 
 const WALL_THICKNESS = 4;
@@ -43,43 +43,89 @@ export const onWall = (o: { position: number; width: number }, room: RoomDims, w
 
 /** Clear space (feet) kept between a new door/window and the openings next to it. */
 export const OPENING_GAP = 0.5;
+/** Distance (feet) a new opening keeps from the wall's ends (the room's corners), when it can. */
+export const CORNER_MARGIN = 0.5;
+/** Spacing (feet) of the positions tried along each wall. */
+export const PLACEMENT_STEP = 0.5;
+
+export interface OpeningSpotOptions {
+  /** For a door: its type and hinge, so its swing can be kept clear of furniture. */
+  swing?: Pick<Door, 'type' | 'hinge'>;
+  gap?: number;
+  margin?: number;
+  step?: number;
+}
 
 /**
- * Where a new door/window of `width` goes: on `preferred.wall`, at
- * `preferred.position` if that is free, else at the first free spot along it
- * (just after an existing opening). If that wall is full, the other walls are
- * tried in `WALL_OPTIONS` order (top, right, bottom, left) the same way. Doors
- * and windows are both obstacles, `gap` feet apart. If nothing fits anywhere,
- * the preferred spot is returned unchanged.
+ * Where a new door/window of `width` goes. Walls are tried in order:
+ * `preferred.wall` first, then the rest in `WALL_OPTIONS` order (top, right,
+ * bottom, left); along a wall, `preferred.position` first, then from the start
+ * of the wall in `step` increments (plus the spots just past each opening).
+ * A spot must not overlap another door or window (`gap` feet apart). Of those,
+ * the first spot that also keeps `margin` from the corners and, for a door,
+ * whose swing misses every visible furniture piece wins; failing that, the
+ * first that keeps the corner margin; then any free spot. If nothing fits
+ * anywhere, the preferred spot is returned unchanged.
  */
 export function findOpeningSpot(
-  layout: Pick<Layout, 'roomDims' | 'doors' | 'windows'>,
+  layout: Pick<Layout, 'roomDims' | 'doors' | 'windows'> & Partial<Pick<Layout, 'items'>>,
   width: number,
   preferred: { wall: Wall; position: number },
-  gap = OPENING_GAP,
+  {
+    swing,
+    gap = OPENING_GAP,
+    margin = CORNER_MARGIN,
+    step = PLACEMENT_STEP,
+  }: OpeningSpotOptions = {},
 ): { wall: Wall; position: number } {
   const eps = 1e-9;
+  const room = layout.roomDims;
+  const items = (layout.items ?? []).filter((i) => i.visible !== false);
   const walls = [preferred.wall, ...WALL_OPTIONS.filter((w) => w !== preferred.wall)];
+
+  // Every free spot, in preference order, with what it is good for.
+  const spots: { wall: Wall; position: number; inMargin: boolean; clear: boolean }[] = [];
   for (const wall of walls) {
-    const len = wallLength(layout.roomDims, wall);
+    const len = wallLength(room, wall);
     if (width > len + eps) continue;
     const taken = [...layout.doors, ...layout.windows]
       .filter((o) => o.wall === wall)
       .map((o) => {
-        const start = onWall(o, layout.roomDims, wall);
+        const start = onWall(o, room, wall);
         return [start, start + Math.min(o.width, len)] as const;
       });
-    const fits = (p: number) =>
+    const free = (p: number) =>
       p >= -eps &&
       p + width <= len + eps &&
       taken.every(([a, b]) => p + width + gap <= a + eps || p >= b + gap - eps);
-    // The preferred position first; otherwise the earliest free one along the wall.
-    const start = clamp(preferred.position, 0, Math.max(0, len - width));
-    if (fits(start)) return { wall, position: start };
-    const first = [0, ...taken.map(([, b]) => b + gap)].sort((x, y) => x - y).find(fits);
-    if (first !== undefined) return { wall, position: first };
+    const scan: number[] = [len - width, len - width - margin, margin];
+    for (let p = 0; p <= len - width + eps; p += step) scan.push(p);
+    for (const [, b] of taken) scan.push(b + gap);
+    const candidates = [
+      clamp(preferred.position, 0, Math.max(0, len - width)),
+      ...scan.map((p) => Math.round(p * 1e6) / 1e6).sort((x, y) => x - y),
+    ];
+    const seen = new Set<number>();
+    for (const position of candidates) {
+      if (seen.has(position) || !free(position)) continue;
+      seen.add(position);
+      const swept = swing
+        ? doorSwingGeometry(
+            { id: 0, width, position, wall, type: swing.type, hinge: swing.hinge },
+            room,
+          )?.box
+        : undefined;
+      spots.push({
+        wall,
+        position,
+        inMargin: position >= margin - eps && position + width <= len - margin + eps,
+        clear: !swept || !items.some((i) => checkItemsCollision(i, { ...swept, rotation: 0 })),
+      });
+    }
   }
-  return preferred;
+  const best =
+    spots.find((s) => s.inMargin && s.clear) ?? spots.find((s) => s.inMargin) ?? spots[0];
+  return best ? { wall: best.wall, position: best.position } : preferred;
 }
 
 // --- Door swing geometry (shared by the canvas and the export) -----------------

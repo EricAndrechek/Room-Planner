@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { Door, DoorType, Hinge, RoomDims, RoomWindow, Wall } from '../types';
+import type { Door, DoorType, FurnitureItem, Hinge, RoomDims, RoomWindow, Wall } from '../types';
 import { PIXELS_PER_UNIT as P } from './constants';
-import type { Point } from './geometry';
+import { checkItemsCollision, type Point } from './geometry';
+import { defaultLayout } from './layout';
 import { OPENING_GAP, doorSwingGeometry, doorStyles, findOpeningSpot } from './openings';
 
 const room: RoomDims = { width: 14, height: 10 };
@@ -181,7 +182,8 @@ describe('findOpeningSpot', () => {
 
   it('goes to the first free spot after the openings already on the wall', () => {
     expect(at([door('bottom', 2)])).toEqual({ wall: 'bottom', position: 5 + OPENING_GAP });
-    expect(at([door('bottom', 2), door('bottom', 5.5)])).toEqual({ wall: 'bottom', position: 9 });
+    // 9..12 is free but flush with the corner, so the next wall's default spot wins.
+    expect(at([door('bottom', 2), door('bottom', 5.5)])).toEqual({ wall: 'top', position: 2 });
     // A free stretch before the first opening counts too.
     expect(at([door('bottom', 1), door('bottom', 8)])).toEqual({
       wall: 'bottom',
@@ -230,7 +232,91 @@ describe('findOpeningSpot', () => {
     expect(at([], [], { width: 2, height: 2 })).toEqual({ wall: 'bottom', position: 2 });
   });
 
-  it('clamps the default onto a short wall before trying it', () => {
-    expect(at([], [], { width: 4, height: 4 })).toEqual({ wall: 'bottom', position: 1 });
+  it('keeps a corner margin, unless the corner is the only place left', () => {
+    // On a 4ft wall the default (2) is clamped to 1, flush with the far corner: 0.5 keeps both margins.
+    expect(at([], [], { width: 4, height: 4 })).toEqual({ wall: 'bottom', position: 0.5 });
+    expect(at([door('bottom', 0.5)]).position).not.toBe(0);
+    // A 3ft wall only fits a 3ft door corner to corner: that is still better than nothing.
+    expect(at([], [], { width: 3, height: 3 })).toEqual({ wall: 'bottom', position: 0 });
+    // Every wall has only a flush-with-the-corner gap left: use the first one.
+    const tight = (['top', 'right', 'bottom', 'left'] as Wall[]).map((w) => win(w, 0, 8.5));
+    expect(at([], tight)).toEqual({ wall: 'bottom', position: 9 });
+  });
+
+  describe('keeps a new door swing clear of furniture', () => {
+    const furniture = (patch: Partial<FurnitureItem>): FurnitureItem => ({
+      id: 'f',
+      label: 'Piece',
+      width: 2,
+      height: 2,
+      x: 0,
+      y: 0,
+      rotation: 0,
+      color: '#93c5fd',
+      ...patch,
+    });
+    const swing = { type: 'swing-in', hinge: 'left' } as const;
+    const place = (items: FurnitureItem[], doors: Door[] = []) =>
+      findOpeningSpot({ roomDims: room12, doors, windows: [], items }, 3, DOOR, { swing });
+
+    it('skips spots whose swing hits a piece, on the same wall first', () => {
+      // A chest in front of the default spot (2..5 along the bottom, 9..12 deep).
+      const chest = furniture({ x: 2, y: 10, width: 2, height: 1.5 });
+      expect(place([chest])).toEqual({ wall: 'bottom', position: 4 }); // flush is fine
+      // Rotated pieces use their rotated outline: a 4x0.5 bar turned 45deg, centered at
+      // (7.5, 10.5), reaches from x 5.9 to 9.1, so it blocks 4..7 but not the default 2..5...
+      const bar = furniture({ x: 5.5, y: 10.25, width: 4, height: 0.5, rotation: 45 });
+      expect(place([bar])).toEqual({ wall: 'bottom', position: 2 });
+      // ...and with the chest too, nothing on the bottom wall is clear: the top wall is next.
+      expect(place([bar, chest])).toEqual({ wall: 'top', position: 2 });
+    });
+
+    it('moves to another wall when the whole wall is blocked, and ignores hidden pieces', () => {
+      const bench = furniture({ x: 0, y: 10, width: 12, height: 2 });
+      expect(place([bench])).toEqual({ wall: 'top', position: 2 });
+      expect(place([{ ...bench, visible: false }])).toEqual({ wall: 'bottom', position: 2 });
+    });
+
+    it('falls back to the free-spot rule when every swing would hit furniture', () => {
+      const rug = furniture({ x: 0, y: 0, width: 12, height: 12 });
+      expect(place([rug])).toEqual({ wall: 'bottom', position: 2 });
+      expect(place([rug], [door('bottom', 2)])).toEqual({ wall: 'bottom', position: 5.5 });
+    });
+
+    it('ignores furniture for windows and swing-out doors that open outside', () => {
+      const rug = furniture({ x: 0, y: 0, width: 12, height: 12 });
+      const open = { roomDims: room12, doors: [], windows: [], items: [rug] };
+      expect(findOpeningSpot(open, 3, { wall: 'top', position: 2 })).toEqual({
+        wall: 'top',
+        position: 2,
+      });
+      const bench = furniture({ x: 0, y: 10, width: 12, height: 2 });
+      expect(
+        findOpeningSpot({ ...open, items: [bench] }, 3, DOOR, {
+          swing: { type: 'swing-out', hinge: 'left' },
+        }),
+      ).toEqual({ wall: 'bottom', position: 2 });
+    });
+  });
+});
+
+describe('adding doors to the starter room', () => {
+  it('puts each new door away from the corners with its swing clear of the furniture', () => {
+    let layout = defaultLayout();
+    // The defaults object doubles as `swing` (as in useOpenings): only its type/hinge may count.
+    const NEW = { width: 3, wall: 'bottom', position: 2, type: 'swing-in', hinge: 'left' } as const;
+    const swing = { type: NEW.type, hinge: NEW.hinge };
+    for (let n = 0; n < 3; n++) {
+      const spot = findOpeningSpot(layout, 3, NEW, { swing: NEW });
+      const door: Door = { id: n + 100, width: 3, ...spot, ...swing };
+      const len = 12; // the starter room is 12' x 12'
+      expect(spot.position).toBeGreaterThanOrEqual(0.5);
+      expect(spot.position + 3).toBeLessThanOrEqual(len - 0.5);
+      const box = doorSwingGeometry(door, layout.roomDims)!.box;
+      for (const item of layout.items) {
+        expect(checkItemsCollision(item, { ...box, rotation: 0 }), item.label).toBe(false);
+      }
+      layout = { ...layout, doors: [...layout.doors, door] };
+    }
   });
 });

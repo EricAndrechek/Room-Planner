@@ -23,7 +23,13 @@ export interface AddedOpening {
 }
 
 /** Defaults for a new opening; it goes to the next free spot from here. */
-const NEW_DOOR = { width: 3, wall: 'bottom' as Wall, position: 2 };
+const NEW_DOOR = {
+  width: 3,
+  wall: 'bottom' as Wall,
+  position: 2,
+  hinge: 'left',
+  type: 'swing-in',
+} as const;
 const NEW_WINDOW = { width: 3, wall: 'top' as Wall, position: 2 };
 
 /** Slide one door/window along its wall by `delta` feet, kept on the wall. */
@@ -83,13 +89,13 @@ export function useOpenings({
     }));
 
   const addDoor = () => {
-    const spot = findOpeningSpot(layout, NEW_DOOR.width, NEW_DOOR);
+    const spot = findOpeningSpot(layout, NEW_DOOR.width, NEW_DOOR, { swing: NEW_DOOR });
     const door: Door = {
       id: Date.now(),
       width: NEW_DOOR.width,
       ...spot,
-      hinge: 'left',
-      type: 'swing-in',
+      hinge: NEW_DOOR.hinge,
+      type: NEW_DOOR.type,
     };
     applyLayout((l) => ({ ...l, doors: [...l.doors, door] }));
     track('door_added', { count: layout.doors.length + 1 });
