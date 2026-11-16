@@ -48,3 +48,9 @@ export const formatTimeAgo = (date: Date | null, now: Date = new Date()): string
   if (hours < 24) return `${hours}h ago`;
   return date.toLocaleDateString();
 };
+
+/** Whether the OS asks for reduced motion (no smooth scrolling or fades). */
+export const prefersReducedMotion = (): boolean =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;

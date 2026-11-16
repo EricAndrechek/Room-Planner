@@ -5,8 +5,8 @@
  * the canvas's inline styles, so the components only render.
  */
 import type { CSSProperties } from 'react';
-import type { Door, RoomDims, RoomWindow, Wall } from '../types';
-import { PIXELS_PER_UNIT as P } from './constants';
+import type { Door, Layout, RoomDims, RoomWindow, Wall } from '../types';
+import { PIXELS_PER_UNIT as P, WALL_OPTIONS } from './constants';
 import { isHorizontalWall, wallLength, type Point } from './geometry';
 import { clamp } from './units';
 
@@ -38,6 +38,49 @@ export interface WindowStyles extends OpeningStyles {
 /** Position along the wall, kept on the wall even if the room shrank since. */
 export const onWall = (o: { position: number; width: number }, room: RoomDims, wall: Wall) =>
   clamp(o.position, 0, Math.max(0, wallLength(room, wall) - o.width));
+
+// --- Placing a new opening ------------------------------------------------------
+
+/** Clear space (feet) kept between a new door/window and the openings next to it. */
+export const OPENING_GAP = 0.5;
+
+/**
+ * Where a new door/window of `width` goes: on `preferred.wall`, at
+ * `preferred.position` if that is free, else at the first free spot along it
+ * (just after an existing opening). If that wall is full, the other walls are
+ * tried in `WALL_OPTIONS` order (top, right, bottom, left) the same way. Doors
+ * and windows are both obstacles, `gap` feet apart. If nothing fits anywhere,
+ * the preferred spot is returned unchanged.
+ */
+export function findOpeningSpot(
+  layout: Pick<Layout, 'roomDims' | 'doors' | 'windows'>,
+  width: number,
+  preferred: { wall: Wall; position: number },
+  gap = OPENING_GAP,
+): { wall: Wall; position: number } {
+  const eps = 1e-9;
+  const walls = [preferred.wall, ...WALL_OPTIONS.filter((w) => w !== preferred.wall)];
+  for (const wall of walls) {
+    const len = wallLength(layout.roomDims, wall);
+    if (width > len + eps) continue;
+    const taken = [...layout.doors, ...layout.windows]
+      .filter((o) => o.wall === wall)
+      .map((o) => {
+        const start = onWall(o, layout.roomDims, wall);
+        return [start, start + Math.min(o.width, len)] as const;
+      });
+    const fits = (p: number) =>
+      p >= -eps &&
+      p + width <= len + eps &&
+      taken.every(([a, b]) => p + width + gap <= a + eps || p >= b + gap - eps);
+    // The preferred position first; otherwise the earliest free one along the wall.
+    const start = clamp(preferred.position, 0, Math.max(0, len - width));
+    if (fits(start)) return { wall, position: start };
+    const first = [0, ...taken.map(([, b]) => b + gap)].sort((x, y) => x - y).find(fits);
+    if (first !== undefined) return { wall, position: first };
+  }
+  return preferred;
+}
 
 // --- Door swing geometry (shared by the canvas and the export) -----------------
 

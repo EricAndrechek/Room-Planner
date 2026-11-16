@@ -1,13 +1,30 @@
-import type { PointerEvent as ReactPointerEvent, RefObject } from 'react';
+import {
+  useState,
+  type Dispatch,
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
+  type SetStateAction,
+} from 'react';
 import { track } from '../lib/analytics';
 import { PIXELS_PER_UNIT } from '../lib/constants';
 import { constrainOpening, isHorizontalWall, wallLength } from '../lib/geometry';
+import { findOpeningSpot } from '../lib/openings';
 import { clamp } from '../lib/units';
-import type { Door, Id, Layout, RoomDims, RoomWindow, Selection } from '../types';
+import type { Door, Id, Layout, RoomDims, RoomWindow, Selection, Wall } from '../types';
 import type { History } from './useHistory';
 import type { usePointerDrag } from './usePointerDrag';
 
 type OpeningKind = 'doors' | 'windows';
+
+/** The door/window added last, for the sidebar to scroll to and highlight. */
+export interface AddedOpening {
+  type: 'door' | 'window';
+  id: Id;
+}
+
+/** Defaults for a new opening; it goes to the next free spot from here. */
+const NEW_DOOR = { width: 3, wall: 'bottom' as Wall, position: 2 };
+const NEW_WINDOW = { width: 3, wall: 'top' as Wall, position: 2 };
 
 /** Slide one door/window along its wall by `delta` feet, kept on the wall. */
 const slideOpening = (l: Layout, kind: OpeningKind, id: Id, dx: number, dy: number): Layout => ({
@@ -23,23 +40,41 @@ const slideOpening = (l: Layout, kind: OpeningKind, id: Id, dx: number, dy: numb
 interface Options {
   history: History<Layout>;
   selection: Selection | null;
-  setSelection: (selection: Selection | null) => void;
+  setSelection: Dispatch<SetStateAction<Selection | null>>;
+  /** Speak a message in the live region. */
+  announce: (text: string) => void;
   /** Doors/windows are only movable in room setup. */
   isRoomSetup: boolean;
   startDrag: ReturnType<typeof usePointerDrag>;
   zoomRef: RefObject<number>;
 }
 
-/** Room size, and adding, editing, removing and sliding doors and windows. */
+/**
+ * Room size, and adding, editing, removing and sliding doors and windows. A new
+ * opening goes to the next free spot on the walls, is selected and announced,
+ * and `lastAdded` tells the sidebar which card to bring into view.
+ */
 export function useOpenings({
   history,
   selection,
   setSelection,
+  announce,
   isRoomSetup,
   startDrag,
   zoomRef,
 }: Options) {
   const { present: layout, set: setLayout, apply: applyLayout, commit } = history;
+  const [lastAdded, setLastAdded] = useState<AddedOpening | null>(null);
+
+  /** Select a new opening, point the sidebar at it and say where it went. */
+  const added = (type: 'door' | 'window', id: Id, number: number, wall: Wall) => {
+    setSelection({ id, type });
+    setLastAdded({ type, id });
+    announce(`${type === 'door' ? 'Door' : 'Window'} ${number} added on the ${wall} wall`);
+  };
+  /** Forget the selection if it points at this (removed) opening. */
+  const deselect = (type: 'door' | 'window', id: Id) =>
+    setSelection((s) => (s?.type === type && s.id === id ? null : s));
 
   const updateRoomDims = (dims: RoomDims) =>
     applyLayout((l) => ({
@@ -48,29 +83,35 @@ export function useOpenings({
     }));
 
   const addDoor = () => {
+    const spot = findOpeningSpot(layout, NEW_DOOR.width, NEW_DOOR);
     const door: Door = {
       id: Date.now(),
-      width: 3,
-      position: 2,
-      wall: 'bottom',
+      width: NEW_DOOR.width,
+      ...spot,
       hinge: 'left',
       type: 'swing-in',
     };
     applyLayout((l) => ({ ...l, doors: [...l.doors, door] }));
     track('door_added', { count: layout.doors.length + 1 });
+    added('door', door.id, layout.doors.length + 1, spot.wall);
   };
   const updateDoor = (id: Id, updates: Partial<Door>) =>
     applyLayout((l) => ({
       ...l,
       doors: l.doors.map((d) => (d.id === id ? constrainOpening(d, updates, l.roomDims, 1) : d)),
     }));
-  const deleteDoor = (id: Id) =>
+  const deleteDoor = (id: Id) => {
     applyLayout((l) => ({ ...l, doors: l.doors.filter((d) => d.id !== id) }));
+    deselect('door', id);
+    track('door_removed', { count: layout.doors.filter((d) => d.id !== id).length });
+  };
 
   const addWindow = () => {
-    const win: RoomWindow = { id: Date.now(), width: 3, position: 2, wall: 'top' };
+    const spot = findOpeningSpot(layout, NEW_WINDOW.width, NEW_WINDOW);
+    const win: RoomWindow = { id: Date.now(), width: NEW_WINDOW.width, ...spot };
     applyLayout((l) => ({ ...l, windows: [...l.windows, win] }));
     track('window_added', { count: layout.windows.length + 1 });
+    added('window', win.id, layout.windows.length + 1, spot.wall);
   };
   const updateWindow = (id: Id, updates: Partial<RoomWindow>) =>
     applyLayout((l) => ({
@@ -79,8 +120,11 @@ export function useOpenings({
         w.id === id ? constrainOpening(w, updates, l.roomDims, 0.5) : w,
       ),
     }));
-  const deleteWindow = (id: Id) =>
+  const deleteWindow = (id: Id) => {
     applyLayout((l) => ({ ...l, windows: l.windows.filter((w) => w.id !== id) }));
+    deselect('window', id);
+    track('window_removed', { count: layout.windows.filter((w) => w.id !== id).length });
+  };
 
   /** Drag a door/window handle along its wall (room setup only). */
   const startOpeningDrag = (e: ReactPointerEvent<HTMLDivElement>, id: Id, kind: OpeningKind) => {
@@ -111,6 +155,7 @@ export function useOpenings({
   };
 
   return {
+    lastAdded,
     updateRoomDims,
     addDoor,
     updateDoor,

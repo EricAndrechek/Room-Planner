@@ -145,6 +145,7 @@ export function Planner({ storage, initial }: PlannerProps) {
     history,
     selection,
     setSelection,
+    announce: live.announce,
     isRoomSetup,
     startDrag,
     zoomRef,
@@ -280,6 +281,7 @@ export function Planner({ storage, initial }: PlannerProps) {
             onAddWindow={openings.addWindow}
             onUpdateWindow={openings.updateWindow}
             onDeleteWindow={openings.deleteWindow}
+            highlight={openings.lastAdded}
           />
           <FurniturePanel
             isActiveMode={!isRoomSetup}

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { Door, DoorType, Hinge, RoomDims, Wall } from '../types';
+import type { Door, DoorType, Hinge, RoomDims, RoomWindow, Wall } from '../types';
 import { PIXELS_PER_UNIT as P } from './constants';
 import type { Point } from './geometry';
-import { doorSwingGeometry, doorStyles } from './openings';
+import { OPENING_GAP, doorSwingGeometry, doorStyles, findOpeningSpot } from './openings';
 
 const room: RoomDims = { width: 14, height: 10 };
 const WIDTH = 3;
@@ -152,5 +152,85 @@ describe('doorStyles (canvas) draws from the shared geometry', () => {
     expect(s.sliding).toBe(true);
     expect(s.arcPath).toBe('');
     expect(s.track).toMatchObject({ left: 2 * P, width: 3 * P });
+  });
+});
+
+describe('findOpeningSpot', () => {
+  const door = (wall: Wall, position: number, width = 3): Door => ({
+    id: `${wall}${position}`,
+    width,
+    position,
+    wall,
+    hinge: 'left',
+    type: 'swing-in',
+  });
+  const win = (wall: Wall, position: number, width = 3): RoomWindow => ({
+    id: `w${wall}${position}`,
+    width,
+    position,
+    wall,
+  });
+  const room12 = { width: 12, height: 12 };
+  const DOOR = { wall: 'bottom', position: 2 } as const;
+  const at = (doors: Door[], windows: RoomWindow[] = [], roomDims = room12, width = 3) =>
+    findOpeningSpot({ roomDims, doors, windows }, width, DOOR);
+
+  it('uses the default spot on an empty wall', () => {
+    expect(at([])).toEqual({ wall: 'bottom', position: 2 });
+  });
+
+  it('goes to the first free spot after the openings already on the wall', () => {
+    expect(at([door('bottom', 2)])).toEqual({ wall: 'bottom', position: 5 + OPENING_GAP });
+    expect(at([door('bottom', 2), door('bottom', 5.5)])).toEqual({ wall: 'bottom', position: 9 });
+    // A free stretch before the first opening counts too.
+    expect(at([door('bottom', 1), door('bottom', 8)])).toEqual({
+      wall: 'bottom',
+      position: 4 + OPENING_GAP,
+    });
+    // The default spot is kept when it is clear (the starter door sits at 6..9).
+    expect(at([door('bottom', 6)])).toEqual({ wall: 'bottom', position: 2 });
+  });
+
+  it('keeps at least the gap between neighbours', () => {
+    // 2..5 and 9..12 taken: 5.5..8.5 leaves exactly the gap on both sides.
+    expect(at([door('bottom', 2), door('bottom', 9)])).toEqual({ wall: 'bottom', position: 5.5 });
+    // With 8.9..11.9 taken, 5.5..8.5 would come within 0.4ft: no room on the bottom wall.
+    expect(at([door('bottom', 2), door('bottom', 8.9)]).wall).toBe('top');
+  });
+
+  it('moves on to the next wall (top, right, bottom, left order) when the wall is full', () => {
+    const fullBottom = [
+      door('bottom', 0),
+      door('bottom', 3.5),
+      door('bottom', 7),
+      door('bottom', 10.5, 1.5),
+    ];
+    expect(at(fullBottom)).toEqual({ wall: 'top', position: 2 });
+    expect(at([...fullBottom], [win('top', 0, 12)])).toEqual({ wall: 'right', position: 2 });
+  });
+
+  it('treats doors and windows alike as obstacles', () => {
+    expect(at([], [win('bottom', 1, 4)])).toEqual({ wall: 'bottom', position: 5 + OPENING_GAP });
+    expect(
+      findOpeningSpot({ roomDims: room12, doors: [door('top', 2)], windows: [] }, 3, {
+        wall: 'top',
+        position: 2,
+      }),
+    ).toEqual({ wall: 'top', position: 5.5 });
+  });
+
+  it('falls back to the default when every wall is full', () => {
+    const full = (['top', 'right', 'bottom', 'left'] as Wall[]).map((w) => win(w, 0, 12));
+    expect(at([], full)).toEqual({ wall: 'bottom', position: 2 });
+  });
+
+  it('skips walls shorter than the opening, and falls back when the room is too small', () => {
+    // 2ft wide room: top/bottom are too short for a 3ft door, left/right are 10ft long.
+    expect(at([], [], { width: 2, height: 10 })).toEqual({ wall: 'right', position: 2 });
+    expect(at([], [], { width: 2, height: 2 })).toEqual({ wall: 'bottom', position: 2 });
+  });
+
+  it('clamps the default onto a short wall before trying it', () => {
+    expect(at([], [], { width: 4, height: 4 })).toEqual({ wall: 'bottom', position: 1 });
   });
 });
