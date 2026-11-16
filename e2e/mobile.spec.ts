@@ -165,3 +165,34 @@ test('the Snap toggle floats on the plan, clear of the mode badge', async ({ pag
   expect(t.height).toBeGreaterThanOrEqual(44);
   expect(t.x + t.width).toBeLessThanOrEqual(page.viewportSize()!.width);
 });
+
+for (const size of [
+  { width: 360, height: 780 },
+  { width: 390, height: 844 },
+  { width: 430, height: 932 },
+  { width: 667, height: 375 }, // landscape phone (still the narrow layout)
+]) {
+  for (const mode of ['room-setup', 'furniture'] as const) {
+    test(`bottom controls and mode badge fit at ${size.width}x${size.height} (${mode})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(size);
+      await page.addInitScript((m) => localStorage.setItem('room-sim-v3-mode', m), mode);
+      await page.goto('/');
+      await ready(page);
+      await animationsSettled(page);
+      const pill = (await page.getByTestId('zoom-pill').boundingBox())!;
+      const edit = (await page.getByTestId('mobile-edit-button').boundingBox())!;
+      // Side by side, never overlapping, both fully on screen.
+      expect(pill.x + pill.width, 'zoom pill overlaps the edit button').toBeLessThanOrEqual(edit.x);
+      expect(pill.x).toBeGreaterThanOrEqual(0);
+      expect(edit.x + edit.width).toBeLessThanOrEqual(size.width);
+      // The mode badge is one line (about 33px tall; two lines would be ~50).
+      const badge = page.getByText(/Drag (to move|handles)/).first();
+      const b = (await badge.locator('xpath=ancestor-or-self::div[1]').boundingBox())!;
+      expect(b.height, 'mode badge wraps').toBeLessThan(40);
+      expect(b.x).toBeGreaterThanOrEqual(0);
+      expect(b.x + b.width).toBeLessThanOrEqual(size.width);
+    });
+  }
+}

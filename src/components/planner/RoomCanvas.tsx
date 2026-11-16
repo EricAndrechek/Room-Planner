@@ -89,7 +89,9 @@ export function RoomCanvas({
       </p>
       {showModeBadge && (
         <div
-          className={`absolute top-4 left-1/2 -translate-x-1/2 px-3 sm:px-4 py-2 rounded-full shadow-lg text-[11px] sm:text-xs z-20 pointer-events-none animate-fade-in backdrop-blur-xs ${
+          // One line on any phone: no wrapping (an absolute box at left: 50% would otherwise shrink
+          // to half the width), truncated with an ellipsis if it still does not fit.
+          className={`absolute top-4 left-1/2 -translate-x-1/2 max-w-[calc(100%-1.5rem)] truncate whitespace-nowrap px-3 sm:px-4 py-2 rounded-full shadow-lg text-[11px] sm:text-xs z-20 pointer-events-none animate-fade-in backdrop-blur-xs ${
             isRoomSetup ? 'bg-indigo-600/90 text-white' : 'bg-emerald-700/90 text-white'
           }`}
         >

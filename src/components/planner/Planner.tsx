@@ -346,42 +346,46 @@ export function Planner({ storage, initial }: PlannerProps) {
           </Sidebar>
           <div ref={setPopoverRoot} className="contents" data-popover-root />
 
-          {/* Mobile: floating button to open the editor */}
+          {/* Phones: one bottom bar (zoom pill left, editor button right) laid out together, so
+              the two can never overlap however narrow the screen. */}
           {isMobile && !mobileSidebarOpen && (
-            <button
-              type="button"
-              onClick={() => {
-                setMobileSidebarOpen(true);
-                setSelection(null);
-              }}
-              className={`fixed bottom-6 right-6 z-40 text-white rounded-full pl-4 pr-5 py-3 shadow-lg flex items-center gap-2 transition-all active:scale-95 animate-fade-in ${
-                isRoomSetup
-                  ? 'bg-indigo-600 hover:bg-indigo-700'
-                  : 'bg-emerald-700 hover:bg-emerald-800'
-              }`}
-              aria-label={isRoomSetup ? 'Edit room settings' : 'Edit furniture'}
+            <div
+              className="fixed inset-x-0 bottom-0 z-40 flex items-end justify-between gap-2 px-3 pointer-events-none md:hidden"
+              style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
+              data-testid="mobile-bottom-bar"
             >
-              {isRoomSetup ? (
-                <>
-                  <Home className="w-5 h-5" />
-                  <span className="text-sm font-medium">Edit Room</span>
-                </>
-              ) : (
-                <>
-                  <Sofa className="w-5 h-5" />
-                  <span className="text-sm font-medium">Edit Furniture</span>
-                </>
-              )}
-            </button>
-          )}
-
-          {!sidebarOpen && (
-            <FloatingZoomControls
-              zoom={zoom}
-              onZoomIn={zoomIn}
-              onZoomOut={zoomOut}
-              onFit={fitToView}
-            />
+              <FloatingZoomControls
+                zoom={zoom}
+                onZoomIn={zoomIn}
+                onZoomOut={zoomOut}
+                onFit={fitToView}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileSidebarOpen(true);
+                  setSelection(null);
+                }}
+                className={`pointer-events-auto shrink-0 text-white rounded-full px-4 py-3 shadow-lg flex items-center gap-2 transition-all active:scale-95 animate-fade-in ${
+                  isRoomSetup
+                    ? 'bg-indigo-600 hover:bg-indigo-700'
+                    : 'bg-emerald-700 hover:bg-emerald-800'
+                }`}
+                aria-label={isRoomSetup ? 'Edit room settings' : 'Edit furniture'}
+                data-testid="mobile-edit-button"
+              >
+                {isRoomSetup ? (
+                  <Home className="w-5 h-5" aria-hidden="true" />
+                ) : (
+                  <Sofa className="w-5 h-5" aria-hidden="true" />
+                )}
+                {/* Narrow phones: just "Edit" (the icon and color say which); wider: "Edit Room". */}
+                <span className="text-sm font-medium whitespace-nowrap">
+                  Edit
+                  <span className="max-[419px]:hidden">{isRoomSetup ? ' Room' : ' Furniture'}</span>
+                </span>
+              </button>
+            </div>
           )}
 
           <RoomCanvas
