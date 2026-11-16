@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { INITIAL_DOORS, INITIAL_ROOM } from './constants';
 import { checkItemsCollision, computeItemWarnings, isItemInBounds } from './geometry';
 import { defaultLayout } from './layout';
+import { doorSwingGeometry } from './openings';
 import { createMemoryStorage, loadPersistedState } from './storage';
 
 describe('default (first-visit) layout', () => {
@@ -20,17 +21,10 @@ describe('default (first-visit) layout', () => {
 
   it('leaves each door swing area clear', () => {
     for (const door of INITIAL_DOORS) {
-      const r = door.width;
-      const box =
-        door.wall === 'bottom'
-          ? { x: door.position, y: INITIAL_ROOM.height - r, width: r, height: r }
-          : door.wall === 'top'
-            ? { x: door.position, y: 0, width: r, height: r }
-            : door.wall === 'left'
-              ? { x: 0, y: door.position, width: r, height: r }
-              : { x: INITIAL_ROOM.width - r, y: door.position, width: r, height: r };
+      const swing = doorSwingGeometry(door, INITIAL_ROOM);
+      if (!swing) continue;
       for (const item of layout.items) {
-        expect(checkItemsCollision(item, { ...box, rotation: 0 }), item.label).toBe(false);
+        expect(checkItemsCollision(item, { ...swing.box, rotation: 0 }), item.label).toBe(false);
       }
     }
   });

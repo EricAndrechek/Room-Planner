@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { animationsSettled } from './ui';
 
 // Touch-emulated smoke for the narrow layout. Runs only in the mobile projects.
 test.beforeEach(({ isMobile }) => {
@@ -97,4 +98,30 @@ test('no horizontal page scroll on the narrow layout', async ({ page }) => {
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
   expect(overflow).toBeLessThanOrEqual(1);
+});
+
+test('the offline toast never covers the bottom controls: Edit Room works right away', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.waitForSelector('html[data-planner-ready]');
+  // The one-time "Ready to work offline" toast shows once the service worker has installed.
+  const toast = page.getByTestId('pwa-toast');
+  await expect(toast).toBeVisible({ timeout: 15_000 });
+  await animationsSettled(page);
+  const t = (await toast.boundingBox())!;
+  const controls = page
+    .getByRole('button', { name: /^(Edit room settings|Zoom out|Zoom in|Fit to view)$/ })
+    .filter({ visible: true });
+  expect(await controls.count()).toBeGreaterThanOrEqual(4);
+  for (const control of await controls.all()) {
+    const b = (await control.boundingBox())!;
+    const overlaps =
+      t.x < b.x + b.width && b.x < t.x + t.width && t.y < b.y + b.height && b.y < t.y + t.height;
+    expect(overlaps, `${await control.getAttribute('aria-label')} is covered`).toBe(false);
+  }
+  // Tappable now, while the toast is still up (a covered button would time out here).
+  await expect(toast).toBeVisible();
+  await page.getByRole('button', { name: 'Edit room settings' }).tap({ timeout: 1000 });
+  await expect(page.getByRole('button', { name: 'View floor plan' })).toBeVisible();
 });

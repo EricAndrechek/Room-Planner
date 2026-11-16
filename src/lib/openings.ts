@@ -1,18 +1,19 @@
 /**
- * Pixel geometry for drawing doors and windows on the canvas. Pure functions
- * returning inline styles, so the components only render.
+ * Door and window geometry. `doorSwingGeometry` is the single source of truth
+ * for where a swing door's leaf and arc go; the canvas (below) and the export
+ * (export/scene.ts) both draw from it. The rest are pure functions returning
+ * the canvas's inline styles, so the components only render.
  */
 import type { CSSProperties } from 'react';
-import type { Door, RoomDims, RoomWindow, Wall } from '../types';
-import { PIXELS_PER_UNIT as P } from './constants';
-import { isHorizontalWall, wallLength } from './geometry';
+import type { Door, Layout, RoomDims, RoomWindow, Wall } from '../types';
+import { PIXELS_PER_UNIT as P, WALL_OPTIONS } from './constants';
+import { checkItemsCollision, isHorizontalWall, wallLength, type Point } from './geometry';
 import { clamp } from './units';
 
 const WALL_THICKNESS = 4;
 const JAMB_LENGTH = 12;
 const JAMB_WIDTH = 2;
 const JAMB_COLOR = '#334155';
-const DASH = '2px dashed #94a3b8';
 
 export interface OpeningStyles {
   gap: CSSProperties;
@@ -23,7 +24,9 @@ export interface OpeningStyles {
 
 export interface DoorStyles extends OpeningStyles {
   sliding: boolean;
+  /** Box of the swing arc's <svg>; `arcPath` is drawn in its local pixel coordinates. */
   arc: CSSProperties;
+  arcPath: string;
   panel: CSSProperties;
   track: CSSProperties;
 }
@@ -33,8 +36,189 @@ export interface WindowStyles extends OpeningStyles {
 }
 
 /** Position along the wall, kept on the wall even if the room shrank since. */
-const onWall = (o: { position: number; width: number }, room: RoomDims, wall: Wall) =>
-  clamp(o.position, 0, wallLength(room, wall) - o.width);
+export const onWall = (o: { position: number; width: number }, room: RoomDims, wall: Wall) =>
+  clamp(o.position, 0, Math.max(0, wallLength(room, wall) - o.width));
+
+// --- Placing a new opening ------------------------------------------------------
+
+/** Clear space (feet) kept between a new door/window and the openings next to it. */
+export const OPENING_GAP = 0.5;
+/** Distance (feet) a new opening keeps from the wall's ends (the room's corners), when it can. */
+export const CORNER_MARGIN = 0.5;
+/** Spacing (feet) of the positions tried along each wall. */
+export const PLACEMENT_STEP = 0.5;
+
+export interface OpeningSpotOptions {
+  /** For a door: its type and hinge, so its swing can be kept clear of furniture. */
+  swing?: Pick<Door, 'type' | 'hinge'>;
+  gap?: number;
+  margin?: number;
+  step?: number;
+}
+
+/**
+ * Where a new door/window of `width` goes. Walls are tried in order:
+ * `preferred.wall` first, then the rest in `WALL_OPTIONS` order (top, right,
+ * bottom, left); along a wall, `preferred.position` first, then from the start
+ * of the wall in `step` increments (plus the spots just past each opening).
+ * A spot must not overlap another door or window (`gap` feet apart). Of those,
+ * the first spot that also keeps `margin` from the corners and, for a door,
+ * whose swing misses every visible furniture piece wins; failing that, the
+ * first that keeps the corner margin; then any free spot. If nothing fits
+ * anywhere, the preferred spot is returned unchanged.
+ */
+export function findOpeningSpot(
+  layout: Pick<Layout, 'roomDims' | 'doors' | 'windows'> & Partial<Pick<Layout, 'items'>>,
+  width: number,
+  preferred: { wall: Wall; position: number },
+  {
+    swing,
+    gap = OPENING_GAP,
+    margin = CORNER_MARGIN,
+    step = PLACEMENT_STEP,
+  }: OpeningSpotOptions = {},
+): { wall: Wall; position: number } {
+  const eps = 1e-9;
+  const room = layout.roomDims;
+  const items = (layout.items ?? []).filter((i) => i.visible !== false);
+  const walls = [preferred.wall, ...WALL_OPTIONS.filter((w) => w !== preferred.wall)];
+
+  // Every free spot, in preference order, with what it is good for.
+  const spots: { wall: Wall; position: number; inMargin: boolean; clear: boolean }[] = [];
+  for (const wall of walls) {
+    const len = wallLength(room, wall);
+    if (width > len + eps) continue;
+    const taken = [...layout.doors, ...layout.windows]
+      .filter((o) => o.wall === wall)
+      .map((o) => {
+        const start = onWall(o, room, wall);
+        return [start, start + Math.min(o.width, len)] as const;
+      });
+    const free = (p: number) =>
+      p >= -eps &&
+      p + width <= len + eps &&
+      taken.every(([a, b]) => p + width + gap <= a + eps || p >= b + gap - eps);
+    const scan: number[] = [len - width, len - width - margin, margin];
+    for (let p = 0; p <= len - width + eps; p += step) scan.push(p);
+    for (const [, b] of taken) scan.push(b + gap);
+    const candidates = [
+      clamp(preferred.position, 0, Math.max(0, len - width)),
+      ...scan.map((p) => Math.round(p * 1e6) / 1e6).sort((x, y) => x - y),
+    ];
+    const seen = new Set<number>();
+    for (const position of candidates) {
+      if (seen.has(position) || !free(position)) continue;
+      seen.add(position);
+      const swept = swing
+        ? doorSwingGeometry(
+            { id: 0, width, position, wall, type: swing.type, hinge: swing.hinge },
+            room,
+          )?.box
+        : undefined;
+      spots.push({
+        wall,
+        position,
+        inMargin: position >= margin - eps && position + width <= len - margin + eps,
+        clear: !swept || !items.some((i) => checkItemsCollision(i, { ...swept, rotation: 0 })),
+      });
+    }
+  }
+  const best =
+    spots.find((s) => s.inMargin && s.clear) ?? spots.find((s) => s.inMargin) ?? spots[0];
+  return best ? { wall: best.wall, position: best.position } : preferred;
+}
+
+// --- Door swing geometry (shared by the canvas and the export) -----------------
+
+/**
+ * A wall's frame in room feet: `origin` is the wall's start (left end of
+ * top/bottom, top end of left/right, where `position` is measured from),
+ * `along` runs along the wall, `inward` points from the wall into the room.
+ */
+const WALL_FRAMES: Record<
+  Wall,
+  (room: RoomDims) => { origin: Point; along: Point; inward: Point }
+> = {
+  top: () => ({ origin: { x: 0, y: 0 }, along: { x: 1, y: 0 }, inward: { x: 0, y: 1 } }),
+  bottom: (r) => ({
+    origin: { x: 0, y: r.height },
+    along: { x: 1, y: 0 },
+    inward: { x: 0, y: -1 },
+  }),
+  left: () => ({ origin: { x: 0, y: 0 }, along: { x: 0, y: 1 }, inward: { x: 1, y: 0 } }),
+  right: (r) => ({ origin: { x: r.width, y: 0 }, along: { x: 0, y: 1 }, inward: { x: -1, y: 0 } }),
+};
+
+export interface DoorSwing {
+  wall: Wall;
+  /** Swing-in doors open into the room, swing-out doors away from it. */
+  side: 'inside' | 'outside';
+  /** Leaf length = arc radius: the door width (capped to the wall). */
+  radius: number;
+  /** Pivot of the leaf: the `hinge` end of the opening (left = wall start, right = wall end). */
+  hinge: Point;
+  /** Where the closed leaf ends: the strike end of the opening. The arc starts here. */
+  closedEnd: Point;
+  /** Tip of the leaf opened 90 degrees, perpendicular to the wall. The arc ends here. */
+  openEnd: Point;
+  /**
+   * SVG `sweep-flag` for the arc from `closedEnd` to `openEnd` around `hinge`
+   * (1 = clockwise on screen, y down).
+   */
+  sweep: 0 | 1;
+  /** Unit vector from the wall towards the side the door swings to. */
+  normal: Point;
+  /** Axis-aligned square the leaf sweeps through (for clearance checks and bounds). */
+  box: { x: number; y: number; width: number; height: number };
+}
+
+/**
+ * Geometry of a swing door's leaf and arc, in room feet (interior top-left is
+ * 0,0). `faceOffset` is the wall thickness in feet: swing-out doors hinge on
+ * the exterior face, `faceOffset` outside the interior one (the canvas draws
+ * walls as a line and passes 0). Sliding doors have no swing: `null`.
+ */
+export function doorSwingGeometry(door: Door, room: RoomDims, faceOffset = 0): DoorSwing | null {
+  const type = door.type || 'swing-in';
+  if (type === 'sliding') return null;
+  const wall = door.wall || 'bottom';
+  const radius = Math.min(door.width, wallLength(room, wall));
+  const position = onWall({ position: door.position, width: radius }, room, wall);
+  const inside = type !== 'swing-out';
+  const face = inside ? 0 : -faceOffset; // distance from the interior face, into the room
+  const out = inside ? 1 : -1; // towards the swing side
+  const hingeRight = door.hinge === 'right';
+  const hingeAt = hingeRight ? position + radius : position;
+  const toStrike = hingeRight ? -1 : 1;
+
+  const { origin, along, inward } = WALL_FRAMES[wall](room);
+  // `+ 0` turns -0 into 0 so results compare cleanly.
+  const at = (a: number, d: number): Point => ({
+    x: origin.x + along.x * a + inward.x * d + 0,
+    y: origin.y + along.y * a + inward.y * d + 0,
+  });
+  const hinge = at(hingeAt, face);
+  const closedEnd = at(hingeAt + toStrike * radius, face);
+  const openEnd = at(hingeAt, face + out * radius);
+  const cross =
+    (closedEnd.x - hinge.x) * (openEnd.y - hinge.y) -
+    (closedEnd.y - hinge.y) * (openEnd.x - hinge.x);
+  const xs = [hinge.x, closedEnd.x, openEnd.x];
+  const ys = [hinge.y, closedEnd.y, openEnd.y];
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  return {
+    wall,
+    side: inside ? 'inside' : 'outside',
+    radius,
+    hinge,
+    closedEnd,
+    openEnd,
+    sweep: cross > 0 ? 1 : 0,
+    normal: { x: inward.x * out + 0, y: inward.y * out + 0 },
+    box: { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y },
+  };
+}
 
 /** White wall gap where the opening is. */
 const gapStyle = (wall: Wall, pos: number, widthPx: number, room: RoomDims): CSSProperties => {
@@ -128,144 +312,78 @@ const handleStyle = (
   }
 };
 
+/** Canvas swing arc stroke (the export uses its own palette in export/scene.ts). */
+export const SWING_ARC_STROKE = { stroke: '#94a3b8', strokeWidth: 2, strokeDasharray: '4 3' };
+const LEAF_THICKNESS = 4;
+
 export const doorStyles = (door: Door, room: RoomDims): DoorStyles => {
   const wall = door.wall || 'bottom';
   const pos = onWall(door, room, wall);
   const widthPx = door.width * P;
-  const r = door.width * P; // swing radius
-  const isLeft = door.hinge === 'left';
-  const type = door.type || 'swing-in';
-  const swingIn = type === 'swing-in';
-  const sliding = type === 'sliding';
+  const sliding = (door.type || 'swing-in') === 'sliding';
   const [jamb1, jamb2] = jambStyles(wall, pos, widthPx, room);
 
   let arc: CSSProperties = {};
+  let arcPath = '';
   let panel: CSSProperties = {};
   let track: CSSProperties = {};
-  const arcBase = {
-    position: 'absolute',
-    width: r,
-    height: r,
-    border: DASH,
-    opacity: 0.5,
-    pointerEvents: 'none',
-  } as const;
-  const panelBase = {
-    position: 'absolute',
-    backgroundColor: '#cbd5e1',
-    border: '1px solid #64748b',
-  } as const;
-  const trackBase = {
-    position: 'absolute',
-    backgroundColor: '#94a3b8',
-    borderRadius: 2,
-    opacity: 0.6,
-  } as const;
-  const startX = isLeft ? pos * P : (pos + door.width) * P - r;
-  const panelX = isLeft ? pos * P : (pos + door.width) * P - 4;
-
-  switch (wall) {
-    case 'bottom': {
-      const top = swingIn ? (room.height - door.width) * P : room.height * P;
-      arc = {
-        ...arcBase,
-        borderRadius: !isLeft
-          ? swingIn
-            ? '100% 0 0 0'
-            : '0 0 0 100%'
-          : swingIn
-            ? '0 100% 0 0'
-            : '0 0 100% 0',
-        borderBottom: swingIn ? DASH : 'none',
-        borderTop: !swingIn ? DASH : 'none',
-        borderLeft: !isLeft ? DASH : 'none',
-        borderRight: isLeft ? DASH : 'none',
-        left: startX,
-        top,
-      };
-      panel = { ...panelBase, width: 4, height: r, top, left: panelX };
-      track = { ...trackBase, left: pos * P, top: room.height * P - 8, width: widthPx, height: 6 };
-      break;
-    }
-    case 'top': {
-      const top = swingIn ? 0 : -r;
-      arc = {
-        ...arcBase,
-        borderRadius: isLeft
-          ? swingIn
-            ? '0 0 100% 0'
-            : '0 0 0 100%'
-          : swingIn
-            ? '0 0 0 100%'
-            : '0 0 100% 0',
-        borderTop: !swingIn ? DASH : 'none',
-        borderBottom: swingIn ? DASH : 'none',
-        borderLeft: isLeft ? DASH : 'none',
-        borderRight: !isLeft ? DASH : 'none',
-        left: startX,
-        top,
-      };
-      panel = { ...panelBase, width: 4, height: r, top, left: panelX };
-      track = { ...trackBase, left: pos * P, top: 2, width: widthPx, height: 6 };
-      break;
-    }
-    case 'left': {
-      const left = swingIn ? 0 : -r;
-      const arcTop = isLeft ? pos * P : (pos + door.width) * P - r;
-      arc = {
-        ...arcBase,
-        borderRadius: isLeft
-          ? swingIn
-            ? '0 100% 0 0'
-            : '0 0 0 100%'
-          : swingIn
-            ? '0 0 100% 0'
-            : '100% 0 0 0',
-        borderLeft: !swingIn ? DASH : 'none',
-        borderRight: swingIn ? DASH : 'none',
-        borderTop: isLeft ? DASH : 'none',
-        borderBottom: !isLeft ? DASH : 'none',
-        left,
-        top: arcTop,
-      };
-      panel = {
-        ...panelBase,
-        width: r,
-        height: 4,
-        left,
-        top: isLeft ? pos * P : (pos + door.width) * P - 4,
-      };
-      track = { ...trackBase, left: 2, top: pos * P, width: 6, height: widthPx };
-      break;
-    }
-    case 'right': {
-      const left = swingIn ? (room.width - door.width) * P : room.width * P;
-      const arcTop = isLeft ? pos * P : (pos + door.width) * P - r;
-      arc = {
-        ...arcBase,
-        borderRadius: !isLeft
-          ? swingIn
-            ? '100% 0 0 0'
-            : '0 0 100% 0'
-          : swingIn
-            ? '0 0 0 100%'
-            : '0 100% 0 0',
-        borderLeft: swingIn ? DASH : 'none',
-        borderRight: !swingIn ? DASH : 'none',
-        borderTop: !isLeft ? DASH : 'none',
-        borderBottom: isLeft ? DASH : 'none',
-        left,
-        top: arcTop,
-      };
-      panel = {
-        ...panelBase,
-        width: r,
-        height: 4,
-        left,
-        top: isLeft ? pos * P : (pos + door.width) * P - 4,
-      };
-      track = { ...trackBase, left: room.width * P - 8, top: pos * P, width: 6, height: widthPx };
-      break;
+  const swing = doorSwingGeometry(door, room);
+  if (swing) {
+    const { box, hinge, closedEnd, openEnd, radius, sweep } = swing;
+    const r = radius * P;
+    // Arc: a quarter circle around the hinge, from the closed leaf to the open one.
+    const local = (p: Point) => `${(p.x - box.x) * P} ${(p.y - box.y) * P}`;
+    arc = {
+      position: 'absolute',
+      left: box.x * P,
+      top: box.y * P,
+      width: box.width * P,
+      height: box.height * P,
+      overflow: 'visible',
+      opacity: 0.5,
+      pointerEvents: 'none',
+    };
+    arcPath = `M ${local(closedEnd)} A ${r} ${r} 0 0 ${sweep} ${local(openEnd)}`;
+    // Leaf: the open door, from the hinge to the open end, thickened towards the strike side.
+    const sx = ((closedEnd.x - hinge.x) / (radius || 1)) * LEAF_THICKNESS;
+    const sy = ((closedEnd.y - hinge.y) / (radius || 1)) * LEAF_THICKNESS;
+    const xs = [hinge.x * P, openEnd.x * P, hinge.x * P + sx];
+    const ys = [hinge.y * P, openEnd.y * P, hinge.y * P + sy];
+    panel = {
+      position: 'absolute',
+      backgroundColor: '#cbd5e1',
+      border: '1px solid #64748b',
+      left: Math.min(...xs),
+      top: Math.min(...ys),
+      width: Math.max(...xs) - Math.min(...xs),
+      height: Math.max(...ys) - Math.min(...ys),
+    };
+  } else {
+    const trackBase = {
+      position: 'absolute',
+      backgroundColor: '#94a3b8',
+      borderRadius: 2,
+      opacity: 0.6,
+    } as const;
+    switch (wall) {
+      case 'bottom':
+        track = {
+          ...trackBase,
+          left: pos * P,
+          top: room.height * P - 8,
+          width: widthPx,
+          height: 6,
+        };
+        break;
+      case 'top':
+        track = { ...trackBase, left: pos * P, top: 2, width: widthPx, height: 6 };
+        break;
+      case 'left':
+        track = { ...trackBase, left: 2, top: pos * P, width: 6, height: widthPx };
+        break;
+      case 'right':
+        track = { ...trackBase, left: room.width * P - 8, top: pos * P, width: 6, height: widthPx };
+        break;
     }
   }
 
@@ -275,6 +393,7 @@ export const doorStyles = (door: Door, room: RoomDims): DoorStyles => {
     jamb1,
     jamb2,
     arc,
+    arcPath,
     panel,
     track,
     handle: handleStyle(wall, pos, widthPx, room, 20, 0),

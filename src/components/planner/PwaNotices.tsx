@@ -3,7 +3,10 @@ import { CircleCheck, Download, RefreshCw, X } from 'lucide-react';
 import { usePwa } from '../../hooks/usePwa';
 import { applyUpdate, dismissOfflineReady, dismissUpdate, promptInstall } from '../../lib/pwa';
 
-/** Bottom toasts: "Update available" and the one-time "Ready to work offline". */
+/**
+ * Bottom toasts: "Update available" and the one-time "Ready to work offline". On narrow
+ * screens they float above the bottom controls so they never cover them.
+ */
 export function PwaNotices() {
   const { needRefresh, offlineReady } = usePwa();
 
@@ -15,9 +18,10 @@ export function PwaNotices() {
 
   if (!needRefresh && !offlineReady) return null;
   return (
+    // On phones the dock sits above the floating zoom pill and Edit button (see .toast-dock).
     <div
-      className="fixed inset-x-0 bottom-0 z-[70] flex justify-center px-3 pointer-events-none"
-      style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+      className="toast-dock fixed inset-x-0 bottom-0 z-[70] flex justify-center px-3 pointer-events-none"
+      data-testid="pwa-toast-dock"
     >
       <div
         role="status"

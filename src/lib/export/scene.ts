@@ -19,7 +19,8 @@ import type {
   Wall,
 } from '../../types';
 import { getBorderColor, migrateColor } from '../colors';
-import { getRotatedCorners, normalizeDegrees, wallLength } from '../geometry';
+import { getRotatedCorners, normalizeDegrees, wallLength, type Point } from '../geometry';
+import { doorSwingGeometry, onWall } from '../openings';
 import { FEET_PER_METER, clamp, feetToDisplay, formatArea, roundNum } from '../units';
 import { fitText, measureText } from './fontMetrics';
 
@@ -178,10 +179,6 @@ const line = (pt: Pt, a0: number, d0: number, a1: number, d1: number): PathComma
   ['L', ...pt(a1, d1)],
 ];
 
-/** Opening start, kept on its wall even if the room shrank since (as lib/openings.ts). */
-const onWall = (o: { position: number; width: number }, room: RoomDims, wall: Wall) =>
-  clamp(o.position, 0, Math.max(0, wallLength(room, wall) - o.width));
-
 // Bezier handle length for a quarter circle.
 const KAPPA = 0.5522847498;
 
@@ -208,7 +205,9 @@ const doorNode = (door: Door, room: RoomDims, s: number, T: number): GroupNode =
   const w = Math.min(door.width, wallLength(room, wall)) * s;
   const p = onWall(door, room, wall) * s;
   const children: SceneNode[] = [];
-  if (type === 'sliding') {
+  // Swing-out doors hinge on the exterior face, a wall thickness (T) outside the interior.
+  const swing = doorSwingGeometry(door, room, T / s);
+  if (!swing) {
     const t = Math.max(1.5, T * 0.24);
     const panel = (a0: number, a1: number, dc: number): PathNode => ({
       kind: 'path',
@@ -226,34 +225,43 @@ const doorNode = (door: Door, room: RoomDims, s: number, T: number): GroupNode =
       strokeWidth: 1,
     });
   } else {
-    // Swing-in hinges on the interior face and opens into the room; swing-out
-    // hinges on the exterior face and opens outward. `hinge` names the end of
-    // the opening the leaf is fixed to: left = start of the wall, right = end.
-    const inward = type !== 'swing-out';
-    const d0 = inward ? 0 : -T;
-    const dir = inward ? 1 : -1;
-    const hingeLeft = door.hinge !== 'right';
-    const ha = hingeLeft ? p : p + w; // hinge position along the wall
-    const sa = hingeLeft ? 1 : -1; // from the hinge towards the strike side
-    const leaf = Math.max(2.5, Math.min(T * 0.45, 0.14 * s));
+    // Leaf and arc come from the same geometry the editor draws (lib/openings.ts).
+    const { hinge, closedEnd, openEnd, radius } = swing;
+    const at = (p: Point, dx = 0, dy = 0): [number, number] => [(p.x + dx) * s, (p.y + dy) * s];
+    // Quarter circle around the hinge as one cubic Bezier, drawn from the open leaf's tip to
+    // the strike end; control points sit KAPPA * radius along each end's tangent.
+    const ox = openEnd.x - hinge.x;
+    const oy = openEnd.y - hinge.y;
+    const cx = closedEnd.x - hinge.x;
+    const cy = closedEnd.y - hinge.y;
     children.push({
       kind: 'path',
       d: [
-        ['M', ...pt(ha, d0 + dir * w)],
+        ['M', ...at(openEnd)],
         [
           'C',
-          ...pt(ha + sa * KAPPA * w, d0 + dir * w),
-          ...pt(ha + sa * w, d0 + dir * KAPPA * w),
-          ...pt(ha + sa * w, d0),
+          ...at(openEnd, KAPPA * cx, KAPPA * cy),
+          ...at(closedEnd, KAPPA * ox, KAPPA * oy),
+          ...at(closedEnd),
         ],
       ],
       stroke: SWING,
       strokeWidth: 1,
       dash: [5, 3.5],
     });
+    // The open leaf, thickened from the hinge towards the strike side.
+    const leaf = Math.max(2.5, Math.min(T * 0.45, 0.14 * s)) / s;
+    const lx = (cx / (radius || 1)) * leaf;
+    const ly = (cy / (radius || 1)) * leaf;
     children.push({
       kind: 'path',
-      d: quad(pt, ha, ha + sa * leaf, d0, d0 + dir * w),
+      d: [
+        ['M', ...at(hinge)],
+        ['L', ...at(hinge, lx, ly)],
+        ['L', ...at(openEnd, lx, ly)],
+        ['L', ...at(openEnd)],
+        ['Z'],
+      ],
       fill: DOOR_FILL,
       stroke: DOOR_STROKE,
       strokeWidth: 0.9,
@@ -531,10 +539,10 @@ export const buildPlanScene = (input: PlanInput): Scene => {
     [W + T, H + T],
   ];
   for (const door of layout.doors) {
-    if (door.type !== 'swing-out') continue;
-    const pt = wallFrame(door.wall || 'bottom', room, s);
-    const p = onWall(door, room, door.wall || 'bottom') * s;
-    pts.push(pt(p, -T - door.width * s), pt(p + door.width * s, -T - door.width * s));
+    const swing = doorSwingGeometry(door, room, T / s);
+    if (swing?.side !== 'outside') continue;
+    const { x, y, width, height } = swing.box;
+    pts.push([x * s, y * s], [(x + width) * s, (y + height) * s]);
   }
   for (const item of items) {
     for (const c of getRotatedCorners(item)) pts.push([c.x * s, c.y * s]);

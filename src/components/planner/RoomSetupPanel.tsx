@@ -9,6 +9,9 @@ import {
   Trash2,
   Unlock,
 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import type { AddedOpening } from '../../hooks/useOpenings';
+import { prefersReducedMotion } from '../../lib/browser';
 import { DOOR_TYPES, WALL_OPTIONS } from '../../lib/constants';
 import { wallLength } from '../../lib/geometry';
 import { feetToDisplay, formatArea } from '../../lib/units';
@@ -32,6 +35,40 @@ interface RoomSetupPanelProps {
   onAddWindow: () => void;
   onUpdateWindow: (id: Id, updates: Partial<RoomWindow>) => void;
   onDeleteWindow: (id: Id) => void;
+  /** The door/window just added: its card is scrolled into view and briefly highlighted. */
+  highlight?: AddedOpening | null;
+}
+
+/** How long a new door/window card stays highlighted. */
+const HIGHLIGHT_MS = 1500;
+const cardKey = (o: AddedOpening) => `${o.type}:${o.id}`;
+
+/**
+ * Bring the card of a just-added door/window into view (inside the sidebar, which
+ * is the scrolling sheet on phones) and report whether it should still glow.
+ */
+function useCardHighlight(highlight: AddedOpening | null | undefined) {
+  const cards = useRef(new Map<string, HTMLElement>());
+  const [faded, setFaded] = useState<string | null>(null);
+  const key = highlight ? cardKey(highlight) : null;
+
+  useEffect(() => {
+    if (!key) return;
+    cards.current.get(key)?.scrollIntoView({
+      block: 'nearest',
+      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+    });
+    const timer = setTimeout(() => setFaded(key), HIGHLIGHT_MS);
+    return () => clearTimeout(timer);
+  }, [key]);
+
+  /** Ref callback registering a card under its key. */
+  const register = (o: AddedOpening) => (el: HTMLElement | null) => {
+    if (el) cards.current.set(cardKey(o), el);
+    else cards.current.delete(cardKey(o));
+  };
+  const isHighlighted = (o: AddedOpening) => key === cardKey(o) && faded !== key;
+  return { register, isHighlighted };
 }
 
 const wallLabel = (w: Wall) => w.charAt(0).toUpperCase() + w.slice(1);
@@ -40,6 +77,10 @@ const plural = (n: number, word: string) => `${n} ${word}${n !== 1 ? 's' : ''}`;
 /** Step 1 group in the sidebar: room size, doors and windows. */
 export function RoomSetupPanel(props: RoomSetupPanelProps) {
   const { isActiveMode, expanded, roomDims, doors, windows, unitSystem } = props;
+  const { register, isHighlighted } = useCardHighlight(props.highlight);
+  // Ring that fades out (transition) when the highlight ends; instant with reduced motion.
+  const glow = (on: boolean, ring: string) =>
+    `scroll-mt-20 scroll-mb-4 transition-shadow duration-700 ${on ? `ring-2 ${ring}` : ''}`;
   const inputClass =
     'w-full p-2 border border-slate-200 rounded-sm focus:ring-2 focus:ring-indigo-500 outline-hidden';
   const smallInput = (ring: string) =>
@@ -170,11 +211,15 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
             <div className="space-y-3">
               {doors.map((door, index) => {
                 const wallLen = wallLength(roomDims, door.wall);
+                const card = { type: 'door', id: door.id } as const;
+                const lit = isHighlighted(card);
                 return (
                   <div
                     key={door.id}
-                    className="p-3 bg-white rounded-lg border border-slate-200"
+                    ref={register(card)}
+                    className={`p-3 bg-white rounded-lg border border-slate-200 ${glow(lit, 'ring-indigo-400')}`}
                     data-testid="door-card"
+                    data-highlighted={lit || undefined}
                   >
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-xs font-medium text-slate-700">Door {index + 1}</span>
@@ -295,11 +340,15 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
             <div className="space-y-3">
               {windows.map((win, index) => {
                 const wallLen = wallLength(roomDims, win.wall);
+                const card = { type: 'window', id: win.id } as const;
+                const lit = isHighlighted(card);
                 return (
                   <div
                     key={win.id}
-                    className="p-3 bg-blue-50/30 rounded-lg border border-blue-100"
+                    ref={register(card)}
+                    className={`p-3 bg-blue-50/30 rounded-lg border border-blue-100 ${glow(lit, 'ring-blue-400')}`}
                     data-testid="window-card"
+                    data-highlighted={lit || undefined}
                   >
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-xs font-medium text-slate-700">Window {index + 1}</span>

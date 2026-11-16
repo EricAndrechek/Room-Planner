@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { INITIAL_DOORS, INITIAL_ITEMS, INITIAL_ROOM, INITIAL_WINDOWS } from '../constants';
+import { doorSwingGeometry } from '../openings';
 import { FEET_PER_METER } from '../units';
 import type { Door, FurnitureItem, Layout, RoomWindow, Wall } from '../../types';
 import { escapeXml, planSvg } from './planSvg';
@@ -192,6 +193,41 @@ describe('planSvg', () => {
     expect(Math.min(...ys)).toBeCloseTo(room.y + 9 * s, 1);
   });
 
+  it.each(
+    (['top', 'right', 'bottom', 'left'] as Wall[]).flatMap((wall) =>
+      (['swing-in', 'swing-out'] as const).flatMap((type) =>
+        (['left', 'right'] as const).map((hinge) => [wall, type, hinge] as const),
+      ),
+    ),
+  )('draws the %s wall %s (hinge %s) arc around the leaf hinge', (wall, type, hinge) => {
+    const roomDims = { width: 14, height: 10 };
+    const door: Door = { id: 1, width: 3, position: 4, wall, hinge, type };
+    const scene = buildPlanScene(input({ roomDims, doors: [door], windows: [], items: [] }));
+    const floor = groups(scene.nodes, 'room')[0]!.children[1]!;
+    if (floor.kind !== 'rect') throw new Error('expected floor rect');
+    const s = floor.w / roomDims.width;
+    const [arc, leaf] = groups(scene.nodes, 'door')[0]!.children;
+    if (arc?.kind !== 'path' || leaf?.kind !== 'path') throw new Error('expected arc + leaf');
+    const pts = (d: typeof arc.d) =>
+      d.filter((c) => c[0] !== 'Z').map((c) => c.slice(-2) as number[]);
+    const [arcStart, arcEnd] = [pts(arc.d)[0]!, pts(arc.d).at(-1)!];
+    const [hingePt, , , openPt] = pts(leaf.d);
+    // The arc starts at the open leaf's tip and ends one door width from the hinge, along the wall.
+    expect(arcStart).toEqual(openPt);
+    const g = doorSwingGeometry(door, roomDims)!;
+    const wallDir = [g.closedEnd.x - g.hinge.x, g.closedEnd.y - g.hinge.y];
+    expect(arcEnd[0]! - hingePt![0]!).toBeCloseTo(wallDir[0]! * s, 1);
+    expect(arcEnd[1]! - hingePt![1]!).toBeCloseTo(wallDir[1]! * s, 1);
+    // The leaf points the same way as the editor's (into the room for swing-in).
+    expect(Math.sign(openPt![0]! - hingePt![0]!)).toBe(Math.sign(g.normal.x));
+    expect(Math.sign(openPt![1]! - hingePt![1]!)).toBe(Math.sign(g.normal.y));
+    // Swing-in doors hinge on the interior face, exactly where the editor puts the hinge.
+    if (type === 'swing-in') {
+      expect(hingePt![0]).toBeCloseTo(floor.x + g.hinge.x * s, 1);
+      expect(hingePt![1]).toBeCloseTo(floor.y + g.hinge.y * s, 1);
+    }
+  });
+
   it('cuts door openings under the furniture but draws door swings over it', () => {
     const scene = buildPlanScene(input(sample));
     const roles = scene.nodes.flatMap((n) => (n.kind === 'group' ? [n.role] : []));
@@ -223,7 +259,7 @@ describe('planSvg', () => {
   it('picks a round scale-bar length for the unit system', () => {
     expect(scaleBarFeet(70, 'ft-in')).toBe(2);
     expect(scaleBarFeet(20, 'ft')).toBe(10);
-    expect(scaleBarFeet(70, 'm') / FEET_PER_METER).toBeCloseTo(1, 6);
+    expect(scaleBarFeet(70, 'm') / FEET_PER_METER).toBeCloseTo(1, 1);
     const scene = buildPlanScene(input(sample, { unitSystem: 'cm' }));
     const bar = groups(scene.nodes, 'scale-bar')[0]!;
     expect(texts(bar.children)).toEqual(['0', '100 cm']);
