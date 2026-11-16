@@ -9,11 +9,14 @@ import { buildShareUrl } from './share';
 import {
   KEYS,
   SCHEMA_KEY,
+  SNAP_PREF_KEY,
   SCHEMA_VERSION,
   createMemoryStorage,
   loadPersistedState,
+  loadSnapPreference,
   migrateStorage,
   saveLayout,
+  saveSnapPreference,
 } from './storage';
 
 const fixture = (f: { localStorage: Record<string, string> }) =>
@@ -254,5 +257,18 @@ describe('opening share links at boot', () => {
   it('an invalid link is ignored', async () => {
     const result = await boot('https://example.com/?config=garbage', createMemoryStorage());
     expect(result.shared).toBeNull();
+  });
+});
+
+describe('snap preference', () => {
+  it('defaults to on, round-trips, and stays out of the plan keys', () => {
+    const s = createMemoryStorage();
+    expect(loadSnapPreference(s)).toBe(true);
+    saveSnapPreference(s, false);
+    expect(loadSnapPreference(s)).toBe(false);
+    expect(s.dump()).toEqual({ [SNAP_PREF_KEY]: '0' });
+    expect(Object.values(KEYS)).not.toContain(SNAP_PREF_KEY);
+    saveSnapPreference(s, true);
+    expect(loadSnapPreference(s)).toBe(true);
   });
 });
