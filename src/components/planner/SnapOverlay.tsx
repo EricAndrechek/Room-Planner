@@ -107,7 +107,7 @@ function MeasureLine({ m, zoom, active }: { m: MeasurementLabel; zoom: number; a
 
 /**
  * Alignment guides (while dragging) and clearance measurements (while dragging, and more subtly
- * while a piece is selected), on top of the furniture. Decorative: the same information reaches
+ * while a piece is selected). Decorative: the same information reaches
  * screen readers through the live region ("Against left wall") and each piece's position.
  */
 export const SnapOverlay = memo(function SnapOverlay({
@@ -128,21 +128,39 @@ export const SnapOverlay = memo(function SnapOverlay({
     PIXELS_PER_UNIT,
     unitSystem,
   );
+  // Center guides run through the middle of pieces, where their names are: draw them under the
+  // furniture (visible in the gaps between pieces). Edge and wall guides and the measurements go
+  // on top.
+  const under = guides.filter((g) => g.kind === 'center');
+  const over = guides.filter((g) => g.kind !== 'center');
   return (
-    <div
-      className="absolute inset-0 pointer-events-none"
-      style={{ zIndex: 60 }}
-      aria-hidden="true"
-      data-testid="snap-overlay"
-      data-dragging={drag ? 'true' : undefined}
-    >
-      {/* Guides under the measurements, so a label is never crossed by a line. */}
-      {guides.map((g) => (
-        <GuideLine key={`${g.axis}${g.pos}`} g={g} zoom={zoom} />
-      ))}
-      {labels.map((m) => (
-        <MeasureLine key={m.side} m={m} zoom={zoom} active={!!drag} />
-      ))}
-    </div>
+    <>
+      {under.length > 0 && (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ zIndex: 5 }}
+          aria-hidden="true"
+        >
+          {under.map((g) => (
+            <GuideLine key={`${g.axis}${g.pos}`} g={g} zoom={zoom} />
+          ))}
+        </div>
+      )}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ zIndex: 60 }}
+        aria-hidden="true"
+        data-testid="snap-overlay"
+        data-dragging={drag ? 'true' : undefined}
+      >
+        {/* Guides under the measurements, so a label is never crossed by a line. */}
+        {over.map((g) => (
+          <GuideLine key={`${g.axis}${g.pos}`} g={g} zoom={zoom} />
+        ))}
+        {labels.map((m) => (
+          <MeasureLine key={m.side} m={m} zoom={zoom} active={!!drag} />
+        ))}
+      </div>
+    </>
   );
 });
