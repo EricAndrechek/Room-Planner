@@ -205,11 +205,12 @@ src/
 ├── components/
 │   ├── PlannerApp.tsx     # client-only island root: boot + ErrorBoundary
 │   ├── ErrorBoundary.tsx
-│   └── planner/           # Planner (state orchestration), Header, Sidebar,
+│   └── planner/           # Planner (composes the hooks), Header, Sidebar,
 │                          # RoomSetupPanel, FurniturePanel/Card, RoomCanvas,
 │                          # FurniturePiece, Openings, modals, ColorPicker...
-├── hooks/                 # useHistory, useProjects (autosave), usePanZoom,
-│                          # usePointerDrag, useRotationDrag, useKeyboardShortcuts...
+├── hooks/                 # useHistory, useProjects (autosave), useProjectActions,
+│                          # useSelection, useOpenings, useFurnitureEditing,
+│                          # usePanZoom, usePointerDrag, useKeyboardShortcuts...
 ├── lib/                   # pure, unit-tested logic: units, geometry, layout,
 │                          # share, storage, projects, boot, analytics facade
 ├── styles/global.css      # Tailwind v4 + app styles
