@@ -1,6 +1,6 @@
 import { expect, test, type BrowserContext, type Download, type Page } from '@playwright/test';
 import fs from 'node:fs';
-import { isProblem } from './problems';
+import { isProblem, withoutOfflineNoise } from './problems';
 
 /** A layout with rotated furniture and doors/windows on every wall. */
 const LAYOUT = {
@@ -241,7 +241,7 @@ test('export works offline', async ({ page, context, browserName, isMobile }) =>
   expect(pngSize(png.bytes).width).toBeGreaterThan(1000);
   const pdf = await save(page, 'Download PDF', viaShare);
   expect(pdf.bytes.subarray(0, 5).toString('latin1')).toBe('%PDF-');
-  expect(problems.filter((p) => !/ERR_INTERNET_DISCONNECTED/.test(p))).toEqual([]);
+  expect(withoutOfflineNoise(problems)).toEqual([]);
 });
 
 test('on iOS, a refused share sheet falls back to a download', async ({

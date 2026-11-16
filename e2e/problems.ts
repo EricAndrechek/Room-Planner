@@ -36,3 +36,15 @@ export function isProblem(m: ConsoleMessage): boolean {
   if (csp) return true; // a CSP violation is always a problem, even for analytics hosts
   return m.type() === 'error' && !isBlockedAnalytics(m);
 }
+
+/**
+ * While a test is deliberately offline, third-party requests that aren't served by the service
+ * worker (e.g. the Cloudflare Web Analytics beacon the production zone injects) fail and the engine
+ * logs a generic network error. Each engine words it differently; none of them is an app problem.
+ */
+const OFFLINE_NETWORK_ERROR =
+  /ERR_INTERNET_DISCONNECTED|WebKit encountered an internal error|NetworkError when attempting to fetch/;
+
+/** Drop the engine's "request failed because we're offline" noise from a list of problems. */
+export const withoutOfflineNoise = (problems: string[]): string[] =>
+  problems.filter((p) => !OFFLINE_NETWORK_ERROR.test(p));
