@@ -18,7 +18,7 @@ import type {
   UnitSystem,
   Wall,
 } from '../../types';
-import { getBorderColor, migrateColor } from '../colors';
+import { DARK_TEXT, getBorderColor, migrateColor, readableTextOn } from '../colors';
 import { getRotatedCorners, normalizeDegrees, wallLength, type Point } from '../geometry';
 import { doorSwingGeometry, onWall } from '../openings';
 import { FEET_PER_METER, clamp, feetToDisplay, formatArea, roundNum } from '../units';
@@ -301,15 +301,8 @@ const windowNode = (win: RoomWindow, room: RoomDims, s: number, T: number): Grou
 
 // --- Furniture -----------------------------------------------------------------------
 
-/** Readable text color on a fill: dark on light colors, white on dark ones. */
-const textOn = (hex: string): string => {
-  const v = (i: number) => {
-    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
-    return Number.isNaN(c) ? 1 : c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  };
-  const lum = 0.2126 * v(1) + 0.7152 * v(3) + 0.0722 * v(5);
-  return lum < 0.28 ? '#ffffff' : TEXT;
-};
+/** Readable text color on a fill: dark on light colors, white on dark ones (by contrast ratio). */
+const textOn = (hex: string): string => (readableTextOn(hex) === DARK_TEXT ? TEXT : '#ffffff');
 
 /** Text angle within (-90, 90], so labels never read upside down. */
 const readable = (deg: number): number => {
@@ -386,7 +379,8 @@ const itemNode = (item: FurnitureItem, unitSystem: UnitSystem, s: number): Group
         text: dims,
         size: r2(dimSize),
         anchor: 'middle',
-        fill: color === TEXT ? MUTED : color,
+        // Same color as the name: a muted gray falls below WCAG AA on the pastel presets.
+        fill: color,
         rotate: labelRotate,
       });
   }
