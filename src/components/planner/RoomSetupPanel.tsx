@@ -112,7 +112,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
           </div>
           <div className="text-left">
             <span className="text-sm font-semibold text-slate-700 block">Room Setup</span>
-            <span className="text-[10px] text-slate-500">
+            <span className="text-[10px] text-slate-600">
               {feetToDisplay(roomDims.width, unitSystem)} ×{' '}
               {feetToDisplay(roomDims.height, unitSystem)} • {plural(doors.length, 'door')} •{' '}
               {plural(windows.length, 'window')}
@@ -122,7 +122,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
         <div className="flex items-center gap-2">
           {!isActiveMode && (
             <>
-              <span className="text-[10px] text-slate-500 flex items-center gap-1">
+              <span className="text-[10px] text-slate-600 flex items-center gap-1">
                 <Lock className="w-3 h-3" /> Locked
               </span>
               {expanded ? (
