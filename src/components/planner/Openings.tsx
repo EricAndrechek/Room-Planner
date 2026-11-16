@@ -1,5 +1,5 @@
 import type { PointerEvent as ReactPointerEvent } from 'react';
-import { doorStyles, windowStyles } from '../../lib/openings';
+import { SWING_ARC_STROKE, doorStyles, windowStyles } from '../../lib/openings';
 import { feetToDisplay } from '../../lib/units';
 import type { Door, RoomDims, RoomWindow, UnitSystem } from '../../types';
 
@@ -48,7 +48,11 @@ export function DoorShape({
       {/* Architectural jamb lines showing the wall break */}
       <div style={s.jamb1} />
       <div style={s.jamb2} />
-      {!s.sliding && <div style={s.arc} />}
+      {!s.sliding && (
+        <svg style={s.arc} aria-hidden="true" data-door-swing>
+          <path d={s.arcPath} fill="none" {...SWING_ARC_STROKE} />
+        </svg>
+      )}
       {!s.sliding && <div style={s.panel} />}
       {s.sliding && <div style={s.track} />}
       {!isLocked && (
