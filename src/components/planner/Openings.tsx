@@ -1,4 +1,4 @@
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { SWING_ARC_STROKE, doorStyles, windowStyles } from '../../lib/openings';
 import { feetToDisplay } from '../../lib/units';
 import type { Door, RoomDims, RoomWindow, UnitSystem } from '../../types';
@@ -19,9 +19,16 @@ interface OpeningProps<T> {
 
 /** Minimum on-screen handle size (WCAG 2.5.8 target size). */
 const MIN_HANDLE_PX = 24;
+/** Touch screens: the hit area around a handle (`.touch-hit`), on screen. */
+const TOUCH_TARGET_PX = 44;
 const handleScale = (handle: { width?: unknown }, zoom: number) => {
   const size = typeof handle.width === 'number' ? handle.width : MIN_HANDLE_PX;
-  return { transform: `scale(${Math.max(1, MIN_HANDLE_PX / (size * zoom))})` };
+  const scale = Math.max(1, MIN_HANDLE_PX / (size * zoom));
+  return {
+    transform: `scale(${scale})`,
+    // In the handle's own (scaled) pixels, so the touch hit area is 44 screen px at any zoom.
+    '--hit': `${TOUCH_TARGET_PX / (scale * zoom)}px`,
+  } as CSSProperties;
 };
 
 const handleLabel = (
@@ -58,7 +65,7 @@ export function DoorShape({
       {!isLocked && (
         <div
           style={{ ...s.handle, ...handleScale(s.handle, zoom), touchAction: 'none' }}
-          className={`rounded-full transition-all ${isActive ? 'bg-indigo-500 ring-2 ring-indigo-300' : 'bg-slate-400 hover:bg-indigo-400'}`}
+          className={`touch-hit rounded-full transition-all ${isActive ? 'bg-indigo-500 ring-2 ring-indigo-300' : 'bg-slate-400 hover:bg-indigo-400'}`}
           onPointerDown={onHandlePointerDown}
           onFocus={onSelect}
           title="Drag to reposition door"
@@ -93,7 +100,7 @@ export function WindowShape({
       {!isLocked && (
         <div
           style={{ ...s.handle, ...handleScale(s.handle, zoom), touchAction: 'none' }}
-          className={`rounded-full transition-all ${isActive ? 'bg-blue-500 ring-2 ring-blue-300' : 'bg-blue-400 hover:bg-blue-500'}`}
+          className={`touch-hit rounded-full transition-all ${isActive ? 'bg-blue-500 ring-2 ring-blue-300' : 'bg-blue-400 hover:bg-blue-500'}`}
           onPointerDown={onHandlePointerDown}
           onFocus={onSelect}
           title="Drag to reposition window"

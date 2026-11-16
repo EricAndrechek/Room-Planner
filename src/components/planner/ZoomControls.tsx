@@ -1,5 +1,6 @@
 import { Scan, ZoomIn, ZoomOut } from 'lucide-react';
 import { MAX_ZOOM, MIN_ZOOM } from '../../lib/constants';
+import { SnapToggle } from './SnapToggle';
 import { Tooltip } from './Tooltip';
 
 interface ZoomControlsProps {
@@ -9,8 +10,15 @@ interface ZoomControlsProps {
   onFit: () => void;
 }
 
-/** Zoom buttons in the desktop header. */
-export function HeaderZoomControls({ zoom, onZoomIn, onZoomOut, onFit }: ZoomControlsProps) {
+/** Zoom buttons and the Snap toggle in the desktop header. */
+export function HeaderZoomControls({
+  zoom,
+  onZoomIn,
+  onZoomOut,
+  onFit,
+  snapOn,
+  onToggleSnap,
+}: ZoomControlsProps & { snapOn: boolean; onToggleSnap: () => void }) {
   return (
     <div className="hidden md:flex items-center gap-1 bg-slate-50 rounded-lg px-2 py-1">
       <Tooltip text="Zoom out">
@@ -49,6 +57,8 @@ export function HeaderZoomControls({ zoom, onZoomIn, onZoomOut, onFit }: ZoomCon
           <Scan className="w-4 h-4" />
         </button>
       </Tooltip>
+      <div className="w-px h-4 bg-slate-300 mx-1" />
+      <SnapToggle variant="header" on={snapOn} onToggle={onToggleSnap} />
     </div>
   );
 }

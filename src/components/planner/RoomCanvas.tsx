@@ -1,4 +1,4 @@
-import type { PointerEvent as ReactPointerEvent, RefObject } from 'react';
+import type { PointerEvent as ReactPointerEvent, ReactNode, RefObject } from 'react';
 import { Home, Sofa } from 'lucide-react';
 import { DESIGN_MODES, PIXELS_PER_UNIT } from '../../lib/constants';
 import type { ItemWarning } from '../../lib/geometry';
@@ -31,6 +31,10 @@ interface RoomCanvasProps {
   onSelectItem: (item: FurnitureItem) => void;
   onDoorPointerDown: (e: ReactPointerEvent<HTMLDivElement>, door: Door) => void;
   onWindowPointerDown: (e: ReactPointerEvent<HTMLDivElement>, win: RoomWindow) => void;
+  /** Drawn inside the room, above the furniture (guides and measurements). */
+  overlay?: ReactNode;
+  /** Floating controls over the canvas (the Snap chip on phones). */
+  controls?: ReactNode;
 }
 
 const GRID_STYLE = {
@@ -56,6 +60,8 @@ export function RoomCanvas({
   onSelectItem,
   onDoorPointerDown,
   onWindowPointerDown,
+  overlay,
+  controls,
 }: RoomCanvasProps) {
   const { roomDims, doors, windows, items } = layout;
   const isRoomSetup = designMode === DESIGN_MODES.ROOM_SETUP;
@@ -77,8 +83,9 @@ export function RoomCanvas({
         Press Tab to move between {isRoomSetup ? 'door and window handles' : 'furniture pieces'}.
         {isRoomSetup
           ? ' Arrow keys slide the focused opening along its wall; hold Shift for larger steps.'
-          : ' Arrow keys move the focused piece; hold Shift for larger steps. R rotates it by 90 degrees, Shift and R rotates the other way. Delete removes it. Escape deselects.'}{' '}
-        Control or Command with Z undoes.
+          : ' Arrow keys move the focused piece; hold Shift for larger steps. With Snap on, a move that ends close to a wall or another piece lines up with it. R rotates it by 90 degrees, Shift and R rotates the other way; with Alt or Option, by 1 degree. Delete removes it. Escape deselects.'}
+        {isRoomSetup ? ' Delete removes the focused door or window.' : ''} Control or Command with Z
+        undoes.
       </p>
       {showModeBadge && (
         <div
@@ -106,6 +113,8 @@ export function RoomCanvas({
         </div>
       )}
 
+      {controls}
+
       {/* Room - centered, panned by translate and zoomed by scale */}
       <div
         className="absolute inset-0 flex items-center justify-center"
@@ -118,6 +127,9 @@ export function RoomCanvas({
             width: roomDims.width * PIXELS_PER_UNIT,
             height: roomDims.height * PIXELS_PER_UNIT,
             border: '4px solid #334155',
+            // The walls sit outside the floor: the interior is exactly the room size, so (0, 0) and
+            // (width, height) are the walls' inner faces (where furniture is flush and openings sit).
+            boxSizing: 'content-box',
             transform: `scale(${zoom})`,
             transformOrigin: 'center',
           }}
@@ -165,8 +177,12 @@ export function RoomCanvas({
                 onPointerDown={onItemPointerDown}
                 onRotatePointerDown={onRotatePointerDown}
                 onSelect={onSelectItem}
+                // Only the selected piece draws zoom-dependent UI (its rotate handle): others keep
+                // their memoized render while zooming.
+                zoom={isActive('item', item.id) ? zoom : 1}
               />
             ))}
+          {overlay}
         </div>
       </div>
     </div>

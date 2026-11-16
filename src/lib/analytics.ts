@@ -26,6 +26,7 @@ export type AnalyticsEvent =
   | 'import_json'
   | 'units_changed'
   | 'mode_changed'
+  | 'snap_toggled'
   | 'undo'
   | 'redo'
   | 'pwa_install_prompted'

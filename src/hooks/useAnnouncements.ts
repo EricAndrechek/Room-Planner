@@ -32,6 +32,18 @@ export function describeLayoutChange(prev: Layout, next: Layout, unitSystem: Uni
   return parts.slice(0, 3).join('. ');
 }
 
+/** Doors/windows that came back or went away (spoken after undo/redo), or ''. */
+export function describeOpeningsChange(prev: Layout, next: Layout): string {
+  const parts: string[] = [];
+  const diff = (before: number, after: number, kind: string) => {
+    if (after > before) parts.push(`${kind} restored`);
+    else if (after < before) parts.push(`${kind} removed`);
+  };
+  diff(prev.doors.length, next.doors.length, 'Door');
+  diff(prev.windows.length, next.windows.length, 'Window');
+  return parts.join('. ');
+}
+
 /** Newly appearing overlap / out-of-bounds warnings, spoken. */
 export function describeNewWarnings(
   prev: Map<Id, ItemWarning>,
@@ -106,7 +118,9 @@ export function useAnnouncements(
       // Replace the bare "Undo" queued by noteAction with the detailed version.
       pending.current = pending.current.filter((m) => m !== act);
     }
-    queue([act, change, newWarnings].filter(Boolean).join('. '));
+    // Openings are announced by their own actions; after undo/redo say what came back or went.
+    const openings = act ? describeOpeningsChange(prev, layout) : '';
+    queue([act, change, openings, newWarnings].filter(Boolean).join('. '));
   }, [layout, warnings, unitSystem, queue]);
 
   useEffect(() => {

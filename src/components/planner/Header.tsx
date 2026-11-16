@@ -27,6 +27,9 @@ interface HeaderProps {
   canUndo: boolean;
   canRedo: boolean;
   zoom: number;
+  /** Snapping preference (Snap toggle in the zoom group). */
+  snapOn: boolean;
+  onToggleSnap: () => void;
   helpHref: string;
   onOpenFiles: () => void;
   /** Rename the current plan (creating it first if it was never saved). */
@@ -83,17 +86,22 @@ export function Header(props: HeaderProps) {
               autoFocus
             />
           ) : (
-            <button
-              type="button"
-              onClick={() => setEditingName(props.projectName)}
-              className="text-left group hover:bg-slate-50 rounded-sm px-1 -mx-1 min-h-6 transition-colors flex items-center justify-center"
-              title="Click to rename"
-            >
+            // The heading is not inside the button: a separate rename button whose hit area
+            // (::after) stretches over the whole name, so clicking the name still renames.
+            <div className="group relative flex items-center min-w-0 rounded-sm px-1 -mx-1 min-h-6 hover:bg-slate-50 transition-colors">
               <h1 className="text-sm font-bold text-slate-800 leading-tight truncate group-hover:text-indigo-600 transition-colors">
                 {props.projectName}
-                <Edit3 className="w-3 h-3 inline ml-1 opacity-0 group-hover:opacity-50 transition-opacity" />
               </h1>
-            </button>
+              <button
+                type="button"
+                onClick={() => setEditingName(props.projectName)}
+                className="shrink-0 ml-1 flex items-center justify-center rounded-sm text-slate-800 group-hover:text-indigo-600 opacity-0 group-hover:opacity-50 focus-visible:opacity-100 [@media(hover:none)]:opacity-50 transition-opacity after:absolute after:inset-0 after:content-['']"
+                title="Click to rename"
+                aria-label="Rename floor plan"
+              >
+                <Edit3 className="w-3 h-3" aria-hidden="true" />
+              </button>
+            </div>
           )}
           {/* Dimensions - hidden on mobile */}
           <div className="hidden sm:flex items-center gap-1 text-[10px] text-slate-500 -mt-0.5">
@@ -155,6 +163,8 @@ export function Header(props: HeaderProps) {
           onZoomIn={props.onZoomIn}
           onZoomOut={props.onZoomOut}
           onFit={props.onFit}
+          snapOn={props.snapOn}
+          onToggleSnap={props.onToggleSnap}
         />
 
         <InstallButton variant="header" />

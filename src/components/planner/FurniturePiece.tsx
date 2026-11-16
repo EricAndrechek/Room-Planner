@@ -1,6 +1,6 @@
 import { memo, useId, type PointerEvent as ReactPointerEvent } from 'react';
 import { AlertTriangle, Lock, RotateCw } from 'lucide-react';
-import { getBorderColor, migrateColor } from '../../lib/colors';
+import { blendOnWhite, getBorderColor, migrateColor, readableTextOn } from '../../lib/colors';
 import { PIXELS_PER_UNIT } from '../../lib/constants';
 import { warningText, type ItemWarning } from '../../lib/geometry';
 import { feetToDisplay } from '../../lib/units';
@@ -16,7 +16,12 @@ interface FurniturePieceProps {
   onPointerDown: (e: ReactPointerEvent<HTMLDivElement>, item: FurnitureItem) => void;
   onRotatePointerDown: (e: ReactPointerEvent<HTMLDivElement>, item: FurnitureItem) => void;
   onSelect: (item: FurnitureItem) => void;
+  /** Canvas zoom: the rotate handle keeps a constant on-screen size. */
+  zoom: number;
 }
+
+/** Furniture is drawn at this opacity while the room is being edited (and furniture is locked). */
+const MODE_LOCKED_ALPHA = 0.5;
 
 /** One piece of furniture on the canvas, with its rotation handle when selected. */
 export const FurniturePiece = memo(function FurniturePiece({
@@ -28,14 +33,19 @@ export const FurniturePiece = memo(function FurniturePiece({
   onPointerDown,
   onRotatePointerDown,
   onSelect,
+  zoom,
 }: FurniturePieceProps) {
   const descId = useId();
   const isItemLocked = !!item.locked;
   const isLocked = modeLocked || isItemLocked;
   const color = migrateColor(item.color);
+  // Room setup fades the fill (not the label, which keeps full contrast on the faded color).
+  const fill = modeLocked ? blendOnWhite(color, MODE_LOCKED_ALPHA) : color;
   const hasWarning = !!warning && (warning.outOfBounds || warning.collision);
 
-  let borderColor = getBorderColor(color);
+  let borderColor = modeLocked
+    ? blendOnWhite(getBorderColor(color), MODE_LOCKED_ALPHA)
+    : getBorderColor(color);
   let borderWidth = '2px';
   if (hasWarning) {
     borderColor = '#ef4444'; // red-500
@@ -49,9 +59,9 @@ export const FurniturePiece = memo(function FurniturePiece({
     <div
       onPointerDown={(e) => onPointerDown(e, item)}
       onClick={() => onSelect(item)}
-      className={`absolute flex items-center justify-center text-xs font-bold text-slate-700 select-none transition-shadow rounded-md ${
+      className={`absolute flex items-center justify-center text-xs font-bold select-none transition-shadow rounded-md ${
         modeLocked
-          ? 'cursor-not-allowed opacity-50'
+          ? 'cursor-not-allowed'
           : isItemLocked
             ? 'cursor-pointer'
             : 'cursor-grab active:cursor-grabbing'
@@ -60,7 +70,8 @@ export const FurniturePiece = memo(function FurniturePiece({
         width: item.width * PIXELS_PER_UNIT,
         height: item.height * PIXELS_PER_UNIT,
         transform: `translate(${item.x * PIXELS_PER_UNIT}px, ${item.y * PIXELS_PER_UNIT}px) rotate(${item.rotation}deg)`,
-        backgroundColor: color,
+        backgroundColor: fill,
+        color: readableTextOn(fill),
         borderColor,
         borderWidth,
         borderStyle: 'solid',
@@ -95,7 +106,7 @@ export const FurniturePiece = memo(function FurniturePiece({
             ? 'Locked while editing the room.'
             : isItemLocked
               ? 'Locked; unlock it in the furniture list to move it.'
-              : 'Arrow keys move, R rotates, Delete removes.',
+              : 'Arrow keys move, R rotates, Alt or Option with R turns by 1 degree, Delete removes.',
           warning?.outOfBounds ? 'Outside the room.' : '',
           warning?.collision ? 'Overlapping other furniture.' : '',
         ]
@@ -135,19 +146,27 @@ export const FurniturePiece = memo(function FurniturePiece({
       )}
 
       {isActive && !isLocked && (
-        <>
+        // Counter-scaled by the zoom so the handle is the same size on screen at every zoom; on
+        // touch screens its hit area grows to 44px (.touch-hit) without a bigger knob.
+        <div
+          className="absolute bottom-full left-1/2 w-8 h-8 z-50 pointer-events-none"
+          style={{
+            transform: `translateX(-50%) scale(${1 / zoom})`,
+            transformOrigin: '50% 100%',
+          }}
+        >
+          <div className="absolute bottom-0 left-1/2 h-full w-0.5 -translate-x-1/2 bg-emerald-500" />
           <div
             onPointerDown={(e) => onRotatePointerDown(e, item)}
-            className="absolute -top-8 left-1/2 -translate-x-1/2 w-8 h-8 md:w-6 md:h-6 bg-white border-2 border-emerald-500 rounded-full flex items-center justify-center cursor-crosshair hover:scale-110 transition-all z-50 shadow-md"
+            className="touch-hit pointer-events-auto absolute top-0 left-1/2 -translate-x-1/2 w-8 h-8 md:w-6 md:h-6 bg-white border-2 border-emerald-500 rounded-full flex items-center justify-center cursor-crosshair hover:scale-110 transition-all shadow-md"
             style={{ touchAction: 'none' }}
             aria-hidden="true"
             data-testid="rotate-handle"
             data-draggable
           >
-            <RotateCw className="w-4 h-4 md:w-3 md:h-3 text-emerald-500" />
+            <RotateCw className="w-4 h-4 md:w-3 md:h-3 text-emerald-600" />
           </div>
-          <div className="absolute -top-8 left-1/2 h-8 w-0.5 -z-10 origin-bottom transition-colors bg-emerald-500" />
-        </>
+        </div>
       )}
     </div>
   );
