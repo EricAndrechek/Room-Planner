@@ -1,4 +1,4 @@
-import { memo, useRef } from 'react';
+import { memo, useId, useRef } from 'react';
 import { AlertTriangle, Eye, EyeOff, Lock, Trash2, Unlock } from 'lucide-react';
 import { migrateColor } from '../../lib/colors';
 import { normalizeDegrees, warningText, type ItemWarning } from '../../lib/geometry';
@@ -46,6 +46,9 @@ export const FurnitureCard = memo(function FurnitureCard({
   onCloseColorPicker,
 }: FurnitureCardProps) {
   const colorButtonRef = useRef<HTMLButtonElement>(null);
+  // Unique per card: the visible labels point at their inputs.
+  const uid = useId();
+  const fieldId = (name: string) => `${uid}-${name}`;
   const isItemLocked = !!item.locked;
   const hidden = item.visible === false;
   const hasWarning = !hidden && !!warning && (warning.outOfBounds || warning.collision);
@@ -165,13 +168,15 @@ export const FurnitureCard = memo(function FurnitureCard({
             <Lock className="w-3 h-3" />
             Position and size locked
           </p>
-          <p className="text-[10px] text-amber-600 mt-1">Click the lock icon to unlock</p>
+          <p className="text-[10px] text-amber-800 mt-1">Click the lock icon to unlock</p>
         </div>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-[10px] text-slate-500">Width</label>
+              <label htmlFor={fieldId('width')} className="text-[10px] text-slate-500">
+                Width
+              </label>
               <DimensionInput
                 value={item.width}
                 onChange={(val) => onChange(item.id, { width: val })}
@@ -179,11 +184,14 @@ export const FurnitureCard = memo(function FurnitureCard({
                 min={0.1}
                 max={roomDims.width}
                 label={`Width of ${item.label}`}
+                id={fieldId('width')}
                 unitSystem={unitSystem}
               />
             </div>
             <div>
-              <label className="text-[10px] text-slate-500">Depth</label>
+              <label htmlFor={fieldId('depth')} className="text-[10px] text-slate-500">
+                Depth
+              </label>
               <DimensionInput
                 value={item.height}
                 onChange={(val) => onChange(item.id, { height: val })}
@@ -191,6 +199,7 @@ export const FurnitureCard = memo(function FurnitureCard({
                 min={0.1}
                 max={roomDims.height}
                 label={`Depth of ${item.label}`}
+                id={fieldId('depth')}
                 unitSystem={unitSystem}
               />
             </div>
@@ -198,7 +207,9 @@ export const FurnitureCard = memo(function FurnitureCard({
 
           <div className="grid grid-cols-3 gap-2 mt-3">
             <div>
-              <label className="text-[10px] text-slate-500">X Position</label>
+              <label htmlFor={fieldId('x')} className="text-[10px] text-slate-500">
+                X Position
+              </label>
               <DimensionInput
                 value={item.x}
                 onChange={(val) =>
@@ -208,11 +219,14 @@ export const FurnitureCard = memo(function FurnitureCard({
                 min={0}
                 max={roomDims.width - item.width}
                 label={`X position of ${item.label}`}
+                id={fieldId('x')}
                 unitSystem={unitSystem}
               />
             </div>
             <div>
-              <label className="text-[10px] text-slate-500">Y Position</label>
+              <label htmlFor={fieldId('y')} className="text-[10px] text-slate-500">
+                Y Position
+              </label>
               <DimensionInput
                 value={item.y}
                 onChange={(val) =>
@@ -222,12 +236,16 @@ export const FurnitureCard = memo(function FurnitureCard({
                 min={0}
                 max={roomDims.height - item.height}
                 label={`Y position of ${item.label}`}
+                id={fieldId('y')}
                 unitSystem={unitSystem}
               />
             </div>
             <div>
-              <label className="text-[10px] text-slate-500">Rotation °</label>
+              <label htmlFor={fieldId('rotation')} className="text-[10px] text-slate-500">
+                Rotation °
+              </label>
               <input
+                id={fieldId('rotation')}
                 type="number"
                 value={Math.round(normalizeDegrees(item.rotation))}
                 onChange={(e) =>

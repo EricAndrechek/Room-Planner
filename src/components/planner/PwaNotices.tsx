@@ -16,54 +16,58 @@ export function PwaNotices() {
     return () => clearTimeout(id);
   }, [offlineReady]);
 
-  if (!needRefresh && !offlineReady) return null;
+  const visible = needRefresh || offlineReady;
   return (
+    // The dock is always mounted and is the polite live region, so a toast appearing inside it is
+    // announced (a region inserted together with its text often is not). Toasts never take focus.
     // On phones the dock sits above the floating zoom pill and Edit button (see .toast-dock).
     <div
       className="toast-dock fixed inset-x-0 bottom-0 z-[70] flex justify-center px-3 pointer-events-none"
+      role="status"
+      aria-live="polite"
       data-testid="pwa-toast-dock"
     >
-      <div
-        role="status"
-        aria-live="polite"
-        data-testid="pwa-toast"
-        className="pointer-events-auto w-full max-w-sm bg-slate-900 text-white rounded-xl shadow-xl px-4 py-3 flex items-center gap-3 animate-slide-up"
-      >
-        {needRefresh ? (
-          <>
-            <RefreshCw className="w-4 h-4 shrink-0 text-indigo-300" aria-hidden="true" />
-            <p className="text-sm flex-1">Update available</p>
-            <button
-              type="button"
-              onClick={applyUpdate}
-              className="px-3 py-1.5 bg-indigo-500 hover:bg-indigo-400 rounded-lg text-sm font-medium transition-colors"
-            >
-              Reload
-            </button>
-            <button
-              type="button"
-              onClick={dismissUpdate}
-              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
-              aria-label="Dismiss"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </>
-        ) : (
-          <>
-            <CircleCheck className="w-4 h-4 shrink-0 text-green-400" aria-hidden="true" />
-            <p className="text-sm flex-1">Ready to work offline</p>
-            <button
-              type="button"
-              onClick={dismissOfflineReady}
-              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
-              aria-label="Dismiss"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </>
-        )}
-      </div>
+      {visible && (
+        <div
+          data-testid="pwa-toast"
+          className="pointer-events-auto w-full max-w-sm bg-slate-900 text-white rounded-xl shadow-xl px-4 py-3 flex items-center gap-3 animate-slide-up"
+        >
+          {needRefresh ? (
+            <>
+              <RefreshCw className="w-4 h-4 shrink-0 text-indigo-300" aria-hidden="true" />
+              <p className="text-sm flex-1">Update available</p>
+              <button
+                type="button"
+                onClick={applyUpdate}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm font-medium transition-colors"
+              >
+                Reload
+              </button>
+              <button
+                type="button"
+                onClick={dismissUpdate}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+                aria-label="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </>
+          ) : (
+            <>
+              <CircleCheck className="w-4 h-4 shrink-0 text-green-400" aria-hidden="true" />
+              <p className="text-sm flex-1">Ready to work offline</p>
+              <button
+                type="button"
+                onClick={dismissOfflineReady}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+                aria-label="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

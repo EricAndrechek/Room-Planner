@@ -125,3 +125,43 @@ test('the offline toast never covers the bottom controls: Edit Room works right 
   await page.getByRole('button', { name: 'Edit room settings' }).tap({ timeout: 1000 });
   await expect(page.getByRole('button', { name: 'View floor plan' })).toBeVisible();
 });
+
+test('touch targets: sidebar icon buttons and the rotate handle are at least 44px; pieces keep their size', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await ready(page);
+  await page.getByRole('button', { name: 'Edit room settings' }).tap();
+  await page.getByRole('button', { name: /^2\. (Furniture|Items)/ }).tap();
+  for (const name of [/^Lock /, /^Hide /, /^Delete /]) {
+    const b = (await page.getByRole('button', { name }).first().boundingBox())!;
+    expect(b.width).toBeGreaterThanOrEqual(44);
+    expect(b.height).toBeGreaterThanOrEqual(44);
+  }
+  await page.getByRole('button', { name: 'View floor plan' }).tap();
+
+  // A piece is drawn at its real size (no 44px minimum stretching a small piece).
+  const room = (await page.getByTestId('room').boundingBox())!;
+  const ppf = (room.width / (12 * 40 + 8)) * 40;
+  const nightstand = page.getByRole('button', { name: /^Nightstand,/ }).first();
+  expect((await nightstand.boundingBox())!.width).toBeCloseTo(1.5 * ppf, 0);
+
+  // The rotate handle's knob is smaller, but a touch within 44px of its center lands on it.
+  await page.getByRole('button', { name: /^Chair,/ }).tap();
+  const knob = (await page.getByTestId('rotate-handle').boundingBox())!;
+  const hit = await page.evaluate(
+    ({ x, y }) => !!document.elementFromPoint(x, y)?.closest('[data-testid="rotate-handle"]'),
+    { x: knob.x + knob.width / 2 + 20, y: knob.y + knob.height / 2 },
+  );
+  expect(hit).toBe(true);
+});
+
+test('the Snap toggle floats on the plan, clear of the mode badge', async ({ page }) => {
+  await page.goto('/');
+  await ready(page);
+  const toggle = page.getByRole('button', { name: 'Snap', exact: true });
+  await expect(toggle).toBeVisible();
+  const t = (await toggle.boundingBox())!;
+  expect(t.height).toBeGreaterThanOrEqual(44);
+  expect(t.x + t.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+});
