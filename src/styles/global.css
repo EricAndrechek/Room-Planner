@@ -143,6 +143,20 @@ summary:focus-visible {
   touch-action: none;
 }
 
+/*
+ * Toasts (PwaNotices). Below md the floating zoom pill and the Edit Room/Furniture button sit at
+ * the bottom of the screen (bottom-6, ~3rem tall, plus the safe area), so toasts stack above them
+ * instead of covering them. From md up there are no floating controls: toasts sit at the bottom.
+ */
+.toast-dock {
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+}
+@media (min-width: 48rem) {
+  .toast-dock {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+}
+
 /* Respect the OS "reduce motion" setting: no entrance/transition animation. */
 @media (prefers-reduced-motion: reduce) {
   *,
