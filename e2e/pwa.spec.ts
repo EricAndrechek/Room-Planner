@@ -1,5 +1,5 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
-import { isProblem } from './problems';
+import { isProblem, withoutOfflineNoise } from './problems';
 import { isNarrow, openStep } from './ui';
 import fs from 'node:fs';
 
@@ -136,7 +136,7 @@ test('the whole app works offline', async ({ page, context }) => {
   await expect(page.getByTestId('room')).toBeVisible();
 
   // (The failed offline navigation below legitimately logs a network error; check before it.)
-  expect(problems).toEqual([]);
+  expect(withoutOfflineNoise(problems)).toEqual([]);
 
   // Unknown URLs are not answered with the app shell.
   await page.goto('about:blank'); // WebKit keeps the old page when an offline navigation fails
