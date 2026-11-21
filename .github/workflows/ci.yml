@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # pinned: Playwright WebKit builds need 24.04 libs (ubuntu-latest moved to 26.04)
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -42,7 +42,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+          key: playwright-${{ runner.os }}-${{ env.ImageOS }}-${{ steps.pw.outputs.version }}
 
       - name: Install Playwright chromium (with system deps)
         if: steps.pw-cache.outputs.cache-hit != 'true'

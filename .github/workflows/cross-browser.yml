@@ -22,7 +22,7 @@ concurrency:
 jobs:
   browsers:
     name: ${{ matrix.project }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # pinned: Playwright WebKit builds need 24.04 libs (ubuntu-latest moved to 26.04)
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -64,7 +64,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ steps.pw.outputs.version }}
+          key: playwright-${{ runner.os }}-${{ env.ImageOS }}-${{ matrix.browser }}-${{ steps.pw.outputs.version }}
 
       # Downloads retried: a CDN/apt blip should not turn into a failure email.
       - name: Install Playwright ${{ matrix.browser }} (with system deps)
