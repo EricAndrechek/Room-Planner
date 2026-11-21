@@ -4,6 +4,7 @@ import {
   CircleHelp,
   Edit3,
   FileDown,
+  Keyboard,
   FolderOpen,
   Maximize2,
   Redo2,
@@ -11,6 +12,7 @@ import {
   Undo2,
 } from 'lucide-react';
 import { formatTimeAgo } from '../../lib/browser';
+import { detectPlatform, toolbarHint } from '../../lib/shortcuts';
 import { feetToDisplay, formatArea } from '../../lib/units';
 import { useNow } from '../../hooks/useNow';
 import type { RoomDims, SaveStatus, UnitSystem } from '../../types';
@@ -41,12 +43,15 @@ interface HeaderProps {
   onFit: () => void;
   onShare: () => void;
   onExport: () => void;
+  /** Open the keyboard shortcuts panel (also `?`). */
+  onShowShortcuts: () => void;
 }
 
 /** Top bar: plan name (click to rename), save status, undo/redo, zoom, export, share. */
 export function Header(props: HeaderProps) {
   const [editingName, setEditingName] = useState<string | null>(null);
   const now = useNow();
+  const [platform] = useState(detectPlatform);
 
   const finishRename = (save: boolean) => {
     if (save && editingName?.trim()) props.onRename(editingName.trim());
@@ -134,24 +139,26 @@ export function Header(props: HeaderProps) {
         </div>
 
         <div className="flex items-center">
-          <Tooltip text="Undo">
+          <Tooltip text={`Undo (${toolbarHint('undo', platform)})`}>
             <button
               type="button"
               onClick={props.onUndo}
               disabled={!props.canUndo}
               className="p-1.5 sm:p-2 hover:bg-slate-100 rounded-lg text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
               aria-label="Undo"
+              aria-keyshortcuts="Control+Z Meta+Z"
             >
               <Undo2 className="w-4 h-4" />
             </button>
           </Tooltip>
-          <Tooltip text="Redo">
+          <Tooltip text={`Redo (${toolbarHint('redo', platform)})`}>
             <button
               type="button"
               onClick={props.onRedo}
               disabled={!props.canRedo}
               className="p-1.5 sm:p-2 hover:bg-slate-100 rounded-lg text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
               aria-label="Redo"
+              aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z"
             >
               <Redo2 className="w-4 h-4" />
             </button>
@@ -168,6 +175,18 @@ export function Header(props: HeaderProps) {
         />
 
         <InstallButton variant="header" />
+
+        <Tooltip text="Keyboard shortcuts (?)">
+          <button
+            type="button"
+            onClick={props.onShowShortcuts}
+            className="hidden md:flex p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-600 transition-colors items-center justify-center"
+            aria-label="Keyboard shortcuts"
+            aria-keyshortcuts="?"
+          >
+            <Keyboard className="w-4 h-4" />
+          </button>
+        </Tooltip>
 
         <Tooltip text="Help & FAQ">
           <a

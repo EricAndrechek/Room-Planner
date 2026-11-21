@@ -14,6 +14,8 @@ export interface ShortcutHandlers {
   nudge: (dx: number, dy: number, size: NudgeSize) => boolean;
   /** Rotate the selected item by `degrees` (clockwise if positive); true if it was rotated. */
   rotateSelected: (degrees: number) => boolean;
+  /** `?`: show the keyboard shortcuts. */
+  showShortcuts: () => void;
 }
 
 const isTyping = (target: EventTarget | null) => {
@@ -38,7 +40,8 @@ export const isCanvasTarget = (target: EventTarget | null, canvas: HTMLElement |
 };
 
 /**
- * Keyboard shortcuts. Anywhere (except while typing): Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z redo.
+ * Keyboard shortcuts (listed in lib/shortcuts.ts). Anywhere (except while typing): Ctrl/Cmd+Z
+ * undo, Ctrl/Cmd+Shift+Z redo, `?` the shortcuts panel.
  * Only with focus on the canvas or one of its pieces (or nothing focused): Delete/Backspace
  * delete, Escape deselect, arrows nudge (Shift: a bigger step; Alt/Option or Ctrl/Cmd: a fine
  * step), R rotate 90deg (Shift+R: back), Alt/Option+R rotate 1deg (with Shift: back). Off when
@@ -66,6 +69,12 @@ export function useKeyboardShortcuts(
         e.preventDefault();
         if (e.shiftKey) h.redo();
         else h.undo();
+        return;
+      }
+      // `?` (Shift+/ on most layouts) works from anywhere except a text field.
+      if (key === '?' && !mod && !e.altKey) {
+        e.preventDefault();
+        h.showShortcuts();
         return;
       }
       if (e.defaultPrevented || !isCanvasTarget(e.target, canvasRef.current)) return;

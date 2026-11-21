@@ -44,6 +44,7 @@ import { PopoverRootContext } from './PopoverRoot';
 import { RoomCanvas } from './RoomCanvas';
 import { RoomSetupPanel } from './RoomSetupPanel';
 import { ShareModal } from './ShareModal';
+import { ShortcutsDialog } from './ShortcutsDialog';
 import { Sidebar } from './Sidebar';
 import { SnapOverlay } from './SnapOverlay';
 import { SnapToggle } from './SnapToggle';
@@ -74,6 +75,7 @@ export function Planner({ storage, initial }: PlannerProps) {
   const [shareOpen, setShareOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [roomSetupExpanded, setRoomSetupExpanded] = useState(false);
   const [furnitureExpanded, setFurnitureExpanded] = useState(false);
 
@@ -241,6 +243,7 @@ export function Planner({ storage, initial }: PlannerProps) {
         furniture.moveItem(selectedItem.id, dirX * step, dirY * step, size !== 'fine');
         return true;
       },
+      showShortcuts: () => setShortcutsOpen(true),
       rotateSelected: (degrees) => {
         if (!canEditSelected) return false;
         furniture.changeItem(selectedItem.id, {
@@ -250,7 +253,7 @@ export function Planner({ storage, initial }: PlannerProps) {
       },
     },
     containerRef,
-    !shareOpen && !filesOpen && !exportOpen,
+    !shareOpen && !filesOpen && !exportOpen && !shortcutsOpen,
   );
 
   // Guides + measurements for the dragged piece, or (subtler) the selected one, in furniture mode.
@@ -298,6 +301,7 @@ export function Planner({ storage, initial }: PlannerProps) {
           onZoomOut={zoomOut}
           onFit={fitToView}
           onShare={() => setShareOpen(true)}
+          onShowShortcuts={() => setShortcutsOpen(true)}
           onExport={() => setExportOpen(true)}
         />
 
@@ -441,6 +445,8 @@ export function Planner({ storage, initial }: PlannerProps) {
             }
           />
         </div>
+
+        <ShortcutsDialog isOpen={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
 
         <ShareModal
           isOpen={shareOpen}

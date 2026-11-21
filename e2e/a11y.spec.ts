@@ -117,6 +117,20 @@ for (const [name, viewport] of [
       if (!isMobile) await page.mouse.up();
     });
 
+    test('planner with the keyboard shortcuts panel open has no serious violations', async ({
+      page,
+    }) => {
+      await page.goto('/');
+      await ready(page);
+      await page.keyboard.press('?');
+      // Found by its heading (see the Export dialog test above for why not by name).
+      const dialog = page
+        .getByRole('dialog')
+        .filter({ has: page.getByRole('heading', { name: 'Keyboard shortcuts' }) });
+      await expect(dialog).toBeVisible();
+      await expectNoSeriousViolations(page);
+    });
+
     test('help page has no serious violations', async ({ page }) => {
       await page.goto('/help/');
       await expectNoSeriousViolations(page);
@@ -341,4 +355,47 @@ test('toasts live in a polite region that is always present (so they are announc
   const dock = page.getByTestId('pwa-toast-dock');
   await expect(dock).toHaveAttribute('role', 'status');
   await expect(dock).toHaveAttribute('aria-live', 'polite');
+});
+
+test("? opens the keyboard shortcuts, grouped, with this keyboard's keys; Escape closes it", async ({
+  page,
+  isMobile,
+}) => {
+  await page.goto('/');
+  await ready(page);
+  await openStep(page, 'furniture');
+  await viewPlan(page);
+  const piece = page.getByRole('button', { name: /^Bed,/ });
+  await piece.focus();
+  await page.keyboard.press('?');
+  const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+  await expect(dialog).toBeVisible();
+  for (const group of ['Move', 'Rotate', 'Edit', 'View']) {
+    await expect(dialog.getByRole('heading', { name: group })).toBeVisible();
+  }
+  // The same detection as the app (the emulated device's userAgentData wins over navigator.platform).
+  const mac = await page.evaluate(() => {
+    const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
+    return /mac|iphone|ipad|ipod/i.test(nav.userAgentData?.platform || nav.platform || '');
+  });
+  const undo = dialog
+    .locator('div')
+    .filter({ has: page.getByText('Undo', { exact: true }) })
+    .last();
+  await expect(undo.locator('kbd').first()).toHaveText(mac ? '⌘' : 'Ctrl');
+  // Canvas keys do nothing while the panel is open.
+  await page.keyboard.press('Delete');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(piece).toBeFocused();
+  await expect(piece).toHaveCount(1);
+
+  if (!isMobile) {
+    // Also from the top bar, whose Undo/Redo tooltips show their keys.
+    await page.getByRole('button', { name: 'Keyboard shortcuts' }).click();
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Undo' }).hover({ force: true });
+    await expect(page.getByRole('tooltip')).toHaveText(mac ? 'Undo (⌘Z)' : 'Undo (Ctrl+Z)');
+  }
 });

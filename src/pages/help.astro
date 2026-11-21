@@ -1,6 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
 import { withBase } from '../lib/paths';
+import { SHORTCUT_GROUPS, shortcutKeys } from '../lib/shortcuts';
 import { SITE_NAME } from '../lib/site';
 
 const title = 'Help & FAQ — Room Planner';
@@ -15,39 +16,11 @@ const units = [
   { system: 'Centimeters', example: '380 cm', use: 'Precision metric' },
 ];
 
-const shortcuts = [
-  { keys: ['Ctrl/⌘', 'Z'], action: 'Undo' },
-  { keys: ['Ctrl/⌘', 'Shift', 'Z'], action: 'Redo' },
-  {
-    keys: ['Delete / Backspace'],
-    action: 'Delete the selected item (or, in Room Setup, the selected door or window)',
-  },
-  { keys: ['Escape'], action: 'Deselect' },
-  {
-    keys: ['Arrow keys'],
-    action:
-      'Move the selected item by 3 inches (5 cm in metric units); with Snap on it lines up with a nearby wall or edge',
-  },
-  { keys: ['Shift', 'Arrow keys'], action: 'Move by 1 foot (25 cm)' },
-  {
-    keys: ['Alt/Option', 'Arrow keys'],
-    action: 'Move by 1 inch (1 cm), exactly, without snapping. Ctrl/⌘ + arrow keys does the same',
-  },
-  { keys: ['R'], action: 'Rotate the selected item by 90°' },
-  { keys: ['Shift', 'R'], action: 'Rotate the selected item by 90° the other way' },
-  { keys: ['Alt/Option', 'R'], action: 'Rotate the selected item by 1° clockwise' },
-  {
-    keys: ['Alt/Option', 'Shift', 'R'],
-    action: 'Rotate the selected item by 1° counter-clockwise',
-  },
-  { keys: ['Alt/Option', 'drag'], action: 'Move or rotate a piece without snapping' },
-  { keys: ['Shift', 'rotate handle'], action: 'Rotate in 15° steps' },
-  {
-    keys: ['Tab'],
-    action:
-      'Move between furniture pieces (or door and window handles in Room Setup); focusing one selects it, so the keys above work without a mouse. They act only while the floor plan (or nothing) has focus, never while you are in the sidebar or a dialog',
-  },
-];
+// One list for the app's shortcuts panel (`?`) and this page: lib/shortcuts.ts.
+const shortcutGroups = SHORTCUT_GROUPS.map((g) => ({
+  title: g.title,
+  rows: g.shortcuts.map((s) => ({ combos: shortcutKeys(s, 'generic'), action: s.action })),
+}));
 
 const sections = [
   { id: 'getting-started', label: 'Getting started' },
@@ -408,6 +381,11 @@ const sections = [
 
       <section id="shortcuts">
         <h2>Keyboard shortcuts</h2>
+        <p>
+          In the planner, press <kbd>?</kbd> (or the keyboard button in the top bar) to see these
+          with your keyboard's keys (⌘ ⌥ on a Mac, Ctrl Alt elsewhere). Shortcuts act while the
+          floor plan (or nothing) has focus, never while you type in the sidebar or a dialog.
+        </p>
         <div class="overflow-x-auto">
           <table class="w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
             <thead class="bg-slate-100 text-left">
@@ -416,23 +394,39 @@ const sections = [
                 <th class="p-2">Action</th>
               </tr>
             </thead>
-            <tbody>
-              {shortcuts.map((s) => (
-                <tr class="border-t border-slate-200 bg-white">
-                  <td class="p-2 whitespace-nowrap">
-                    {s.keys.map((k, i) => (
-                      <>
-                        {i > 0 && ' + '}
-                        <kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded-sm text-xs font-mono">
-                          {k}
-                        </kbd>
-                      </>
-                    ))}
-                  </td>
-                  <td class="p-2">{s.action}</td>
+            {shortcutGroups.map((g) => (
+              <tbody>
+                <tr class="border-t border-slate-200 bg-slate-50">
+                  <th
+                    colspan="2"
+                    scope="colgroup"
+                    class="p-2 text-left text-xs uppercase tracking-wider text-slate-600"
+                  >
+                    {g.title}
+                  </th>
                 </tr>
-              ))}
-            </tbody>
+                {g.rows.map((r) => (
+                  <tr class="border-t border-slate-200 bg-white">
+                    <td class="p-2 whitespace-nowrap">
+                      {r.combos.map((combo, ci) => (
+                        <>
+                          {ci > 0 && ' or '}
+                          {combo.map((k, i) => (
+                            <>
+                              {i > 0 && ' + '}
+                              <kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded-sm text-xs font-mono">
+                                {k}
+                              </kbd>
+                            </>
+                          ))}
+                        </>
+                      ))}
+                    </td>
+                    <td class="p-2">{r.action}</td>
+                  </tr>
+                ))}
+              </tbody>
+            ))}
           </table>
         </div>
       </section>
