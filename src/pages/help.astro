@@ -407,18 +407,21 @@ const sections = [
                 </tr>
                 {g.rows.map((r) => (
                   <tr class="border-t border-slate-200 bg-white">
-                    <td class="p-2 whitespace-nowrap">
+                    <td class="p-2 leading-7">
+                      {/* Each combination stays on one line; alternatives wrap on phones. */}
                       {r.combos.map((combo, ci) => (
                         <>
                           {ci > 0 && ' or '}
-                          {combo.map((k, i) => (
-                            <>
-                              {i > 0 && ' + '}
-                              <kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded-sm text-xs font-mono">
-                                {k}
-                              </kbd>
-                            </>
-                          ))}
+                          <span class="whitespace-nowrap">
+                            {combo.map((k, i) => (
+                              <>
+                                {i > 0 && ' + '}
+                                <kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded-sm text-xs font-mono">
+                                  {k}
+                                </kbd>
+                              </>
+                            ))}
+                          </span>
                         </>
                       ))}
                     </td>
