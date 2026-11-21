@@ -32,6 +32,8 @@ interface RoomCanvasProps {
   onSelectItem: (item: FurnitureItem) => void;
   onDoorPointerDown: (e: ReactPointerEvent<HTMLDivElement>, door: Door) => void;
   onWindowPointerDown: (e: ReactPointerEvent<HTMLDivElement>, win: RoomWindow) => void;
+  /** Doors whose clearance to highlight (a piece being moved is in their way). */
+  highlightDoorIds?: readonly Id[];
   /** Drawn inside the room, above the furniture (guides and measurements). */
   overlay?: ReactNode;
   /** Floating controls over the canvas (the Snap chip on phones). */
@@ -63,6 +65,7 @@ export function RoomCanvas({
   onWindowPointerDown,
   overlay,
   controls,
+  highlightDoorIds = [],
 }: RoomCanvasProps) {
   const { roomDims, doors, windows, items } = layout;
   const isRoomSetup = designMode === DESIGN_MODES.ROOM_SETUP;
@@ -151,6 +154,7 @@ export function RoomCanvas({
               zoom={zoom}
               onSelect={() => onSelectOpening('door', door.id)}
               onHandlePointerDown={(e) => onDoorPointerDown(e, door)}
+              highlight={highlightDoorIds.includes(door.id)}
             />
           ))}
           {windows.map((win) => (

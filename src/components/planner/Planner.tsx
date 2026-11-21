@@ -20,7 +20,8 @@ import { track } from '../../lib/analytics';
 import type { BootState } from '../../lib/boot';
 import { migrateColor } from '../../lib/colors';
 import { DESIGN_MODES } from '../../lib/constants';
-import { computeItemWarnings, normalizeDegrees } from '../../lib/geometry';
+import { normalizeDegrees } from '../../lib/geometry';
+import { computeLayoutWarnings } from '../../lib/openings';
 import { toShareConfig } from '../../lib/layout';
 import { HELP_PATH } from '../../lib/paths';
 import { nudgeStep } from '../../lib/units';
@@ -116,8 +117,13 @@ export function Planner({ storage, initial }: PlannerProps) {
 
   const isRoomSetup = designMode === DESIGN_MODES.ROOM_SETUP;
   const warnings = useMemo(
-    () => computeItemWarnings(layout.items, layout.roomDims),
-    [layout.items, layout.roomDims],
+    () =>
+      computeLayoutWarnings({
+        items: layout.items,
+        doors: layout.doors,
+        roomDims: layout.roomDims,
+      }),
+    [layout.items, layout.doors, layout.roomDims],
   );
   const live = useAnnouncements(layout, warnings, unitSystem, projects.saveStatus);
   const shareConfig = useMemo(
@@ -249,6 +255,9 @@ export function Planner({ storage, initial }: PlannerProps) {
 
   // Guides + measurements for the dragged piece, or (subtler) the selected one, in furniture mode.
   const overlayItemId = dragFrame?.id ?? (!isRoomSetup ? selectedItem?.id : undefined);
+  // While a piece is moved or turned into a door's way, that door's clearance lights up.
+  const movingId = dragFrame?.id ?? rotateFrame?.id;
+  const highlightDoorIds = movingId !== undefined ? warnings.get(movingId)?.doorIds : undefined;
 
   // --- Render --------------------------------------------------------------------------------
   const colorPickerItem =
@@ -413,6 +422,7 @@ export function Planner({ storage, initial }: PlannerProps) {
             onSelectItem={(item) => selectItem(item.id)}
             onDoorPointerDown={(e, door) => openings.startOpeningDrag(e, door.id, 'doors')}
             onWindowPointerDown={(e, win) => openings.startOpeningDrag(e, win.id, 'windows')}
+            highlightDoorIds={highlightDoorIds}
             overlay={
               overlayItemId !== undefined && (
                 <SnapOverlay

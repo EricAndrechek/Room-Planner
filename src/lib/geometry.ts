@@ -93,9 +93,70 @@ export const isItemInBounds = (item: Box, room: RoomDims): boolean =>
       c.y <= room.height + GEOMETRY_EPSILON,
   );
 
+// --- Polygons -------------------------------------------------------------------------------
+
+/** Move every vertex `by` towards the centroid (so shapes that only touch do not overlap). */
+export const shrinkPolygon = (pts: Point[], by: number): Point[] => {
+  const cx = pts.reduce((a, p) => a + p.x, 0) / pts.length;
+  const cy = pts.reduce((a, p) => a + p.y, 0) / pts.length;
+  return pts.map((p) => {
+    const dx = p.x - cx;
+    const dy = p.y - cy;
+    const d = Math.hypot(dx, dy) || 1;
+    const k = Math.max(0, d - by) / d;
+    return { x: cx + dx * k, y: cy + dy * k };
+  });
+};
+
+const cross = (o: Point, a: Point, b: Point) =>
+  (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+
+/** Whether segments ab and cd cross at a point inside both (not merely touching). */
+const segmentsCross = (a: Point, b: Point, c: Point, d: Point): boolean => {
+  const d1 = cross(c, d, a);
+  const d2 = cross(c, d, b);
+  const d3 = cross(a, b, c);
+  const d4 = cross(a, b, d);
+  return d1 * d2 < 0 && d3 * d4 < 0;
+};
+
+/** Even-odd point-in-polygon test (any simple polygon, convex or not). */
+export const pointInPolygon = (p: Point, poly: Point[]): boolean => {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i]!;
+    const b = poly[j]!;
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) {
+      inside = !inside;
+    }
+  }
+  return inside;
+};
+
+/**
+ * Whether two simple polygons (convex or not, e.g. a rotated piece and a door's swing) overlap:
+ * an edge of one crosses an edge of the other, or one has a vertex inside the other.
+ */
+export const polygonsOverlap = (a: Point[], b: Point[]): boolean => {
+  for (let i = 0; i < a.length; i++) {
+    const a1 = a[i]!;
+    const a2 = a[(i + 1) % a.length]!;
+    for (let j = 0; j < b.length; j++) {
+      if (segmentsCross(a1, a2, b[j]!, b[(j + 1) % b.length]!)) return true;
+    }
+  }
+  return a.some((p) => pointInPolygon(p, b)) || b.some((p) => pointInPolygon(p, a));
+};
+
 export interface ItemWarning {
   outOfBounds: boolean;
   collision: boolean;
+  /** In a door's swing, fold or sliding track (softer warning; see `computeLayoutWarnings`). */
+  blocksDoor?: boolean;
+  /** Standing in a doorway (softer warning). */
+  blocksDoorway?: boolean;
+  /** The doors it blocks. */
+  doorIds?: Id[];
 }
 
 /**

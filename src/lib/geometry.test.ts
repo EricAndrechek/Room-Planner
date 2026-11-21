@@ -8,7 +8,11 @@ import {
   constrainOpening,
   getRotatedCorners,
   isItemInBounds,
+  pointInPolygon,
+  polygonsOverlap,
+  shrinkPolygon,
   snapAngle,
+  type Point,
   wallLength,
 } from './geometry';
 import type { Door, FurnitureItem } from '../types';
@@ -205,5 +209,42 @@ describe('computeFitZoom', () => {
     expect(computeFitZoom({ width: 960, height: 480 }, { width: 12, height: 12 }, 40)).toBe(1);
     expect(computeFitZoom({ width: 100, height: 100 }, { width: 100, height: 100 }, 40)).toBe(0.25);
     expect(computeFitZoom({ width: 5000, height: 5000 }, { width: 1, height: 1 }, 40)).toBe(2);
+  });
+});
+
+describe('polygons', () => {
+  const sq = (x: number, y: number, w = 1): Point[] => [
+    { x, y },
+    { x: x + w, y },
+    { x: x + w, y: y + w },
+    { x, y: y + w },
+  ];
+  // An L shape (not convex): the notch at the top right is outside.
+  const ell: Point[] = [
+    { x: 0, y: 0 },
+    { x: 1, y: 0 },
+    { x: 1, y: 1 },
+    { x: 2, y: 1 },
+    { x: 2, y: 2 },
+    { x: 0, y: 2 },
+  ];
+
+  it('point in polygon, convex or not', () => {
+    expect(pointInPolygon({ x: 0.5, y: 0.5 }, ell)).toBe(true);
+    expect(pointInPolygon({ x: 1.5, y: 0.5 }, ell)).toBe(false);
+    expect(pointInPolygon({ x: 1.5, y: 1.5 }, ell)).toBe(true);
+  });
+
+  it('overlap: crossing edges, containment either way, the notch of a concave shape', () => {
+    expect(polygonsOverlap(sq(0.5, 0.5), sq(0, 0))).toBe(true);
+    expect(polygonsOverlap(sq(0, 0, 4), sq(1, 1))).toBe(true);
+    expect(polygonsOverlap(sq(1, 1), sq(0, 0, 4))).toBe(true);
+    expect(polygonsOverlap(sq(1.2, 0.2, 0.5), ell)).toBe(false); // in the notch
+    expect(polygonsOverlap(sq(3, 3), sq(0, 0))).toBe(false);
+  });
+
+  it('shapes that only touch do not overlap once shrunk by an epsilon', () => {
+    expect(polygonsOverlap(shrinkPolygon(sq(1, 0), 0.001), sq(0, 0))).toBe(false);
+    expect(polygonsOverlap(shrinkPolygon(sq(0.9, 0), 0.001), sq(0, 0))).toBe(true);
   });
 });

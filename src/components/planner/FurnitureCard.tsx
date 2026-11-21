@@ -1,7 +1,8 @@
 import { memo, useId, useRef } from 'react';
-import { AlertTriangle, Eye, EyeOff, Lock, Trash2, Unlock } from 'lucide-react';
+import { AlertTriangle, DoorOpen, Eye, EyeOff, Lock, Trash2, Unlock } from 'lucide-react';
 import { migrateColor } from '../../lib/colors';
 import { normalizeDegrees, warningText, type ItemWarning } from '../../lib/geometry';
+import { doorBlockText } from '../../lib/openings';
 import { clamp } from '../../lib/units';
 import type { FurnitureItem, Id, RoomDims, UnitSystem } from '../../types';
 import { ColorPicker } from './ColorPicker';
@@ -53,6 +54,10 @@ export const FurnitureCard = memo(function FurnitureCard({
   const hidden = item.visible === false;
   const hasWarning = !hidden && !!warning && (warning.outOfBounds || warning.collision);
   const text = warning ? warningText(warning) : '';
+  const doorBlock =
+    !hidden && warning && (warning.blocksDoor || warning.blocksDoorway)
+      ? doorBlockText({ door: !!warning.blocksDoor, doorway: !!warning.blocksDoorway })
+      : '';
   const color = migrateColor(item.color);
 
   return (
@@ -158,6 +163,18 @@ export const FurnitureCard = memo(function FurnitureCard({
           <p className="text-[10px] text-red-700 flex items-center justify-center gap-1">
             <AlertTriangle className="w-3 h-3" />
             {text}
+          </p>
+        </div>
+      )}
+
+      {doorBlock && (
+        <div
+          className="mb-2 py-1.5 px-2 bg-amber-50 border border-amber-300 rounded-sm text-center"
+          data-testid="card-door-block"
+        >
+          <p className="text-[10px] text-amber-900 flex items-center justify-center gap-1">
+            <DoorOpen className="w-3 h-3" aria-hidden="true" />
+            {doorBlock}
           </p>
         </div>
       )}

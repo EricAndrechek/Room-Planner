@@ -53,10 +53,16 @@ export function describeNewWarnings(
   const parts: string[] = [];
   for (const item of items) {
     const now = next.get(item.id);
-    if (!now || (!now.collision && !now.outOfBounds)) continue;
+    if (!now) continue;
     const was = prev.get(item.id);
-    const isNew = (now.collision && !was?.collision) || (now.outOfBounds && !was?.outOfBounds);
-    if (isNew) parts.push(`Warning: ${item.label}. ${warningText(now, true)}`);
+    if (now.collision || now.outOfBounds) {
+      const isNew = (now.collision && !was?.collision) || (now.outOfBounds && !was?.outOfBounds);
+      if (isNew) parts.push(`Warning: ${item.label}. ${warningText(now, true)}`);
+    }
+    if (now.blocksDoor && !was?.blocksDoor) parts.push(`${item.label} blocks a door`);
+    else if (now.blocksDoorway && !now.blocksDoor && !was?.blocksDoorway && !was?.blocksDoor) {
+      parts.push(`${item.label} is in a doorway`);
+    }
   }
   return parts.slice(0, 2).join('. ');
 }

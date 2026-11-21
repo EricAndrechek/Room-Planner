@@ -1,5 +1,6 @@
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
-import { SWING_ARC_STROKE, doorStyles, windowStyles } from '../../lib/openings';
+import { DOOR_TYPES, PIXELS_PER_UNIT } from '../../lib/constants';
+import { SWING_ARC_STROKE, doorStyles, doorSvg, windowStyles } from '../../lib/openings';
 import { feetToDisplay } from '../../lib/units';
 import type { Door, RoomDims, RoomWindow, UnitSystem } from '../../types';
 
@@ -33,10 +34,10 @@ const handleScale = (handle: { width?: unknown }, zoom: number) => {
 
 const handleLabel = (
   kind: 'Door' | 'Window',
-  o: { wall: string; position: number; width: number },
+  o: { wall: string; position: number; width: number; type?: string },
   unitSystem: UnitSystem,
 ) =>
-  `${kind} handle, ${feetToDisplay(o.width, unitSystem)} wide on the ${o.wall} wall, ${feetToDisplay(o.position, unitSystem)} along the wall. Arrow keys slide it.`;
+  `${kind} handle${o.type ? ` (${DOOR_TYPES.find((t) => t.value === o.type)?.label ?? o.type})` : ''}, ${feetToDisplay(o.width, unitSystem)} wide on the ${o.wall} wall, ${feetToDisplay(o.position, unitSystem)} along the wall. Arrow keys slide it.`;
 
 export function DoorShape({
   opening: door,
@@ -47,21 +48,54 @@ export function DoorShape({
   zoom,
   onSelect,
   onHandlePointerDown,
-}: OpeningProps<Door>) {
+  highlight = false,
+}: OpeningProps<Door> & { highlight?: boolean }) {
   const s = doorStyles(door, room);
+  const d = doorSvg(door, room);
   return (
     <>
       <div style={s.gap} />
       {/* Architectural jamb lines showing the wall break */}
       <div style={s.jamb1} />
       <div style={s.jamb2} />
-      {!s.sliding && (
-        <svg style={s.arc} aria-hidden="true" data-door-swing>
-          <path d={s.arcPath} fill="none" {...SWING_ARC_STROKE} />
-        </svg>
-      )}
-      {!s.sliding && <div style={s.panel} />}
-      {s.sliding && <div style={s.track} />}
+      {/* The door itself (leaves, arcs, panels, pocket), drawn from the shared door geometry. */}
+      <svg
+        className="absolute left-0 top-0 overflow-visible pointer-events-none"
+        width={room.width * PIXELS_PER_UNIT}
+        height={room.height * PIXELS_PER_UNIT}
+        aria-hidden="true"
+        data-door-swing
+        data-door-type={door.type || 'swing-in'}
+        data-blocked={highlight ? 'true' : undefined}
+      >
+        {highlight && (
+          // A piece is being moved into this door's way: show the area it needs.
+          <g
+            fill="#f59e0b"
+            fillOpacity={0.22}
+            stroke="#d97706"
+            strokeWidth={1.5}
+            strokeDasharray="5 3"
+          >
+            {d.clearance.map((c, i) => (
+              <path key={i} d={c} />
+            ))}
+            <path d={d.doorway} fillOpacity={0.12} />
+          </g>
+        )}
+        <g opacity={0.5}>
+          {d.arcs.map((a, i) => (
+            <path key={i} d={a} fill="none" {...SWING_ARC_STROKE} />
+          ))}
+        </g>
+        {d.panels.map((p, i) => (
+          <path key={i} d={p} fill="#cbd5e1" stroke="#64748b" strokeWidth={1} />
+        ))}
+        {d.pocket && (
+          // A light dashed line along the (dark) wall: the cavity the door slides into.
+          <path d={d.pocket} stroke="#e2e8f0" strokeWidth={2} strokeDasharray="5 3" />
+        )}
+      </svg>
       {!isLocked && (
         <div
           style={{ ...s.handle, ...handleScale(s.handle, zoom), touchAction: 'none' }}

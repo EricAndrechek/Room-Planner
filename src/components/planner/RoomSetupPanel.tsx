@@ -14,6 +14,7 @@ import type { AddedOpening } from '../../hooks/useOpenings';
 import { prefersReducedMotion } from '../../lib/browser';
 import { DOOR_TYPES, WALL_OPTIONS } from '../../lib/constants';
 import { wallLength } from '../../lib/geometry';
+import { doorSwingAngle, hasHingeSide, isSwingDoor } from '../../lib/openings';
 import { feetToDisplay, formatArea } from '../../lib/units';
 import type { Door, DoorType, Id, RoomDims, RoomWindow, UnitSystem, Wall } from '../../types';
 import { DimensionInput } from './DimensionInput';
@@ -70,6 +71,10 @@ function useCardHighlight(highlight: AddedOpening | null | undefined) {
   const isHighlighted = (o: AddedOpening) => key === cardKey(o) && faded !== key;
   return { register, isHighlighted };
 }
+
+/** What a door's `hinge` setting is called for its type. */
+const hingeWord = (type: DoorType | undefined) =>
+  type === 'bifold' ? 'Folds to' : type === 'pocket' ? 'Pocket' : 'Hinge';
 
 const wallLabel = (w: Wall) => w.charAt(0).toUpperCase() + w.slice(1);
 const plural = (n: number, word: string) => `${n} ${word}${n !== 1 ? 's' : ''}`;
@@ -330,19 +335,59 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                       </div>
                     </div>
 
-                    {door.type !== 'sliding' && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          props.onUpdateDoor(door.id, {
-                            hinge: door.hinge === 'left' ? 'right' : 'left',
-                          })
-                        }
-                        className="w-full py-1.5 px-2 bg-slate-100 hover:bg-slate-200 rounded-sm text-[10px] font-medium text-slate-600 flex items-center justify-center gap-1 transition-colors"
-                      >
-                        <ArrowLeftRight className="w-3 h-3" /> Hinge:{' '}
-                        {door.hinge === 'left' ? 'Left' : 'Right'}
-                      </button>
+                    {(hasHingeSide(door.type) || isSwingDoor(door.type)) && (
+                      <div className="flex gap-2">
+                        {hasHingeSide(door.type) && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              props.onUpdateDoor(door.id, {
+                                hinge: door.hinge === 'left' ? 'right' : 'left',
+                              })
+                            }
+                            className="flex-1 py-1.5 px-2 bg-slate-100 hover:bg-slate-200 rounded-sm text-[10px] font-medium text-slate-600 flex items-center justify-center gap-1 transition-colors"
+                          >
+                            <ArrowLeftRight className="w-3 h-3" aria-hidden="true" />{' '}
+                            {hingeWord(door.type)}: {door.hinge === 'left' ? 'Left' : 'Right'}
+                          </button>
+                        )}
+                        {isSwingDoor(door.type) && (
+                          <div
+                            role="radiogroup"
+                            aria-label={`Door ${index + 1} opens`}
+                            className="flex-1 flex bg-slate-100 rounded-sm p-0.5"
+                          >
+                            {([90, 180] as const).map((angle) => {
+                              const on = doorSwingAngle(door) === angle;
+                              return (
+                                <button
+                                  key={angle}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={on}
+                                  title={
+                                    angle === 90
+                                      ? 'Opens to 90°'
+                                      : 'Opens to 180°, flat against the wall'
+                                  }
+                                  onClick={() =>
+                                    props.onUpdateDoor(door.id, {
+                                      swingAngle: angle === 180 ? 180 : undefined,
+                                    })
+                                  }
+                                  className={`flex-1 py-1 text-[10px] font-medium rounded-sm transition-colors ${
+                                    on
+                                      ? 'bg-white text-indigo-700 shadow-xs'
+                                      : 'text-slate-600 hover:text-slate-800'
+                                  }`}
+                                >
+                                  {angle}°
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 );

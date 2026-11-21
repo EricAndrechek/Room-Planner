@@ -207,9 +207,17 @@ const sections = [
             <strong>Width</strong> — the opening size; it can't exceed the wall.
           </li>
           <li>
-            <strong>Door type</strong> — <em>swing in</em>, <em>swing out</em> or <em>sliding</em>.
-            Swing doors show their swing arc so you can keep it clear of furniture; use{' '}
-            <strong>Hinge</strong> to flip which side they open from.
+            <strong>Door type</strong> — <em>swing in</em> or <em>swing out</em> (one hinged door),{' '}
+            <em>double (French)</em> in or out (two leaves), <em>sliding</em> (bypass or barn panels
+            along the inside of the wall), <em>pocket</em> (slides into the wall),
+            <em>bi-fold</em> (folds into the room) or <em>opening</em> (a doorway with no door).
+            Swing doors show their swing arc so you can keep it clear of furniture; use
+            <strong>Hinge</strong> to flip which side they open from (for a bi-fold, the side it
+            folds to; for a pocket door, the side of its pocket).
+          </li>
+          <li>
+            <strong>Opens to 90° or 180°</strong> — swing and double doors open to 90° by default;
+            choose 180° for a door that opens flat against the wall.
           </li>
         </ul>
       </section>
@@ -278,6 +286,16 @@ const sections = [
         <p>
           A piece gets a red border and ⚠️ badge when it overlaps another visible piece or sticks
           out of the room. Rotation is taken into account, and pieces that only touch are fine.
+        </p>
+        <p>
+          A softer amber, dashed border means a piece is in a door's way:{' '}
+          <strong>Blocks door</strong>
+          when it is where an inward door swings (both leaves of a double door, at the angle it
+          opens to), where a bi-fold folds or where sliding panels run, and{' '}
+          <strong>Blocks doorway</strong>
+          when it stands in the passage just inside any door or opening (about 1½ ft / 45 cm deep).
+          While you drag a piece into a door's way, the area that door needs lights up. Doors that
+          swing outward only need their doorway clear. Hidden pieces never count.
         </p>
       </section>
 

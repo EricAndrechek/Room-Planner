@@ -3,7 +3,21 @@ import type { Door, DoorType, FurnitureItem, Hinge, RoomDims, RoomWindow, Wall }
 import { PIXELS_PER_UNIT as P } from './constants';
 import { checkItemsCollision, type Point } from './geometry';
 import { defaultLayout } from './layout';
-import { OPENING_GAP, doorSwingGeometry, doorStyles, findOpeningSpot } from './openings';
+import {
+  DOORWAY_DEPTH,
+  OPENING_GAP,
+  SLIDING_DEPTH,
+  computeDoorBlocks,
+  computeLayoutWarnings,
+  doorBlockText,
+  doorGeometry,
+  doorSvg,
+  doorSwingAngle,
+  doorSwingGeometry,
+  findOpeningSpot,
+  hasHingeSide,
+  isSwingDoor,
+} from './openings';
 
 const room: RoomDims = { width: 14, height: 10 };
 const WIDTH = 3;
@@ -113,35 +127,35 @@ describe('doorSwingGeometry', () => {
   });
 });
 
-describe('doorStyles (canvas) draws from the shared geometry', () => {
+describe('doorSvg (canvas) draws from the shared geometry', () => {
   it.each(cases)('%s wall, %s, hinge %s', (wall, type, hinge) => {
     const door: Door = { id: 1, width: WIDTH, position: POSITION, wall, hinge, type };
     const g = doorSwingGeometry(door, room)!;
-    const s = doorStyles(door, room);
-    const left = s.arc.left as number;
-    const top = s.arc.top as number;
-    const nums = s.arcPath.match(/-?\d+(\.\d+)?/g)!.map(Number);
-    // "M x0 y0 A r r 0 0 sweep x1 y1", in the arc box's local pixels.
+    const d = doorSvg(door, room);
+    expect(d.arcs).toHaveLength(1);
+    const nums = d.arcs[0]!.match(/-?\d+(\.\d+)?/g)!.map(Number);
+    // "M x0 y0 A r r 0 0 sweep x1 y1", in canvas pixels.
     const [x0, y0, rx, , , , sweep, x1, y1] = nums;
-    expect([left + x0!, top + y0!]).toEqual([g.closedEnd.x * P, g.closedEnd.y * P]);
-    expect([left + x1!, top + y1!]).toEqual([g.openEnd.x * P, g.openEnd.y * P]);
+    expect([x0, y0]).toEqual([g.closedEnd.x * P, g.closedEnd.y * P]);
+    expect([x1, y1]).toEqual([g.openEnd.x * P, g.openEnd.y * P]);
     expect(rx).toBe(WIDTH * P);
     expect(sweep).toBe(g.sweep);
-
-    // The leaf runs from the hinge to the open end.
-    const p = s.panel as { left: number; top: number; width: number; height: number };
+    // The leaf runs from the hinge to the open end, 4px thick.
+    const pts = d.panels[0]!.match(/-?\d+(\.\d+)?/g)!.map(Number);
+    const xs = pts.filter((_, i) => i % 2 === 0);
+    const ys = pts.filter((_, i) => i % 2 === 1);
     for (const pt of [g.hinge, g.openEnd]) {
-      expect(pt.x * P).toBeGreaterThanOrEqual(p.left);
-      expect(pt.x * P).toBeLessThanOrEqual(p.left + p.width);
-      expect(pt.y * P).toBeGreaterThanOrEqual(p.top);
-      expect(pt.y * P).toBeLessThanOrEqual(p.top + p.height);
+      expect(xs).toContain(pt.x * P);
+      expect(ys).toContain(pt.y * P);
     }
-    expect(Math.max(p.width, p.height)).toBe(WIDTH * P);
-    expect(Math.min(p.width, p.height)).toBe(4);
+    const w = Math.max(...xs) - Math.min(...xs);
+    const h = Math.max(...ys) - Math.min(...ys);
+    expect(Math.max(w, h)).toBeCloseTo(WIDTH * P, 6);
+    expect(Math.min(w, h)).toBeCloseTo(4, 6);
   });
 
-  it('draws a track and no arc for sliding doors', () => {
-    const door: Door = {
+  it('draws two panels and no arc for sliding doors, a pocket line for pocket doors', () => {
+    const base: Door = {
       id: 1,
       width: 3,
       position: 2,
@@ -149,10 +163,213 @@ describe('doorStyles (canvas) draws from the shared geometry', () => {
       hinge: 'left',
       type: 'sliding',
     };
-    const s = doorStyles(door, room);
-    expect(s.sliding).toBe(true);
-    expect(s.arcPath).toBe('');
-    expect(s.track).toMatchObject({ left: 2 * P, width: 3 * P });
+    const sliding = doorSvg(base, room);
+    expect(sliding.arcs).toEqual([]);
+    expect(sliding.panels).toHaveLength(2);
+    const pocket = doorSvg({ ...base, type: 'pocket' }, room);
+    expect(pocket.arcs).toEqual([]);
+    expect(pocket.panels).toEqual([]);
+    expect(pocket.pocket).toMatch(/^M /);
+    const opening = doorSvg({ ...base, type: 'opening' }, room);
+    expect([opening.arcs, opening.panels, opening.pocket]).toEqual([[], [], null]);
+  });
+});
+
+describe('doorGeometry: every door type', () => {
+  const door = (patch: Partial<Door>): Door => ({
+    id: 1,
+    width: 3,
+    position: 2,
+    wall: 'bottom',
+    hinge: 'left',
+    type: 'swing-in',
+    ...patch,
+  });
+  const room12 = { width: 12, height: 12 };
+  const close = (a: Point, b: Point) => {
+    expect(a.x).toBeCloseTo(b.x, 9);
+    expect(a.y).toBeCloseTo(b.y, 9);
+  };
+
+  it('a 90deg swing opens perpendicular to the wall; 180deg folds back flat along it', () => {
+    const at90 = doorGeometry(door({}), room12);
+    expect(at90.leaves).toHaveLength(1);
+    close(at90.leaves[0]!.openEnd, { x: 2, y: 9 });
+    const at180 = doorGeometry(door({ swingAngle: 180 }), room12);
+    close(at180.leaves[0]!.openEnd, { x: -1, y: 12 }); // past the hinge, flat on the wall
+    expect(at180.leaves[0]!.angle).toBe(180);
+    // The 180deg sweep is a half disc: it reaches the far side of the hinge.
+    const xs = at180.clearance[0]!.map((p) => p.x);
+    expect(Math.min(...xs)).toBeCloseTo(-1, 6);
+    expect(Math.max(...xs)).toBeCloseTo(5, 6);
+    // Missing or anything but 180 means 90; non-swing types ignore it.
+    expect(doorSwingAngle({ type: 'swing-in' })).toBe(90);
+    expect(doorSwingAngle({ type: 'sliding', swingAngle: 180 })).toBe(90);
+    expect(doorSwingAngle({ type: 'double-out', swingAngle: 180 })).toBe(180);
+  });
+
+  it('double doors have two half-width leaves hinged at both jambs', () => {
+    const g = doorGeometry(door({ type: 'double-in' }), room12);
+    expect(g.leaves.map((l) => l.radius)).toEqual([1.5, 1.5]);
+    close(g.leaves[0]!.hinge, { x: 2, y: 12 });
+    close(g.leaves[1]!.hinge, { x: 5, y: 12 });
+    close(g.leaves[0]!.openEnd, { x: 2, y: 10.5 });
+    close(g.leaves[1]!.openEnd, { x: 5, y: 10.5 });
+    expect(g.clearance).toHaveLength(2);
+    expect(doorGeometry(door({ type: 'double-out' }), room12).clearance).toEqual([]);
+  });
+
+  it('outward swings need no room inside, but every type keeps a doorway', () => {
+    for (const type of ['swing-out', 'double-out', 'pocket', 'opening'] as const) {
+      const g = doorGeometry(door({ type }), room12);
+      expect(g.clearance).toEqual([]);
+      expect(g.doorway).toEqual([
+        { x: 2, y: 12 },
+        { x: 5, y: 12 },
+        { x: 5, y: 12 - DOORWAY_DEPTH },
+        { x: 2, y: 12 - DOORWAY_DEPTH },
+      ]);
+    }
+  });
+
+  it('a bi-fold folds towards its hinge side, needing half its width at the jamb', () => {
+    const g = doorGeometry(door({ type: 'bifold', width: 3 }), room12);
+    expect(g.bifold).not.toBeNull();
+    const zone = g.clearance[0]!;
+    const depth = (p: Point) => 12 - p.y;
+    expect(Math.max(...zone.map(depth))).toBeCloseTo(1.5, 6); // half the width, at the jamb
+    // Near the far jamb it needs (almost) nothing.
+    const farPts = zone.filter((p) => p.x > 4.9);
+    expect(Math.max(...farPts.map(depth))).toBeLessThan(0.2);
+    const right = doorGeometry(door({ type: 'bifold', hinge: 'right' }), room12);
+    close(right.bifold!.hinge, { x: 5, y: 12 });
+  });
+
+  it('sliding panels run in a strip along the inside face; pockets sit in the wall', () => {
+    const sl = doorGeometry(door({ type: 'sliding' }), room12);
+    expect(sl.slidingPanels).toHaveLength(2);
+    const ys = sl.clearance[0]!.map((p) => p.y);
+    expect(Math.min(...ys)).toBeCloseTo(12 - SLIDING_DEPTH, 9);
+    const pk = doorGeometry(door({ type: 'pocket' }), room12, 0.4);
+    expect(pk.pocket).toEqual({ from: { x: 0, y: 12.2 }, to: { x: 2, y: 12.2 } }); // clamped
+    const pkRight = doorGeometry(door({ type: 'pocket', hinge: 'right' }), room12, 0.4);
+    expect(pkRight.pocket).toEqual({ from: { x: 5, y: 12.2 }, to: { x: 8, y: 12.2 } });
+  });
+
+  it('hinge sides and swing types are classified for the door card', () => {
+    expect(
+      ['swing-in', 'swing-out', 'double-in', 'double-out'].every((t) => isSwingDoor(t as DoorType)),
+    ).toBe(true);
+    expect(['sliding', 'pocket', 'bifold', 'opening'].some((t) => isSwingDoor(t as DoorType))).toBe(
+      false,
+    );
+    expect(
+      ['swing-in', 'swing-out', 'bifold', 'pocket'].every((t) => hasHingeSide(t as DoorType)),
+    ).toBe(true);
+    expect(
+      ['double-in', 'double-out', 'sliding', 'opening'].some((t) => hasHingeSide(t as DoorType)),
+    ).toBe(false);
+  });
+});
+
+describe('computeDoorBlocks', () => {
+  const room12 = { width: 12, height: 12 };
+  const piece = (patch: Partial<FurnitureItem>): FurnitureItem => ({
+    id: 'p',
+    label: 'Piece',
+    width: 1,
+    height: 1,
+    x: 0,
+    y: 0,
+    rotation: 0,
+    color: '#93c5fd',
+    visible: true,
+    ...patch,
+  });
+  const door = (patch: Partial<Door> = {}): Door => ({
+    id: 'd',
+    width: 3,
+    position: 2,
+    wall: 'bottom',
+    hinge: 'left',
+    type: 'swing-in',
+    ...patch,
+  });
+  const blocks = (items: FurnitureItem[], doors: Door[]) =>
+    Object.fromEntries(computeDoorBlocks(items, doors, room12));
+
+  // In a 3ft swing-in door's swing (2.4 ft from the wall), but outside its 1.5 ft doorway.
+  const inSwing = piece({ id: 'swing', x: 2.2, y: 9.3, width: 1, height: 1 });
+  // In the doorway, in front of the opening.
+  const inDoorway = piece({ id: 'way', x: 3, y: 11, width: 1, height: 0.8 });
+
+  it('flags a piece in an inward swing (door) or in the doorway, softer than overlap', () => {
+    expect(blocks([inSwing, inDoorway], [door()])).toEqual({
+      swing: { door: true, doorway: false, doorIds: ['d'] },
+      way: { door: true, doorway: false, doorIds: ['d'] }, // the doorway is inside the swing too
+    });
+  });
+
+  it('outward swings flag only the doorway', () => {
+    expect(blocks([inSwing, inDoorway], [door({ type: 'swing-out' })])).toEqual({
+      way: { door: false, doorway: true, doorIds: ['d'] },
+    });
+  });
+
+  it('openings and pocket doors flag their doorway', () => {
+    for (const type of ['opening', 'pocket'] as const) {
+      expect(blocks([inSwing, inDoorway], [door({ type })])).toEqual({
+        way: { door: false, doorway: true, doorIds: ['d'] },
+      });
+    }
+  });
+
+  it('respects the opening angle: a 180deg swing also sweeps past the hinge', () => {
+    const beside = piece({ id: 'beside', x: 0.3, y: 10.6, width: 1, height: 1 });
+    expect(blocks([beside], [door()])).toEqual({});
+    expect(blocks([beside], [door({ swingAngle: 180 })])).toEqual({
+      beside: { door: true, doorway: false, doorIds: ['d'] },
+    });
+  });
+
+  it('checks both leaves of a double door, a bi-fold fold and a sliding track', () => {
+    const nearRightJamb = piece({ id: 'r', x: 4.2, y: 10.7, width: 0.6, height: 0.6 });
+    expect(blocks([nearRightJamb], [door({ type: 'double-in' })]).r!.door).toBe(true);
+    const atFold = piece({ id: 'f', x: 2.2, y: 10.9, width: 0.5, height: 0.5 });
+    expect(blocks([atFold], [door({ type: 'bifold' })]).f!.door).toBe(true);
+    const onTrack = piece({ id: 't', x: 3, y: 11.8, width: 0.5, height: 0.5 });
+    expect(blocks([onTrack], [door({ type: 'sliding' })]).t!.door).toBe(true);
+    const behindTrack = piece({ id: 'b', x: 3, y: 11, width: 0.5, height: 0.5 });
+    expect(blocks([behindTrack], [door({ type: 'sliding' })]).b).toEqual({
+      door: false,
+      doorway: true,
+      doorIds: ['d'],
+    });
+  });
+
+  it('ignores hidden pieces, pieces that only touch, rotated pieces clear of it', () => {
+    expect(blocks([{ ...inSwing, visible: false }], [door()])).toEqual({});
+    // Flush against the side of the doorway / the edge of the swing: touching is fine.
+    const flush = piece({ id: 'flush', x: 5, y: 10.5, width: 1, height: 1.5 });
+    expect(blocks([flush], [door({ type: 'opening' })])).toEqual({});
+    const rotatedAway = piece({ id: 'rot', x: 6, y: 9, width: 2, height: 0.5, rotation: 30 });
+    expect(blocks([rotatedAway], [door()])).toEqual({});
+  });
+
+  it('merges into the layout warnings; the starter room has none', () => {
+    const w = computeLayoutWarnings({ roomDims: room12, doors: [door()], items: [inSwing] });
+    expect(w.get('swing')).toMatchObject({
+      outOfBounds: false,
+      collision: false,
+      blocksDoor: true,
+      blocksDoorway: false,
+    });
+    const starter = defaultLayout();
+    for (const warning of computeLayoutWarnings(starter).values()) {
+      expect(warning).toEqual({ outOfBounds: false, collision: false });
+    }
+    expect(doorBlockText({ door: true, doorway: true })).toBe('Blocks door');
+    expect(doorBlockText({ door: false, doorway: true })).toBe('Blocks doorway');
   });
 });
 
@@ -267,8 +484,21 @@ describe('findOpeningSpot', () => {
       // (7.5, 10.5), reaches from x 5.9 to 9.1, so it blocks 4..7 but not the default 2..5...
       const bar = furniture({ x: 5.5, y: 10.25, width: 4, height: 0.5, rotation: 45 });
       expect(place([bar])).toEqual({ wall: 'bottom', position: 2 });
-      // ...and with the chest too, nothing on the bottom wall is clear: the top wall is next.
-      expect(place([bar, chest])).toEqual({ wall: 'top', position: 2 });
+      // ...and with the chest too, 4..7 is the first clear spot: the bar crosses the swing's
+      // bounding square there, but neither the quarter circle the leaf really sweeps nor the
+      // doorway in front of it.
+      expect(place([bar, chest])).toEqual({ wall: 'bottom', position: 4 });
+    });
+
+    it('keeps the doorway clear too, for every door type', () => {
+      const chair = furniture({ x: 2.5, y: 11, width: 1, height: 1 });
+      for (const type of ['swing-out', 'pocket', 'opening', 'sliding'] as const) {
+        expect(
+          findOpeningSpot({ roomDims: room12, doors: [], windows: [], items: [chair] }, 3, DOOR, {
+            swing: { type, hinge: 'left' },
+          }),
+        ).not.toEqual({ wall: 'bottom', position: 2 });
+      }
     });
 
     it('moves to another wall when the whole wall is blocked, and ignores hidden pieces', () => {
@@ -283,16 +513,19 @@ describe('findOpeningSpot', () => {
       expect(place([rug], [door('bottom', 2)])).toEqual({ wall: 'bottom', position: 5.5 });
     });
 
-    it('ignores furniture for windows and swing-out doors that open outside', () => {
+    it('ignores furniture for windows, and for the swing of doors that open outside', () => {
       const rug = furniture({ x: 0, y: 0, width: 12, height: 12 });
       const open = { roomDims: room12, doors: [], windows: [], items: [rug] };
       expect(findOpeningSpot(open, 3, { wall: 'top', position: 2 })).toEqual({
         wall: 'top',
         position: 2,
       });
-      const bench = furniture({ x: 0, y: 10, width: 12, height: 2 });
+      // A desk 2.5-3.5 ft into the room: in a swing-in door's swing at 2..5, but not in its
+      // doorway (1.5 ft deep). A swing-out door there only needs its doorway clear.
+      const desk = furniture({ x: 2, y: 8.5, width: 3, height: 1 });
+      expect(place([desk])).not.toEqual({ wall: 'bottom', position: 2 });
       expect(
-        findOpeningSpot({ ...open, items: [bench] }, 3, DOOR, {
+        findOpeningSpot({ ...open, items: [desk] }, 3, DOOR, {
           swing: { type: 'swing-out', hinge: 'left' },
         }),
       ).toEqual({ wall: 'bottom', position: 2 });

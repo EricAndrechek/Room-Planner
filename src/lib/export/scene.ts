@@ -20,7 +20,7 @@ import type {
 } from '../../types';
 import { DARK_TEXT, getBorderColor, migrateColor, readableTextOn } from '../colors';
 import { getRotatedCorners, normalizeDegrees, wallLength, type Point } from '../geometry';
-import { doorSwingGeometry, onWall } from '../openings';
+import { doorGeometry, leafPoint, onWall, type DoorLeaf } from '../openings';
 import { FEET_PER_METER, clamp, feetToDisplay, formatArea, roundNum } from '../units';
 import { fitText, measureText } from './fontMetrics';
 
@@ -179,9 +179,6 @@ const line = (pt: Pt, a0: number, d0: number, a1: number, d1: number): PathComma
   ['L', ...pt(a1, d1)],
 ];
 
-// Bezier handle length for a quarter circle.
-const KAPPA = 0.5522847498;
-
 /** The wall gap for a door (drawn with the walls, under the furniture). */
 const doorCutNode = (door: Door, room: RoomDims, s: number, T: number): GroupNode => {
   const wall = door.wall || 'bottom';
@@ -197,74 +194,127 @@ const doorCutNode = (door: Door, room: RoomDims, s: number, T: number): GroupNod
   };
 };
 
-/** The door itself: leaf and swing arc, or sliding panels (drawn over the furniture). */
+/** Cubic Beziers for a leaf's arc from `fromDeg` to `toDeg` (in <= 90deg pieces), in plan units. */
+const arcCommands = (leaf: DoorLeaf, fromDeg: number, toDeg: number, s: number): PathCommand[] => {
+  const at = (p: Point): [number, number] => [p.x * s, p.y * s];
+  const tangent = (deg: number): Point => {
+    const a = (deg * Math.PI) / 180;
+    const dir = Math.sign(toDeg - fromDeg);
+    return {
+      x: dir * leaf.radius * (-Math.sin(a) * leaf.u.x + Math.cos(a) * leaf.v.x),
+      y: dir * leaf.radius * (-Math.sin(a) * leaf.u.y + Math.cos(a) * leaf.v.y),
+    };
+  };
+  const pieces = Math.max(1, Math.ceil(Math.abs(toDeg - fromDeg) / 90));
+  const step = (toDeg - fromDeg) / pieces;
+  // Bezier handle length for a circular arc of `step` degrees.
+  const k = (4 / 3) * Math.tan((Math.abs(step) * Math.PI) / 720);
+  const cmds: PathCommand[] = [['M', ...at(leafPoint(leaf, fromDeg))]];
+  for (let i = 0; i < pieces; i++) {
+    const a0 = fromDeg + step * i;
+    const a1 = a0 + step;
+    const p0 = leafPoint(leaf, a0);
+    const p1 = leafPoint(leaf, a1);
+    const t0 = tangent(a0);
+    const t1 = tangent(a1);
+    cmds.push([
+      'C',
+      ...at({ x: p0.x + k * t0.x, y: p0.y + k * t0.y }),
+      ...at({ x: p1.x - k * t1.x, y: p1.y - k * t1.y }),
+      ...at(p1),
+    ]);
+  }
+  return cmds;
+};
+
+/** A filled panel from `a` to `b`, `thick` (plan units) wide towards unit vector `side`. */
+const panelPath = (a: Point, b: Point, side: Point, thick: number, s: number): PathNode => {
+  const o = { x: (side.x * thick) / s, y: (side.y * thick) / s };
+  const at = (p: Point): [number, number] => [p.x * s, p.y * s];
+  return {
+    kind: 'path',
+    d: [
+      ['M', ...at(a)],
+      ['L', ...at({ x: a.x + o.x, y: a.y + o.y })],
+      ['L', ...at({ x: b.x + o.x, y: b.y + o.y })],
+      ['L', ...at(b)],
+      ['Z'],
+    ],
+    fill: DOOR_FILL,
+    stroke: DOOR_STROKE,
+    strokeWidth: 0.9,
+  };
+};
+
+/**
+ * The door itself (drawn over the furniture), from the same `doorGeometry` the editor draws:
+ * swing arcs and open leaves (one or two, 90 or 180 degrees), a half-folded bi-fold, sliding
+ * panels along the inside face, a pocket in the wall, or nothing for a plain opening.
+ */
 const doorNode = (door: Door, room: RoomDims, s: number, T: number): GroupNode => {
   const wall = door.wall || 'bottom';
   const type = door.type || 'swing-in';
   const pt = wallFrame(wall, room, s);
-  const w = Math.min(door.width, wallLength(room, wall)) * s;
-  const p = onWall(door, room, wall) * s;
+  // Outward swings hinge on the exterior face, a wall thickness (T) outside the interior.
+  const g = doorGeometry(door, room, T / s);
+  const p = g.position * s;
+  const w = g.width * s;
   const children: SceneNode[] = [];
-  // Swing-out doors hinge on the exterior face, a wall thickness (T) outside the interior.
-  const swing = doorSwingGeometry(door, room, T / s);
-  if (!swing) {
-    const t = Math.max(1.5, T * 0.24);
-    const panel = (a0: number, a1: number, dc: number): PathNode => ({
+  // Arcs first (dashed), drawn from each open leaf's tip back to where it closes.
+  for (const leaf of g.leaves) {
+    children.push({
       kind: 'path',
-      d: quad(pt, a0, a1, dc - t / 2, dc + t / 2),
+      d: arcCommands(leaf, leaf.angle, 0, s),
+      stroke: SWING,
+      strokeWidth: 1,
+      dash: [5, 3.5],
+    });
+  }
+  const leafThick = Math.max(2.5, Math.min(T * 0.45, 0.14 * s));
+  for (const leaf of g.leaves) {
+    children.push(
+      panelPath(leaf.hinge, leaf.openEnd, leaf.angle === 90 ? leaf.u : leaf.v, leafThick, s),
+    );
+  }
+  if (g.bifold) {
+    const { hinge, fold, end } = g.bifold;
+    const normal = (a: Point, b: Point): Point => {
+      const d = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      return { x: -(b.y - a.y) / d, y: (b.x - a.x) / d };
+    };
+    const t = Math.max(1.5, leafThick * 0.7);
+    children.push(panelPath(hinge, fold, normal(hinge, fold), t, s));
+    children.push(panelPath(fold, end, normal(fold, end), t, s));
+  }
+  for (const poly of g.slidingPanels) {
+    children.push({
+      kind: 'path',
+      d: [...poly.map((q, i): PathCommand => [i === 0 ? 'M' : 'L', q.x * s, q.y * s]), ['Z']],
       fill: DOOR_FILL,
       stroke: DOOR_STROKE,
       strokeWidth: 0.9,
     });
-    children.push(panel(p, p + w * 0.55, -T * 0.32), panel(p + w * 0.45, p + w, -T * 0.68));
+  }
+  if (g.pocket) {
+    // The cavity in the wall, and the door's edge showing at the mouth of the pocket.
+    const along = (q: Point) => (wall === 'top' || wall === 'bottom' ? q.x : q.y) * s;
+    const from = along(g.pocket.from);
+    const to = along(g.pocket.to);
+    children.push({
+      kind: 'path',
+      d: line(pt, from, -T / 2, to, -T / 2),
+      stroke: DOOR_STROKE,
+      strokeWidth: 1.2,
+      dash: [4, 3],
+    });
+  }
+  if (type === 'sliding' || type === 'pocket' || type === 'opening' || type === 'bifold') {
     // Jamb lines on both faces make the opening read as a doorway.
     children.push({
       kind: 'path',
       d: [...line(pt, p, 0, p, -T), ...line(pt, p + w, 0, p + w, -T)],
       stroke: WALL,
       strokeWidth: 1,
-    });
-  } else {
-    // Leaf and arc come from the same geometry the editor draws (lib/openings.ts).
-    const { hinge, closedEnd, openEnd, radius } = swing;
-    const at = (p: Point, dx = 0, dy = 0): [number, number] => [(p.x + dx) * s, (p.y + dy) * s];
-    // Quarter circle around the hinge as one cubic Bezier, drawn from the open leaf's tip to
-    // the strike end; control points sit KAPPA * radius along each end's tangent.
-    const ox = openEnd.x - hinge.x;
-    const oy = openEnd.y - hinge.y;
-    const cx = closedEnd.x - hinge.x;
-    const cy = closedEnd.y - hinge.y;
-    children.push({
-      kind: 'path',
-      d: [
-        ['M', ...at(openEnd)],
-        [
-          'C',
-          ...at(openEnd, KAPPA * cx, KAPPA * cy),
-          ...at(closedEnd, KAPPA * ox, KAPPA * oy),
-          ...at(closedEnd),
-        ],
-      ],
-      stroke: SWING,
-      strokeWidth: 1,
-      dash: [5, 3.5],
-    });
-    // The open leaf, thickened from the hinge towards the strike side.
-    const leaf = Math.max(2.5, Math.min(T * 0.45, 0.14 * s)) / s;
-    const lx = (cx / (radius || 1)) * leaf;
-    const ly = (cy / (radius || 1)) * leaf;
-    children.push({
-      kind: 'path',
-      d: [
-        ['M', ...at(hinge)],
-        ['L', ...at(hinge, lx, ly)],
-        ['L', ...at(openEnd, lx, ly)],
-        ['L', ...at(openEnd)],
-        ['Z'],
-      ],
-      fill: DOOR_FILL,
-      stroke: DOOR_STROKE,
-      strokeWidth: 0.9,
     });
   }
   return { kind: 'group', role: 'door', attrs: { wall, type, hinge: door.hinge }, children };
@@ -533,10 +583,15 @@ export const buildPlanScene = (input: PlanInput): Scene => {
     [W + T, H + T],
   ];
   for (const door of layout.doors) {
-    const swing = doorSwingGeometry(door, room, T / s);
-    if (swing?.side !== 'outside') continue;
-    const { x, y, width, height } = swing.box;
-    pts.push([x * s, y * s], [(x + width) * s, (y + height) * s]);
+    // Outward swings reach outside the walls: keep them in the drawing.
+    const g = doorGeometry(door, room, T / s);
+    if (g.side !== 'outside') continue;
+    for (const leaf of g.leaves) {
+      for (let deg = 0; deg <= leaf.angle; deg += 15) {
+        const q = leafPoint(leaf, deg);
+        pts.push([q.x * s, q.y * s]);
+      }
+    }
   }
   for (const item of items) {
     for (const c of getRotatedCorners(item)) pts.push([c.x * s, c.y * s]);
