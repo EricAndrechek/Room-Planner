@@ -26,9 +26,13 @@ const shortcuts = [
   {
     keys: ['Arrow keys'],
     action:
-      'Move the selected item by 3 inches (0.25 ft); with Snap on it lines up with a nearby wall or edge',
+      'Move the selected item by 3 inches (5 cm in metric units); with Snap on it lines up with a nearby wall or edge',
   },
-  { keys: ['Shift', 'Arrow keys'], action: 'Move the selected item by 1 foot' },
+  { keys: ['Shift', 'Arrow keys'], action: 'Move by 1 foot (25 cm)' },
+  {
+    keys: ['Alt/Option', 'Arrow keys'],
+    action: 'Move by 1 inch (1 cm), exactly, without snapping. Ctrl/⌘ + arrow keys does the same',
+  },
   { keys: ['R'], action: 'Rotate the selected item by 90°' },
   { keys: ['Shift', 'R'], action: 'Rotate the selected item by 90° the other way' },
   { keys: ['Alt/Option', 'R'], action: 'Rotate the selected item by 1° clockwise' },
@@ -226,7 +230,9 @@ const sections = [
             wall or piece on each side (also, more faintly, while a piece is selected). Hold
             <kbd>Alt</kbd>/<kbd>Option</kbd> while dragging to place it freely, or switch snapping
             off with the <strong>Snap</strong> button (next to the zoom controls; on phones, on the
-            plan). Arrow-key moves keep their steps but snap when they end close to a wall or edge.
+            plan). Arrow-key moves keep their steps but snap when they end close to a wall or edge;
+            fine moves (<kbd>Alt</kbd>/<kbd>Option</kbd> or <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + arrow)
+            never snap.
           </li>
           <li>
             <strong>Color</strong> — pick one of 10 preset colors or enter any custom hex color.

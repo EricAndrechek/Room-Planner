@@ -1,4 +1,5 @@
 import { useEffect, useRef, type RefObject } from 'react';
+import type { NudgeSize } from '../lib/units';
 
 export interface ShortcutHandlers {
   undo: () => void;
@@ -6,8 +7,11 @@ export interface ShortcutHandlers {
   /** Return true if something was deleted (the key's default is then suppressed). */
   deleteSelected: () => boolean;
   deselect: () => void;
-  /** Move the selected item by (dx, dy) feet; true if an item was moved. */
-  nudge: (dx: number, dy: number) => boolean;
+  /**
+   * Move the selected item one step in direction (dx, dy), each -1, 0 or 1; `size` picks the step
+   * (see `nudgeStep`). True if something moved.
+   */
+  nudge: (dx: number, dy: number, size: NudgeSize) => boolean;
   /** Rotate the selected item by `degrees` (clockwise if positive); true if it was rotated. */
   rotateSelected: (degrees: number) => boolean;
 }
@@ -36,8 +40,9 @@ export const isCanvasTarget = (target: EventTarget | null, canvas: HTMLElement |
 /**
  * Keyboard shortcuts. Anywhere (except while typing): Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z redo.
  * Only with focus on the canvas or one of its pieces (or nothing focused): Delete/Backspace
- * delete, Escape deselect, arrows nudge 0.25 ft (Shift: 1 ft), R rotate 90deg (Shift+R: back),
- * Alt/Option+R rotate 1deg (with Shift: back). Off when `enabled` is false (a modal is open).
+ * delete, Escape deselect, arrows nudge (Shift: a bigger step; Alt/Option or Ctrl/Cmd: a fine
+ * step), R rotate 90deg (Shift+R: back), Alt/Option+R rotate 1deg (with Shift: back). Off when
+ * `enabled` is false (a modal is open).
  */
 export function useKeyboardShortcuts(
   handlers: ShortcutHandlers,
@@ -72,15 +77,16 @@ export function useKeyboardShortcuts(
         h.deselect();
         return;
       }
-      const step = e.shiftKey ? 1 : 0.25;
       const arrows: Record<string, [number, number]> = {
-        ArrowLeft: [-step, 0],
-        ArrowRight: [step, 0],
-        ArrowUp: [0, -step],
-        ArrowDown: [0, step],
+        ArrowLeft: [-1, 0],
+        ArrowRight: [1, 0],
+        ArrowUp: [0, -1],
+        ArrowDown: [0, 1],
       };
       if (key in arrows) {
-        if (h.nudge(...arrows[key]!)) e.preventDefault();
+        // Shift = bigger (Figma, Keynote, Slides); Alt/Option, or Ctrl/Cmd as in PowerPoint = finer.
+        const size: NudgeSize = e.altKey || mod ? 'fine' : e.shiftKey ? 'coarse' : 'normal';
+        if (h.nudge(...arrows[key]!, size)) e.preventDefault();
         return;
       }
       // By physical key: Option+R types "®" on a Mac keyboard.

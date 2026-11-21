@@ -19,6 +19,7 @@ import { DESIGN_MODES } from '../../lib/constants';
 import { computeItemWarnings, normalizeDegrees } from '../../lib/geometry';
 import { toShareConfig } from '../../lib/layout';
 import { HELP_PATH } from '../../lib/paths';
+import { nudgeStep } from '../../lib/units';
 import {
   loadSnapPreference,
   saveDesignMode,
@@ -221,9 +222,11 @@ export function Planner({ storage, initial }: PlannerProps) {
         sel.clearSelection();
         focusCanvas();
       },
-      nudge: (dx, dy) => {
-        if (!canEditSelected) return openings.nudgeOpening(dx, dy);
-        furniture.moveItem(selectedItem.id, dx, dy);
+      nudge: (dirX, dirY, size) => {
+        const step = nudgeStep(size, unitSystem);
+        if (!canEditSelected) return openings.nudgeOpening(dirX * step, dirY * step);
+        // Fine steps place exactly, without snapping (like Alt-dragging).
+        furniture.moveItem(selectedItem.id, dirX * step, dirY * step, size !== 'fine');
         return true;
       },
       rotateSelected: (degrees) => {

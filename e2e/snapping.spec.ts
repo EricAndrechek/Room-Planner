@@ -28,17 +28,21 @@ const ITEMS = [
   },
 ];
 
-async function seed(page: Page) {
-  await page.addInitScript((items) => {
-    if (sessionStorage.getItem('seeded')) return;
-    localStorage.clear();
-    localStorage.setItem('room-sim-v3-dims', JSON.stringify({ width: 12, height: 12 }));
-    localStorage.setItem('room-sim-v3-doors', '[]');
-    localStorage.setItem('room-sim-v3-windows', '[]');
-    localStorage.setItem('room-sim-v3-items', JSON.stringify(items));
-    localStorage.setItem('room-sim-v3-mode', 'furniture');
-    sessionStorage.setItem('seeded', '1');
-  }, ITEMS);
+async function seed(page: Page, extra: Record<string, string> = {}) {
+  await page.addInitScript(
+    ({ items, extra }) => {
+      if (sessionStorage.getItem('seeded')) return;
+      localStorage.clear();
+      localStorage.setItem('room-sim-v3-dims', JSON.stringify({ width: 12, height: 12 }));
+      localStorage.setItem('room-sim-v3-doors', '[]');
+      localStorage.setItem('room-sim-v3-windows', '[]');
+      localStorage.setItem('room-sim-v3-items', JSON.stringify(items));
+      localStorage.setItem('room-sim-v3-mode', 'furniture');
+      for (const [k, v] of Object.entries(extra)) localStorage.setItem(k, v);
+      sessionStorage.setItem('seeded', '1');
+    },
+    { items: ITEMS, extra },
+  );
   await page.goto('/');
   await page.waitForSelector('html[data-planner-ready]');
   await page.waitForTimeout(700); // initial auto-fit zoom
@@ -213,6 +217,13 @@ test('a selected piece shows its clearances; arrow keys snap and announce', asyn
   // Stepping away again is never pulled back onto the edge it just left.
   await page.keyboard.press('ArrowLeft');
   await expect.poll(async () => (await stored(page, 'Box')).x).toBe(4.75);
+
+  // Fine steps: Alt/Option or Ctrl/Cmd + arrow = 1 inch, never snapped (4.75 + 1/12 lands 2 in from
+  // the Bed's edge, inside the snap threshold, and stays there).
+  await page.keyboard.press('Alt+ArrowRight');
+  await expect.poll(async () => (await stored(page, 'Box')).x).toBeCloseTo(4.75 + 1 / 12, 9);
+  await page.keyboard.press('Control+ArrowLeft');
+  await expect.poll(async () => (await stored(page, 'Box')).x).toBeCloseTo(4.75, 9);
 });
 
 test('snapping adds no noticeable cost to a drag among 30 pieces', async ({ page, isMobile }) => {
@@ -288,4 +299,18 @@ test('snapping adds no noticeable cost to a drag among 30 pieces', async ({ page
   // Relative to the same drag without snapping, so a slow CI machine does not fail it: snapping,
   // guides and measurements must not make a move noticeably slower.
   expect(on).toBeLessThan(off * 1.5 + 4);
+});
+
+test('metric units nudge in round centimeters', async ({ page }) => {
+  await seed(page, { 'room-sim-v3-units': 'cm' });
+  const piece = page.getByRole('button', { name: /^Box,/ });
+  await piece.focus();
+  const cm = 0.0328084; // feet per cm
+  const y0 = (await stored(page, 'Box')).y;
+  await page.keyboard.press('ArrowDown');
+  await expect.poll(async () => (await stored(page, 'Box')).y).toBeCloseTo(y0 + 5 * cm, 9);
+  await page.keyboard.press('Shift+ArrowDown');
+  await expect.poll(async () => (await stored(page, 'Box')).y).toBeCloseTo(y0 + 30 * cm, 9);
+  await page.keyboard.press('Alt+ArrowUp');
+  await expect.poll(async () => (await stored(page, 'Box')).y).toBeCloseTo(y0 + 29 * cm, 9);
 });

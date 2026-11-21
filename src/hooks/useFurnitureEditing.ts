@@ -136,18 +136,19 @@ export function useFurnitureEditing({
   );
 
   /**
-   * Keyboard move by a fixed (dx, dy) step as one undo step. With snapping on, a step that lands
-   * within the snap threshold of a wall or piece edge snaps onto it, and that is announced.
+   * Keyboard move by a fixed (dx, dy) step as one undo step. With snapping on (and `snap` true; fine
+   * steps pass false), a step that lands within the snap threshold of a wall or piece edge snaps
+   * onto it, and that is announced.
    */
   const moveItem = useCallback(
-    (id: Id, dx: number, dy: number) => {
+    (id: Id, dx: number, dy: number, snap = true) => {
       const l = layoutRef.current;
       const item = l.items.find((i) => i.id === id);
       if (!item) return;
       let x = item.x + dx;
       let y = item.y + dy;
       let said = '';
-      if (snapRef.current) {
+      if (snap && snapRef.current) {
         const threshold = thresholdFeet(SNAP_THRESHOLD_PX, zoomRef.current, PIXELS_PER_UNIT);
         const r = snapNudge(item, dx, dy, buildSnapCandidates(l.items, l.roomDims, id), threshold);
         x = r.x;

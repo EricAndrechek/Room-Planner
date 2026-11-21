@@ -1,6 +1,7 @@
 import type { PointerEvent as ReactPointerEvent, ReactNode, RefObject } from 'react';
 import { Home, Sofa } from 'lucide-react';
 import { DESIGN_MODES, PIXELS_PER_UNIT } from '../../lib/constants';
+import { feetToDisplay, nudgeStep } from '../../lib/units';
 import type { ItemWarning } from '../../lib/geometry';
 import type {
   DesignMode,
@@ -82,8 +83,8 @@ export function RoomCanvas({
       <p id="floor-plan-help" className="sr-only">
         Press Tab to move between {isRoomSetup ? 'door and window handles' : 'furniture pieces'}.
         {isRoomSetup
-          ? ' Arrow keys slide the focused opening along its wall; hold Shift for larger steps.'
-          : ' Arrow keys move the focused piece; hold Shift for larger steps. With Snap on, a move that ends close to a wall or another piece lines up with it. R rotates it by 90 degrees, Shift and R rotates the other way; with Alt or Option, by 1 degree. Delete removes it. Escape deselects.'}
+          ? ' Arrow keys slide the focused opening along its wall; hold Shift for larger steps, Alt or Option for fine ones.'
+          : ` Arrow keys move the focused piece by ${feetToDisplay(nudgeStep('normal', unitSystem), unitSystem)}; hold Shift for ${feetToDisplay(nudgeStep('coarse', unitSystem), unitSystem)}, or Alt or Option (or Control or Command) for ${feetToDisplay(nudgeStep('fine', unitSystem), unitSystem)} without snapping. With Snap on, a move that ends close to a wall or another piece lines up with it. R rotates it by 90 degrees, Shift and R rotates the other way; with Alt or Option, by 1 degree. Delete removes it. Escape deselects.`}
         {isRoomSetup ? ' Delete removes the focused door or window.' : ''} Control or Command with Z
         undoes.
       </p>
