@@ -396,7 +396,11 @@ test("? opens the keyboard shortcuts, grouped, with this keyboard's keys; Escape
     await expect(dialog).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
-    await page.getByRole('button', { name: 'Undo' }).hover({ force: true });
+    // Something to undo, so the button is enabled (a disabled one gets no hover in Chromium).
+    await piece.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled();
+    await page.getByRole('button', { name: 'Undo' }).hover();
     await expect(page.getByRole('tooltip').filter({ hasText: /^Undo/ })).toHaveText(
       mac ? 'Undo (⌘Z)' : 'Undo (Ctrl+Z)',
     );
