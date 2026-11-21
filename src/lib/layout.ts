@@ -57,7 +57,7 @@ export const normalizeDoor = (raw: unknown, index = 0): Door | null => {
     ? (raw.type as Door['type'])
     : 'swing-in';
   const hinge: Hinge = raw.hinge === 'right' ? 'right' : 'left';
-  return {
+  const door = {
     ...raw,
     id: typeof raw.id === 'number' || typeof raw.id === 'string' ? raw.id : index + 1,
     width: num(raw.width, 3),
@@ -66,6 +66,9 @@ export const normalizeDoor = (raw: unknown, index = 0): Door | null => {
     hinge,
     type,
   } as Door;
+  // Optional: 90 or 180; anything else means the default (90) and is dropped.
+  if (door.swingAngle !== 90 && door.swingAngle !== 180) delete door.swingAngle;
+  return door;
 };
 
 export const normalizeWindow = (raw: unknown, index = 0): RoomWindow | null => {

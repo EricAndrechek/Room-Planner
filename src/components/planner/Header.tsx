@@ -4,6 +4,7 @@ import {
   CircleHelp,
   Edit3,
   FileDown,
+  Keyboard,
   FolderOpen,
   Maximize2,
   Redo2,
@@ -11,6 +12,7 @@ import {
   Undo2,
 } from 'lucide-react';
 import { formatTimeAgo } from '../../lib/browser';
+import { detectPlatform, toolbarHint } from '../../lib/shortcuts';
 import { feetToDisplay, formatArea } from '../../lib/units';
 import { useNow } from '../../hooks/useNow';
 import type { RoomDims, SaveStatus, UnitSystem } from '../../types';
@@ -27,6 +29,9 @@ interface HeaderProps {
   canUndo: boolean;
   canRedo: boolean;
   zoom: number;
+  /** Snapping preference (Snap toggle in the zoom group). */
+  snapOn: boolean;
+  onToggleSnap: () => void;
   helpHref: string;
   onOpenFiles: () => void;
   /** Rename the current plan (creating it first if it was never saved). */
@@ -38,12 +43,15 @@ interface HeaderProps {
   onFit: () => void;
   onShare: () => void;
   onExport: () => void;
+  /** Open the keyboard shortcuts panel (also `?`). */
+  onShowShortcuts: () => void;
 }
 
 /** Top bar: plan name (click to rename), save status, undo/redo, zoom, export, share. */
 export function Header(props: HeaderProps) {
   const [editingName, setEditingName] = useState<string | null>(null);
   const now = useNow();
+  const [platform] = useState(detectPlatform);
 
   const finishRename = (save: boolean) => {
     if (save && editingName?.trim()) props.onRename(editingName.trim());
@@ -83,17 +91,22 @@ export function Header(props: HeaderProps) {
               autoFocus
             />
           ) : (
-            <button
-              type="button"
-              onClick={() => setEditingName(props.projectName)}
-              className="text-left group hover:bg-slate-50 rounded-sm px-1 -mx-1 min-h-6 transition-colors flex items-center justify-center"
-              title="Click to rename"
-            >
+            // The heading is not inside the button: a separate rename button whose hit area
+            // (::after) stretches over the whole name, so clicking the name still renames.
+            <div className="group relative flex items-center min-w-0 rounded-sm px-1 -mx-1 min-h-6 hover:bg-slate-50 transition-colors">
               <h1 className="text-sm font-bold text-slate-800 leading-tight truncate group-hover:text-indigo-600 transition-colors">
                 {props.projectName}
-                <Edit3 className="w-3 h-3 inline ml-1 opacity-0 group-hover:opacity-50 transition-opacity" />
               </h1>
-            </button>
+              <button
+                type="button"
+                onClick={() => setEditingName(props.projectName)}
+                className="shrink-0 ml-1 flex items-center justify-center rounded-sm text-slate-800 group-hover:text-indigo-600 opacity-0 group-hover:opacity-50 focus-visible:opacity-100 [@media(hover:none)]:opacity-50 transition-opacity after:absolute after:inset-0 after:content-['']"
+                title="Click to rename"
+                aria-label="Rename floor plan"
+              >
+                <Edit3 className="w-3 h-3" aria-hidden="true" />
+              </button>
+            </div>
           )}
           {/* Dimensions - hidden on mobile */}
           <div className="hidden sm:flex items-center gap-1 text-[10px] text-slate-500 -mt-0.5">
@@ -126,24 +139,26 @@ export function Header(props: HeaderProps) {
         </div>
 
         <div className="flex items-center">
-          <Tooltip text="Undo">
+          <Tooltip text={`Undo (${toolbarHint('undo', platform)})`}>
             <button
               type="button"
               onClick={props.onUndo}
               disabled={!props.canUndo}
               className="p-1.5 sm:p-2 hover:bg-slate-100 rounded-lg text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
               aria-label="Undo"
+              aria-keyshortcuts="Control+Z Meta+Z"
             >
               <Undo2 className="w-4 h-4" />
             </button>
           </Tooltip>
-          <Tooltip text="Redo">
+          <Tooltip text={`Redo (${toolbarHint('redo', platform)})`}>
             <button
               type="button"
               onClick={props.onRedo}
               disabled={!props.canRedo}
               className="p-1.5 sm:p-2 hover:bg-slate-100 rounded-lg text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
               aria-label="Redo"
+              aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z"
             >
               <Redo2 className="w-4 h-4" />
             </button>
@@ -155,9 +170,23 @@ export function Header(props: HeaderProps) {
           onZoomIn={props.onZoomIn}
           onZoomOut={props.onZoomOut}
           onFit={props.onFit}
+          snapOn={props.snapOn}
+          onToggleSnap={props.onToggleSnap}
         />
 
         <InstallButton variant="header" />
+
+        <Tooltip text="Keyboard shortcuts (?)">
+          <button
+            type="button"
+            onClick={props.onShowShortcuts}
+            className="hidden md:flex p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-600 transition-colors items-center justify-center"
+            aria-label="Keyboard shortcuts"
+            aria-keyshortcuts="?"
+          >
+            <Keyboard className="w-4 h-4" />
+          </button>
+        </Tooltip>
 
         <Tooltip text="Help & FAQ">
           <a

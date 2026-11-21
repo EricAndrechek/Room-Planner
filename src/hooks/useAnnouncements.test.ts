@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { computeItemWarnings } from '../lib/geometry';
 import type { FurnitureItem, Layout } from '../types';
-import { describeLayoutChange, describeNewWarnings } from './useAnnouncements';
+import {
+  describeLayoutChange,
+  describeNewWarnings,
+  describeOpeningsChange,
+} from './useAnnouncements';
 
 const item = (over: Partial<FurnitureItem> = {}): FurnitureItem => ({
   id: 1,
@@ -43,5 +47,24 @@ describe('describeNewWarnings', () => {
     const after = computeItemWarnings(bad.items, bad.roomDims);
     expect(describeNewWarnings(before, after, bad.items)).toContain('Overlapping');
     expect(describeNewWarnings(after, after, bad.items)).toBe('');
+  });
+});
+
+describe('describeOpeningsChange', () => {
+  it('says which openings came back or went away', () => {
+    const none = layout([]);
+    const door = {
+      id: 1,
+      width: 3,
+      position: 2,
+      wall: 'bottom' as const,
+      hinge: 'left' as const,
+      type: 'swing-in' as const,
+    };
+    const win = { id: 2, width: 3, position: 2, wall: 'top' as const };
+    const both = { ...none, doors: [door], windows: [win] };
+    expect(describeOpeningsChange(none, both)).toBe('Door restored. Window restored');
+    expect(describeOpeningsChange(both, { ...both, doors: [] })).toBe('Door removed');
+    expect(describeOpeningsChange(both, both)).toBe('');
   });
 });

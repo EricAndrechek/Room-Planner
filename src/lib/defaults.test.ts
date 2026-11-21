@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { INITIAL_DOORS, INITIAL_ROOM } from './constants';
 import { checkItemsCollision, computeItemWarnings, isItemInBounds } from './geometry';
 import { defaultLayout } from './layout';
-import { doorSwingGeometry } from './openings';
+import { computeDoorBlocks, doorSwingGeometry } from './openings';
 import { createMemoryStorage, loadPersistedState } from './storage';
 
 describe('default (first-visit) layout', () => {
@@ -27,6 +27,10 @@ describe('default (first-visit) layout', () => {
         expect(checkItemsCollision(item, { ...swing.box, rotation: 0 }), item.label).toBe(false);
       }
     }
+  });
+
+  it('blocks no door or doorway', () => {
+    expect(computeDoorBlocks(layout.items, layout.doors, layout.roomDims).size).toBe(0);
   });
 
   it('only applies to empty storage; stored layouts win, including an empty one', () => {

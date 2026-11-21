@@ -54,3 +54,39 @@ export const migrateColor = (color: unknown): string => {
 /** A random preset color for newly added furniture. */
 export const randomPresetColor = (random: () => number = Math.random): string =>
   COLOR_PRESETS[Math.floor(random() * COLOR_PRESETS.length)]!.hex;
+
+// --- Contrast (WCAG 2.x) -------------------------------------------------------------------
+
+/** Text color used on light furniture fills (Tailwind slate-700). */
+export const DARK_TEXT = '#334155';
+
+const channel = (hex: string, i: number): number => {
+  const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+  if (Number.isNaN(c)) return 1;
+  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+};
+
+/** WCAG relative luminance of a `#rrggbb` color (unparseable channels count as white). */
+export const relativeLuminance = (hex: string): number =>
+  0.2126 * channel(hex, 1) + 0.7152 * channel(hex, 3) + 0.0722 * channel(hex, 5);
+
+/** WCAG contrast ratio between two `#rrggbb` colors, 1 to 21. */
+export const contrastRatio = (a: string, b: string): number => {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+};
+
+/** Whichever of slate-700 and white reads better on `fill` (labels on furniture). */
+export const readableTextOn = (fill: string): string =>
+  contrastRatio(DARK_TEXT, fill) >= contrastRatio('#ffffff', fill) ? DARK_TEXT : '#ffffff';
+
+/** `fill` blended over white at `alpha` (what a translucent fill looks like on the floor). */
+export const blendOnWhite = (fill: string, alpha: number): string => {
+  const mix = (i: number) => {
+    const v = parseInt(fill.slice(i, i + 2), 16);
+    const c = Math.round((Number.isNaN(v) ? 255 : v) * alpha + 255 * (1 - alpha));
+    return c.toString(16).padStart(2, '0');
+  };
+  return `#${mix(1)}${mix(3)}${mix(5)}`;
+};

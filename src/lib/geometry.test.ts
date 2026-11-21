@@ -8,7 +8,11 @@ import {
   constrainOpening,
   getRotatedCorners,
   isItemInBounds,
-  snapRotation,
+  pointInPolygon,
+  polygonsOverlap,
+  shrinkPolygon,
+  snapAngle,
+  type Point,
   wallLength,
 } from './geometry';
 import type { Door, FurnitureItem } from '../types';
@@ -176,14 +180,27 @@ describe('rotation helpers', () => {
     expect(angleDelta(-170, 170)).toBeCloseTo(-20);
   });
 
-  it('snapRotation normalizes and snaps within 5deg of a 15deg step', () => {
-    expect(snapRotation(43)).toBe(45);
-    expect(snapRotation(48)).toBe(45);
-    expect(snapRotation(52)).toBe(52);
-    expect(snapRotation(-2)).toBe(0);
-    expect(snapRotation(358)).toBe(0);
-    expect(snapRotation(450)).toBe(90);
-    expect(snapRotation(37.5)).toBe(37.5);
+  it('snapAngle pulls onto the axes within 8deg and the diagonals within 5deg', () => {
+    expect(snapAngle(83)).toEqual({ deg: 90, snapped: 90 });
+    expect(snapAngle(97.9)).toEqual({ deg: 90, snapped: 90 });
+    expect(snapAngle(98.5)).toEqual({ deg: 99, snapped: null }); // free: whole degrees
+    expect(snapAngle(-6)).toEqual({ deg: 0, snapped: 0 });
+    expect(snapAngle(355)).toEqual({ deg: 0, snapped: 0 });
+    expect(snapAngle(450)).toEqual({ deg: 90, snapped: 90 });
+    expect(snapAngle(41)).toEqual({ deg: 45, snapped: 45 });
+    expect(snapAngle(229.5)).toEqual({ deg: 225, snapped: 225 });
+    expect(snapAngle(39)).toEqual({ deg: 39, snapped: null });
+    expect(snapAngle(37.4)).toEqual({ deg: 37, snapped: null });
+    expect(snapAngle(-137)).toEqual({ deg: 225, snapped: 225 }); // -137 = 223
+  });
+
+  it('snapAngle steps by 15deg in step mode and never snaps in free mode', () => {
+    expect(snapAngle(37, 'step')).toEqual({ deg: 30, snapped: 30 });
+    expect(snapAngle(38, 'step')).toEqual({ deg: 45, snapped: 45 });
+    expect(snapAngle(-8, 'step')).toEqual({ deg: 345, snapped: 345 });
+    expect(snapAngle(359, 'step')).toEqual({ deg: 0, snapped: 0 });
+    expect(snapAngle(88, 'free')).toEqual({ deg: 88, snapped: null });
+    expect(snapAngle(-2.4, 'free')).toEqual({ deg: 358, snapped: null });
   });
 });
 
@@ -192,5 +209,42 @@ describe('computeFitZoom', () => {
     expect(computeFitZoom({ width: 960, height: 480 }, { width: 12, height: 12 }, 40)).toBe(1);
     expect(computeFitZoom({ width: 100, height: 100 }, { width: 100, height: 100 }, 40)).toBe(0.25);
     expect(computeFitZoom({ width: 5000, height: 5000 }, { width: 1, height: 1 }, 40)).toBe(2);
+  });
+});
+
+describe('polygons', () => {
+  const sq = (x: number, y: number, w = 1): Point[] => [
+    { x, y },
+    { x: x + w, y },
+    { x: x + w, y: y + w },
+    { x, y: y + w },
+  ];
+  // An L shape (not convex): the notch at the top right is outside.
+  const ell: Point[] = [
+    { x: 0, y: 0 },
+    { x: 1, y: 0 },
+    { x: 1, y: 1 },
+    { x: 2, y: 1 },
+    { x: 2, y: 2 },
+    { x: 0, y: 2 },
+  ];
+
+  it('point in polygon, convex or not', () => {
+    expect(pointInPolygon({ x: 0.5, y: 0.5 }, ell)).toBe(true);
+    expect(pointInPolygon({ x: 1.5, y: 0.5 }, ell)).toBe(false);
+    expect(pointInPolygon({ x: 1.5, y: 1.5 }, ell)).toBe(true);
+  });
+
+  it('overlap: crossing edges, containment either way, the notch of a concave shape', () => {
+    expect(polygonsOverlap(sq(0.5, 0.5), sq(0, 0))).toBe(true);
+    expect(polygonsOverlap(sq(0, 0, 4), sq(1, 1))).toBe(true);
+    expect(polygonsOverlap(sq(1, 1), sq(0, 0, 4))).toBe(true);
+    expect(polygonsOverlap(sq(1.2, 0.2, 0.5), ell)).toBe(false); // in the notch
+    expect(polygonsOverlap(sq(3, 3), sq(0, 0))).toBe(false);
+  });
+
+  it('shapes that only touch do not overlap once shrunk by an epsilon', () => {
+    expect(polygonsOverlap(shrinkPolygon(sq(1, 0), 0.001), sq(0, 0))).toBe(false);
+    expect(polygonsOverlap(shrinkPolygon(sq(0.9, 0), 0.001), sq(0, 0))).toBe(true);
   });
 });

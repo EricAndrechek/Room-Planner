@@ -169,12 +169,27 @@ summary:focus-visible {
   }
 }
 
-/* Larger touch targets on coarse pointers */
-@media (hover: none) and (pointer: coarse) {
-  html.app button,
-  html.app [role='button'] {
+/*
+ * Touch screens (coarse pointer): every control is at least 44x44 CSS px (WCAG 2.5.5). Canvas
+ * pieces and handles are excluded - their size is the furniture's real size - and instead get an
+ * invisible 44px hit area (.touch-hit; --hit sets its size in the element's own scaled pixels).
+ */
+@media (pointer: coarse) {
+  html.app button:not([data-draggable]),
+  html.app [role='button']:not([data-draggable]) {
     min-height: 44px;
     min-width: 44px;
+  }
+
+  .touch-hit::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: var(--hit, 44px);
+    height: var(--hit, 44px);
+    transform: translate(-50%, -50%);
+    border-radius: 9999px;
   }
 }
 

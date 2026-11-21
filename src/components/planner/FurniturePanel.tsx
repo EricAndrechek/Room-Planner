@@ -55,7 +55,7 @@ export function FurniturePanel(props: FurniturePanelProps) {
           </div>
           <div className="text-left">
             <span className="text-sm font-semibold text-slate-700 block">Furniture</span>
-            <span className="text-[10px] text-slate-500">
+            <span className="text-[10px] text-slate-600">
               {items.length} item{items.length !== 1 ? 's' : ''}
             </span>
           </div>
@@ -63,7 +63,7 @@ export function FurniturePanel(props: FurniturePanelProps) {
         <div className="flex items-center gap-2">
           {!isActiveMode && (
             <>
-              <span className="text-[10px] text-slate-500 flex items-center gap-1">
+              <span className="text-[10px] text-slate-600 flex items-center gap-1">
                 <Lock className="w-3 h-3" /> Locked
               </span>
               {expanded ? (

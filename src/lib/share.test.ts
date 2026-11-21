@@ -233,6 +233,54 @@ describe('new #s= fragment links', () => {
     }
   });
 
+  it('round-trips every door type and opening angle; old links keep working', async () => {
+    const types = [
+      'swing-in',
+      'swing-out',
+      'double-in',
+      'double-out',
+      'sliding',
+      'pocket',
+      'bifold',
+      'opening',
+    ] as const;
+    const doors = types.map((type, i) => ({
+      id: i + 1,
+      width: 3,
+      position: 0.5,
+      wall: (['top', 'right', 'bottom', 'left'] as const)[i % 4]!,
+      hinge: 'right' as const,
+      type,
+      ...(type.startsWith('swing') || type.startsWith('double')
+        ? { swingAngle: 180 as const }
+        : {}),
+    }));
+    const config = toShareConfig({ ...layout, doors }, 'Doors', 'cm');
+    const link = await readShareLink(await buildShareUrl('https://example.com/', config));
+    const back = fromShareConfig(link!.config).doors;
+    expect(back.map((d) => [d.type, d.swingAngle, d.hinge])).toEqual(
+      doors.map((d) => [d.type, d.swingAngle, d.hinge]),
+    );
+    // A link from before door types/angles existed: unchanged, with no angle (= 90deg).
+    const old = fromShareConfig({
+      ...config,
+      doors: [
+        { id: 1, width: 91.44, position: 30, wall: 'bottom', hinge: 'left', type: 'swing-out' },
+      ],
+    }).doors[0]!;
+    expect(old.type).toBe('swing-out');
+    expect('swingAngle' in old).toBe(false);
+    // Unknown types and angles fall back to the defaults.
+    const odd = fromShareConfig({
+      ...config,
+      doors: [
+        { id: 1, width: 91.44, position: 30, wall: 'bottom', type: 'revolving', swingAngle: 135 },
+      ],
+    }).doors[0]!;
+    expect(odd.type).toBe('swing-in');
+    expect('swingAngle' in odd).toBe(false);
+  });
+
   it('uncompressed fallback uses #j=', async () => {
     const config = toShareConfig(layout, 'x', 'ft');
     const fragment = await encodeShareFragment(config, { compress: false });

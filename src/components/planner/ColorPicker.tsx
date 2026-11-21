@@ -1,8 +1,16 @@
-import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import {
+  useContext,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Palette, X } from 'lucide-react';
 import { useDialogFocus } from '../../hooks/useDialogFocus';
 import { COLOR_PRESETS, DEFAULT_COLOR, isValidHex } from '../../lib/colors';
+import { PopoverRootContext } from './PopoverRoot';
 
 interface ColorPickerProps {
   currentColor: string;
@@ -31,6 +39,7 @@ export function ColorPicker({
   const [hexError, setHexError] = useState('');
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const panelRef = useRef<HTMLDivElement>(null);
+  const popoverRoot = useContext(PopoverRootContext);
   // Both variants take focus on open, trap Tab, close on Escape and hand focus back to the trigger.
   useDialogFocus(panelRef, { onClose });
 
@@ -196,11 +205,13 @@ export function ColorPicker({
     );
   }
 
-  // Desktop: portal to <body> to escape the sidebar's overflow clipping.
+  // Desktop: portal out of the sidebar (its scroll clips, and its transform would offset, a fixed
+  // popover) into the popover root right after it, so it still follows the sidebar when read.
   return createPortal(
     <div
       ref={panelRef}
       role="dialog"
+      aria-modal="true"
       aria-label="Choose color"
       tabIndex={-1}
       className="fixed bg-white rounded-lg shadow-xl outline-hidden border border-slate-200 p-3 z-[9999] min-w-[200px] animate-fade-in"
@@ -210,6 +221,6 @@ export function ColorPicker({
     >
       {content}
     </div>,
-    document.body,
+    popoverRoot ?? document.body,
   );
 }

@@ -1,5 +1,6 @@
 import { Scan, ZoomIn, ZoomOut } from 'lucide-react';
 import { MAX_ZOOM, MIN_ZOOM } from '../../lib/constants';
+import { SnapToggle } from './SnapToggle';
 import { Tooltip } from './Tooltip';
 
 interface ZoomControlsProps {
@@ -9,8 +10,15 @@ interface ZoomControlsProps {
   onFit: () => void;
 }
 
-/** Zoom buttons in the desktop header. */
-export function HeaderZoomControls({ zoom, onZoomIn, onZoomOut, onFit }: ZoomControlsProps) {
+/** Zoom buttons and the Snap toggle in the desktop header. */
+export function HeaderZoomControls({
+  zoom,
+  onZoomIn,
+  onZoomOut,
+  onFit,
+  snapOn,
+  onToggleSnap,
+}: ZoomControlsProps & { snapOn: boolean; onToggleSnap: () => void }) {
   return (
     <div className="hidden md:flex items-center gap-1 bg-slate-50 rounded-lg px-2 py-1">
       <Tooltip text="Zoom out">
@@ -49,16 +57,18 @@ export function HeaderZoomControls({ zoom, onZoomIn, onZoomOut, onFit }: ZoomCon
           <Scan className="w-4 h-4" />
         </button>
       </Tooltip>
+      <div className="w-px h-4 bg-slate-300 mx-1" />
+      <SnapToggle variant="header" on={snapOn} onToggle={onToggleSnap} />
     </div>
   );
 }
 
-/** Floating zoom pill on small screens. */
+/** Zoom pill in the phone bottom bar (laid out next to the editor button by the planner). */
 export function FloatingZoomControls({ zoom, onZoomIn, onZoomOut, onFit }: ZoomControlsProps) {
   return (
     <div
-      className="fixed bottom-6 left-4 z-40 flex md:hidden items-center gap-1 bg-white/95 backdrop-blur-xs rounded-full shadow-lg px-2 py-1.5 animate-fade-in"
-      style={{ paddingBottom: 'max(0.375rem, env(safe-area-inset-bottom))' }}
+      className="pointer-events-auto flex md:hidden items-center gap-0.5 bg-white/95 backdrop-blur-xs rounded-full shadow-lg px-1.5 py-1.5 animate-fade-in"
+      data-testid="zoom-pill"
     >
       <button
         type="button"
@@ -69,7 +79,7 @@ export function FloatingZoomControls({ zoom, onZoomIn, onZoomOut, onFit }: ZoomC
       >
         <ZoomOut className="w-5 h-5" />
       </button>
-      <span className="text-xs font-medium text-slate-600 min-w-[3rem] text-center">
+      <span className="text-xs font-medium text-slate-600 min-w-[2.5rem] text-center tabular-nums">
         {Math.round(zoom * 100)}%
       </span>
       <button
@@ -81,7 +91,7 @@ export function FloatingZoomControls({ zoom, onZoomIn, onZoomOut, onFit }: ZoomC
       >
         <ZoomIn className="w-5 h-5" />
       </button>
-      <div className="w-px h-5 bg-slate-300 mx-1" />
+      <div className="w-px h-5 bg-slate-300 mx-0.5" />
       <button
         type="button"
         onClick={onFit}

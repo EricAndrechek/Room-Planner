@@ -1,6 +1,7 @@
-import type { PointerEvent as ReactPointerEvent, RefObject } from 'react';
+import type { PointerEvent as ReactPointerEvent, ReactNode, RefObject } from 'react';
 import { Home, Sofa } from 'lucide-react';
 import { DESIGN_MODES, PIXELS_PER_UNIT } from '../../lib/constants';
+import { feetToDisplay, nudgeStep } from '../../lib/units';
 import type { ItemWarning } from '../../lib/geometry';
 import type {
   DesignMode,
@@ -31,6 +32,12 @@ interface RoomCanvasProps {
   onSelectItem: (item: FurnitureItem) => void;
   onDoorPointerDown: (e: ReactPointerEvent<HTMLDivElement>, door: Door) => void;
   onWindowPointerDown: (e: ReactPointerEvent<HTMLDivElement>, win: RoomWindow) => void;
+  /** Doors whose clearance to highlight (a piece being moved is in their way). */
+  highlightDoorIds?: readonly Id[];
+  /** Drawn inside the room, above the furniture (guides and measurements). */
+  overlay?: ReactNode;
+  /** Floating controls over the canvas (the Snap chip on phones). */
+  controls?: ReactNode;
 }
 
 const GRID_STYLE = {
@@ -56,6 +63,9 @@ export function RoomCanvas({
   onSelectItem,
   onDoorPointerDown,
   onWindowPointerDown,
+  overlay,
+  controls,
+  highlightDoorIds = [],
 }: RoomCanvasProps) {
   const { roomDims, doors, windows, items } = layout;
   const isRoomSetup = designMode === DESIGN_MODES.ROOM_SETUP;
@@ -76,13 +86,16 @@ export function RoomCanvas({
       <p id="floor-plan-help" className="sr-only">
         Press Tab to move between {isRoomSetup ? 'door and window handles' : 'furniture pieces'}.
         {isRoomSetup
-          ? ' Arrow keys slide the focused opening along its wall; hold Shift for larger steps.'
-          : ' Arrow keys move the focused piece; hold Shift for larger steps. R rotates it by 90 degrees, Shift and R rotates the other way. Delete removes it. Escape deselects.'}{' '}
-        Control or Command with Z undoes.
+          ? ' Arrow keys slide the focused opening along its wall; hold Shift for larger steps, Alt or Option for fine ones.'
+          : ` Arrow keys move the focused piece by ${feetToDisplay(nudgeStep('normal', unitSystem), unitSystem)}; hold Shift for ${feetToDisplay(nudgeStep('coarse', unitSystem), unitSystem)}, or Alt or Option (or Control or Command) for ${feetToDisplay(nudgeStep('fine', unitSystem), unitSystem)} without snapping. With Snap on, a move that ends close to a wall or another piece lines up with it. R rotates it by 90 degrees, Shift and R rotates the other way; with Alt or Option, by 1 degree. Delete removes it. Escape deselects.`}
+        {isRoomSetup ? ' Delete removes the focused door or window.' : ''} Control or Command with Z
+        undoes.
       </p>
       {showModeBadge && (
         <div
-          className={`absolute top-4 left-1/2 -translate-x-1/2 px-3 sm:px-4 py-2 rounded-full shadow-lg text-[11px] sm:text-xs z-20 pointer-events-none animate-fade-in backdrop-blur-xs ${
+          // One line on any phone: no wrapping (an absolute box at left: 50% would otherwise shrink
+          // to half the width), truncated with an ellipsis if it still does not fit.
+          className={`absolute top-4 left-1/2 -translate-x-1/2 max-w-[calc(100%-1.5rem)] truncate whitespace-nowrap px-3 sm:px-4 py-2 rounded-full shadow-lg text-[11px] sm:text-xs z-20 pointer-events-none animate-fade-in backdrop-blur-xs ${
             isRoomSetup ? 'bg-indigo-600/90 text-white' : 'bg-emerald-700/90 text-white'
           }`}
         >
@@ -106,6 +119,8 @@ export function RoomCanvas({
         </div>
       )}
 
+      {controls}
+
       {/* Room - centered, panned by translate and zoomed by scale */}
       <div
         className="absolute inset-0 flex items-center justify-center"
@@ -118,6 +133,9 @@ export function RoomCanvas({
             width: roomDims.width * PIXELS_PER_UNIT,
             height: roomDims.height * PIXELS_PER_UNIT,
             border: '4px solid #334155',
+            // The walls sit outside the floor: the interior is exactly the room size, so (0, 0) and
+            // (width, height) are the walls' inner faces (where furniture is flush and openings sit).
+            boxSizing: 'content-box',
             transform: `scale(${zoom})`,
             transformOrigin: 'center',
           }}
@@ -136,6 +154,7 @@ export function RoomCanvas({
               zoom={zoom}
               onSelect={() => onSelectOpening('door', door.id)}
               onHandlePointerDown={(e) => onDoorPointerDown(e, door)}
+              highlight={highlightDoorIds.includes(door.id)}
             />
           ))}
           {windows.map((win) => (
@@ -165,8 +184,12 @@ export function RoomCanvas({
                 onPointerDown={onItemPointerDown}
                 onRotatePointerDown={onRotatePointerDown}
                 onSelect={onSelectItem}
+                // Only the selected piece draws zoom-dependent UI (its rotate handle): others keep
+                // their memoized render while zooming.
+                zoom={isActive('item', item.id) ? zoom : 1}
               />
             ))}
+          {overlay}
         </div>
       </div>
     </div>

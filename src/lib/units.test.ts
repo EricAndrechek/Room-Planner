@@ -9,6 +9,7 @@ import {
   parseToFeet,
   roundNum,
   unitValueToFeet,
+  nudgeStep,
 } from './units';
 import type { UnitSystem } from '../types';
 
@@ -166,5 +167,28 @@ describe('unit value conversion (share/export format)', () => {
   it('roundNum and formatArea', () => {
     expect(roundNum(1.23456, 2)).toBe(1.23);
     expect(formatArea(14.5, 11)).toBe('159.5 sq ft');
+  });
+});
+
+describe('nudgeStep', () => {
+  it('uses inches and feet for imperial units', () => {
+    for (const u of ['ft-in', 'ft', 'in'] as const) {
+      expect(nudgeStep('fine', u)).toBeCloseTo(1 / 12, 10);
+      expect(nudgeStep('normal', u)).toBe(0.25);
+      expect(nudgeStep('coarse', u)).toBe(1);
+    }
+  });
+  it('uses round centimeters for metric units', () => {
+    for (const u of ['m', 'cm'] as const) {
+      expect(feetToDisplay(nudgeStep('fine', u), 'cm')).toBe('1 cm');
+      expect(feetToDisplay(nudgeStep('normal', u), 'cm')).toBe('5 cm');
+      expect(feetToDisplay(nudgeStep('coarse', u), 'cm')).toBe('25 cm');
+    }
+  });
+  it('orders fine < normal < coarse', () => {
+    for (const u of ['ft-in', 'cm'] as const) {
+      expect(nudgeStep('fine', u)).toBeLessThan(nudgeStep('normal', u));
+      expect(nudgeStep('normal', u)).toBeLessThan(nudgeStep('coarse', u));
+    }
   });
 });

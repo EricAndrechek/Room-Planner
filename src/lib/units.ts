@@ -198,3 +198,22 @@ export const unitValueToFeet = (value: number, unitSystem: string = 'ft-in'): nu
 /** Room area. Always square feet (the app's historical display). */
 export const formatArea = (width: number, height: number): string =>
   `${roundNum(width * height, 1)} sq ft`;
+
+// --- Keyboard nudge steps -----------------------------------------------------------------
+
+/** How far one arrow-key press moves: `fine` (Alt/Option or Ctrl/Cmd), `normal`, `coarse` (Shift). */
+export type NudgeSize = 'fine' | 'normal' | 'coarse';
+
+const isMetric = (u: UnitSystem) => u === 'm' || u === 'cm';
+
+/**
+ * Arrow-key step in feet, in round numbers of the user's units: imperial 1 in / 3 in / 1 ft,
+ * metric 1 cm / 5 cm / 25 cm. The single place these steps are defined (the keyboard handler,
+ * help text and tests all read it).
+ */
+export const nudgeStep = (size: NudgeSize, unitSystem: UnitSystem): number => {
+  if (isMetric(unitSystem)) {
+    return { fine: 1, normal: 5, coarse: 25 }[size] * FEET_PER_CM;
+  }
+  return { fine: FEET_PER_INCH, normal: 0.25, coarse: 1 }[size];
+};

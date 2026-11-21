@@ -32,6 +32,18 @@ export function describeLayoutChange(prev: Layout, next: Layout, unitSystem: Uni
   return parts.slice(0, 3).join('. ');
 }
 
+/** Doors/windows that came back or went away (spoken after undo/redo), or ''. */
+export function describeOpeningsChange(prev: Layout, next: Layout): string {
+  const parts: string[] = [];
+  const diff = (before: number, after: number, kind: string) => {
+    if (after > before) parts.push(`${kind} restored`);
+    else if (after < before) parts.push(`${kind} removed`);
+  };
+  diff(prev.doors.length, next.doors.length, 'Door');
+  diff(prev.windows.length, next.windows.length, 'Window');
+  return parts.join('. ');
+}
+
 /** Newly appearing overlap / out-of-bounds warnings, spoken. */
 export function describeNewWarnings(
   prev: Map<Id, ItemWarning>,
@@ -41,10 +53,16 @@ export function describeNewWarnings(
   const parts: string[] = [];
   for (const item of items) {
     const now = next.get(item.id);
-    if (!now || (!now.collision && !now.outOfBounds)) continue;
+    if (!now) continue;
     const was = prev.get(item.id);
-    const isNew = (now.collision && !was?.collision) || (now.outOfBounds && !was?.outOfBounds);
-    if (isNew) parts.push(`Warning: ${item.label}. ${warningText(now, true)}`);
+    if (now.collision || now.outOfBounds) {
+      const isNew = (now.collision && !was?.collision) || (now.outOfBounds && !was?.outOfBounds);
+      if (isNew) parts.push(`Warning: ${item.label}. ${warningText(now, true)}`);
+    }
+    if (now.blocksDoor && !was?.blocksDoor) parts.push(`${item.label} blocks a door`);
+    else if (now.blocksDoorway && !now.blocksDoor && !was?.blocksDoorway && !was?.blocksDoor) {
+      parts.push(`${item.label} is in a doorway`);
+    }
   }
   return parts.slice(0, 2).join('. ');
 }
@@ -106,7 +124,9 @@ export function useAnnouncements(
       // Replace the bare "Undo" queued by noteAction with the detailed version.
       pending.current = pending.current.filter((m) => m !== act);
     }
-    queue([act, change, newWarnings].filter(Boolean).join('. '));
+    // Openings are announced by their own actions; after undo/redo say what came back or went.
+    const openings = act ? describeOpeningsChange(prev, layout) : '';
+    queue([act, change, openings, newWarnings].filter(Boolean).join('. '));
   }, [layout, warnings, unitSystem, queue]);
 
   useEffect(() => {

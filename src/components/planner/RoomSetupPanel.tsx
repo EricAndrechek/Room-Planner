@@ -9,11 +9,12 @@ import {
   Trash2,
   Unlock,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { AddedOpening } from '../../hooks/useOpenings';
 import { prefersReducedMotion } from '../../lib/browser';
 import { DOOR_TYPES, WALL_OPTIONS } from '../../lib/constants';
 import { wallLength } from '../../lib/geometry';
+import { doorSwingAngle, hasHingeSide, isSwingDoor } from '../../lib/openings';
 import { feetToDisplay, formatArea } from '../../lib/units';
 import type { Door, DoorType, Id, RoomDims, RoomWindow, UnitSystem, Wall } from '../../types';
 import { DimensionInput } from './DimensionInput';
@@ -71,6 +72,10 @@ function useCardHighlight(highlight: AddedOpening | null | undefined) {
   return { register, isHighlighted };
 }
 
+/** What a door's `hinge` setting is called for its type. */
+const hingeWord = (type: DoorType | undefined) =>
+  type === 'bifold' ? 'Folds to' : type === 'pocket' ? 'Pocket' : 'Hinge';
+
 const wallLabel = (w: Wall) => w.charAt(0).toUpperCase() + w.slice(1);
 const plural = (n: number, word: string) => `${n} ${word}${n !== 1 ? 's' : ''}`;
 
@@ -78,6 +83,9 @@ const plural = (n: number, word: string) => `${n} ${word}${n !== 1 ? 's' : ''}`;
 export function RoomSetupPanel(props: RoomSetupPanelProps) {
   const { isActiveMode, expanded, roomDims, doors, windows, unitSystem } = props;
   const { register, isHighlighted } = useCardHighlight(props.highlight);
+  // Ids for the visible field labels (`htmlFor`), unique per panel and per door/window row.
+  const uid = useId();
+  const fid = (...parts: (string | number)[]) => [uid, ...parts].join('-');
   // Ring that fades out (transition) when the highlight ends; instant with reduced motion.
   const glow = (on: boolean, ring: string) =>
     `scroll-mt-20 scroll-mb-4 transition-shadow duration-700 ${on ? `ring-2 ${ring}` : ''}`;
@@ -109,7 +117,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
           </div>
           <div className="text-left">
             <span className="text-sm font-semibold text-slate-700 block">Room Setup</span>
-            <span className="text-[10px] text-slate-500">
+            <span className="text-[10px] text-slate-600">
               {feetToDisplay(roomDims.width, unitSystem)} ×{' '}
               {feetToDisplay(roomDims.height, unitSystem)} • {plural(doors.length, 'door')} •{' '}
               {plural(windows.length, 'window')}
@@ -119,7 +127,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
         <div className="flex items-center gap-2">
           {!isActiveMode && (
             <>
-              <span className="text-[10px] text-slate-500 flex items-center gap-1">
+              <span className="text-[10px] text-slate-600 flex items-center gap-1">
                 <Lock className="w-3 h-3" /> Locked
               </span>
               {expanded ? (
@@ -163,8 +171,11 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
             </h2>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium mb-1">Width</label>
+                <label htmlFor={fid('room-width')} className="block text-xs font-medium mb-1">
+                  Width
+                </label>
                 <DimensionInput
+                  id={fid('room-width')}
                   value={roomDims.width}
                   onChange={(val) => props.onRoomDimsChange({ ...roomDims, width: val })}
                   className={inputClass}
@@ -176,8 +187,11 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">Length</label>
+                <label htmlFor={fid('room-length')} className="block text-xs font-medium mb-1">
+                  Length
+                </label>
                 <DimensionInput
+                  id={fid('room-length')}
                   value={roomDims.height}
                   onChange={(val) => props.onRoomDimsChange({ ...roomDims, height: val })}
                   className={inputClass}
@@ -235,8 +249,14 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
 
                     <div className="grid grid-cols-2 gap-2 mb-2">
                       <div>
-                        <label className="block text-[10px] text-slate-500 mb-1">Wall</label>
+                        <label
+                          htmlFor={fid('door', index, 'wall')}
+                          className="block text-[10px] text-slate-500 mb-1"
+                        >
+                          Wall
+                        </label>
                         <select
+                          id={fid('door', index, 'wall')}
                           value={door.wall}
                           onChange={(e) =>
                             props.onUpdateDoor(door.id, { wall: e.target.value as Wall })
@@ -252,8 +272,14 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                         </select>
                       </div>
                       <div>
-                        <label className="block text-[10px] text-slate-500 mb-1">Type</label>
+                        <label
+                          htmlFor={fid('door', index, 'type')}
+                          className="block text-[10px] text-slate-500 mb-1"
+                        >
+                          Type
+                        </label>
                         <select
+                          id={fid('door', index, 'type')}
                           value={door.type}
                           onChange={(e) =>
                             props.onUpdateDoor(door.id, { type: e.target.value as DoorType })
@@ -272,8 +298,14 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
 
                     <div className="grid grid-cols-2 gap-2 mb-2">
                       <div>
-                        <label className="block text-[10px] text-slate-500 mb-1">Width</label>
+                        <label
+                          htmlFor={fid('door', index, 'width')}
+                          className="block text-[10px] text-slate-500 mb-1"
+                        >
+                          Width
+                        </label>
                         <DimensionInput
+                          id={fid('door', index, 'width')}
                           value={door.width}
                           onChange={(val) => props.onUpdateDoor(door.id, { width: val })}
                           className={smallInput('focus:ring-indigo-500')}
@@ -284,8 +316,14 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] text-slate-500 mb-1">Position</label>
+                        <label
+                          htmlFor={fid('door', index, 'position')}
+                          className="block text-[10px] text-slate-500 mb-1"
+                        >
+                          Position
+                        </label>
                         <DimensionInput
+                          id={fid('door', index, 'position')}
                           value={door.position}
                           onChange={(val) => props.onUpdateDoor(door.id, { position: val })}
                           className={smallInput('focus:ring-indigo-500')}
@@ -297,19 +335,59 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                       </div>
                     </div>
 
-                    {door.type !== 'sliding' && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          props.onUpdateDoor(door.id, {
-                            hinge: door.hinge === 'left' ? 'right' : 'left',
-                          })
-                        }
-                        className="w-full py-1.5 px-2 bg-slate-100 hover:bg-slate-200 rounded-sm text-[10px] font-medium text-slate-600 flex items-center justify-center gap-1 transition-colors"
-                      >
-                        <ArrowLeftRight className="w-3 h-3" /> Hinge:{' '}
-                        {door.hinge === 'left' ? 'Left' : 'Right'}
-                      </button>
+                    {(hasHingeSide(door.type) || isSwingDoor(door.type)) && (
+                      <div className="flex gap-2">
+                        {hasHingeSide(door.type) && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              props.onUpdateDoor(door.id, {
+                                hinge: door.hinge === 'left' ? 'right' : 'left',
+                              })
+                            }
+                            className="flex-1 py-1.5 px-2 bg-slate-100 hover:bg-slate-200 rounded-sm text-[10px] font-medium text-slate-600 flex items-center justify-center gap-1 transition-colors"
+                          >
+                            <ArrowLeftRight className="w-3 h-3" aria-hidden="true" />{' '}
+                            {hingeWord(door.type)}: {door.hinge === 'left' ? 'Left' : 'Right'}
+                          </button>
+                        )}
+                        {isSwingDoor(door.type) && (
+                          <div
+                            role="radiogroup"
+                            aria-label={`Door ${index + 1} opens`}
+                            className="flex-1 flex bg-slate-100 rounded-sm p-0.5"
+                          >
+                            {([90, 180] as const).map((angle) => {
+                              const on = doorSwingAngle(door) === angle;
+                              return (
+                                <button
+                                  key={angle}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={on}
+                                  title={
+                                    angle === 90
+                                      ? 'Opens to 90°'
+                                      : 'Opens to 180°, flat against the wall'
+                                  }
+                                  onClick={() =>
+                                    props.onUpdateDoor(door.id, {
+                                      swingAngle: angle === 180 ? 180 : undefined,
+                                    })
+                                  }
+                                  className={`flex-1 py-1 text-[10px] font-medium rounded-sm transition-colors ${
+                                    on
+                                      ? 'bg-white text-indigo-700 shadow-xs'
+                                      : 'text-slate-600 hover:text-slate-800'
+                                  }`}
+                                >
+                                  {angle}°
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 );
@@ -364,8 +442,14 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
 
                     <div className="grid grid-cols-3 gap-2">
                       <div>
-                        <label className="block text-[10px] text-slate-500 mb-1">Wall</label>
+                        <label
+                          htmlFor={fid('window', index, 'wall')}
+                          className="block text-[10px] text-slate-500 mb-1"
+                        >
+                          Wall
+                        </label>
                         <select
+                          id={fid('window', index, 'wall')}
                           value={win.wall}
                           onChange={(e) =>
                             props.onUpdateWindow(win.id, { wall: e.target.value as Wall })
@@ -381,8 +465,14 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                         </select>
                       </div>
                       <div>
-                        <label className="block text-[10px] text-slate-500 mb-1">Width</label>
+                        <label
+                          htmlFor={fid('window', index, 'width')}
+                          className="block text-[10px] text-slate-500 mb-1"
+                        >
+                          Width
+                        </label>
                         <DimensionInput
+                          id={fid('window', index, 'width')}
                           value={win.width}
                           onChange={(val) => props.onUpdateWindow(win.id, { width: val })}
                           className={smallInput('focus:ring-blue-500')}
@@ -393,8 +483,14 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] text-slate-500 mb-1">Position</label>
+                        <label
+                          htmlFor={fid('window', index, 'position')}
+                          className="block text-[10px] text-slate-500 mb-1"
+                        >
+                          Position
+                        </label>
                         <DimensionInput
+                          id={fid('window', index, 'position')}
                           value={win.position}
                           onChange={(val) => props.onUpdateWindow(win.id, { position: val })}
                           className={smallInput('focus:ring-blue-500')}

@@ -1,6 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
 import { withBase } from '../lib/paths';
+import { SHORTCUT_GROUPS, shortcutKeys } from '../lib/shortcuts';
 import { SITE_NAME } from '../lib/site';
 
 const title = 'Help & FAQ — Room Planner';
@@ -15,21 +16,11 @@ const units = [
   { system: 'Centimeters', example: '380 cm', use: 'Precision metric' },
 ];
 
-const shortcuts = [
-  { keys: ['Ctrl/⌘', 'Z'], action: 'Undo' },
-  { keys: ['Ctrl/⌘', 'Shift', 'Z'], action: 'Redo' },
-  { keys: ['Delete / Backspace'], action: 'Delete the selected item' },
-  { keys: ['Escape'], action: 'Deselect' },
-  { keys: ['Arrow keys'], action: 'Move the selected item by 3 inches (0.25 ft)' },
-  { keys: ['Shift', 'Arrow keys'], action: 'Move the selected item by 1 foot' },
-  { keys: ['R'], action: 'Rotate the selected item by 90°' },
-  { keys: ['Shift', 'R'], action: 'Rotate the selected item by 90° the other way' },
-  {
-    keys: ['Tab'],
-    action:
-      'Move between furniture pieces (or door and window handles in Room Setup); focusing one selects it, so the keys above work without a mouse',
-  },
-];
+// One list for the app's shortcuts panel (`?`) and this page: lib/shortcuts.ts.
+const shortcutGroups = SHORTCUT_GROUPS.map((g) => ({
+  title: g.title,
+  rows: g.shortcuts.map((s) => ({ combos: shortcutKeys(s, 'generic'), action: s.action })),
+}));
 
 const sections = [
   { id: 'getting-started', label: 'Getting started' },
@@ -189,9 +180,17 @@ const sections = [
             <strong>Width</strong> — the opening size; it can't exceed the wall.
           </li>
           <li>
-            <strong>Door type</strong> — <em>swing in</em>, <em>swing out</em> or <em>sliding</em>.
-            Swing doors show their swing arc so you can keep it clear of furniture; use{' '}
-            <strong>Hinge</strong> to flip which side they open from.
+            <strong>Door type</strong> — <em>swing in</em> or <em>swing out</em> (one hinged door),{' '}
+            <em>double (French)</em> in or out (two leaves), <em>sliding</em> (bypass or barn panels
+            along the inside of the wall), <em>pocket</em> (slides into the wall),
+            <em>bi-fold</em> (folds into the room) or <em>opening</em> (a doorway with no door).
+            Swing doors show their swing arc so you can keep it clear of furniture; use
+            <strong>Hinge</strong> to flip which side they open from (for a bi-fold, the side it
+            folds to; for a pocket door, the side of its pocket).
+          </li>
+          <li>
+            <strong>Opens to 90° or 180°</strong> — swing and double doors open to 90° by default;
+            choose 180° for a door that opens flat against the wall.
           </li>
         </ul>
       </section>
@@ -207,6 +206,17 @@ const sections = [
             arrow keys.
           </li>
           <li>
+            <strong>Snapping &amp; guides</strong> — while you drag, a piece snaps flush against a
+            wall, lines up with the edges or center of other pieces, or centers in the room, and red
+            guide lines show what it lined up with. Labels show the clear distance to the nearest
+            wall or piece on each side (also, more faintly, while a piece is selected). Hold
+            <kbd>Alt</kbd>/<kbd>Option</kbd> while dragging to place it freely, or switch snapping
+            off with the <strong>Snap</strong> button (next to the zoom controls; on phones, on the
+            plan). Arrow-key moves keep their steps but snap when they end close to a wall or edge;
+            fine moves (<kbd>Alt</kbd>/<kbd>Option</kbd> or <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + arrow)
+            never snap.
+          </li>
+          <li>
             <strong>Color</strong> — pick one of 10 preset colors or enter any custom hex color.
           </li>
           <li>
@@ -218,10 +228,15 @@ const sections = [
       <section id="rotation">
         <h2>Rotating items</h2>
         <p>
-          Select a piece and drag the circular handle above it around the piece. When you let go
-          close to a 15° step (for example 45° or 90°) it snaps exactly onto it. You can also type
-          an exact angle in the sidebar's <strong>Rotation</strong> field, or press <kbd>R</kbd> to
-          turn the selected item 90°.
+          Select a piece and drag the circular handle above it around the piece. A badge under the
+          piece shows the angle as you turn. Near straight (0°, 90°, 180°, 270°, within 8°) or a
+          diagonal (45°, within 5°) it locks on: the badge turns red with a magnet and a guide line
+          shows the axis. Hold <kbd>Shift</kbd> to turn in 15° steps, or <kbd>Alt</kbd> (
+          <kbd>Option</kbd>
+          on a Mac) to turn freely (so does switching <strong>Snap</strong> off). You can also type
+          an exact angle in the sidebar's <strong>Rotation</strong> field, press <kbd>R</kbd> to
+          turn the selected item 90°, or <kbd>Alt</kbd>/<kbd>Option</kbd>+<kbd>R</kbd> to turn it 1°
+          at a time (add <kbd>Shift</kbd> to turn the other way).
         </p>
       </section>
 
@@ -244,6 +259,16 @@ const sections = [
         <p>
           A piece gets a red border and ⚠️ badge when it overlaps another visible piece or sticks
           out of the room. Rotation is taken into account, and pieces that only touch are fine.
+        </p>
+        <p>
+          A softer amber, dashed border means a piece is in a door's way:{' '}
+          <strong>Blocks door</strong>
+          when it is where an inward door swings (both leaves of a double door, at the angle it
+          opens to), where a bi-fold folds or where sliding panels run, and{' '}
+          <strong>Blocks doorway</strong>
+          when it stands in the passage just inside any door or opening (about 1½ ft / 45 cm deep).
+          While you drag a piece into a door's way, the area that door needs lights up. Doors that
+          swing outward only need their doorway clear. Hidden pieces never count.
         </p>
       </section>
 
@@ -356,6 +381,11 @@ const sections = [
 
       <section id="shortcuts">
         <h2>Keyboard shortcuts</h2>
+        <p>
+          In the planner, press <kbd>?</kbd> (or the keyboard button in the top bar) to see these
+          with your keyboard's keys (⌘ ⌥ on a Mac, Ctrl Alt elsewhere). Shortcuts act while the
+          floor plan (or nothing) has focus, never while you type in the sidebar or a dialog.
+        </p>
         <div class="overflow-x-auto">
           <table class="w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
             <thead class="bg-slate-100 text-left">
@@ -364,23 +394,42 @@ const sections = [
                 <th class="p-2">Action</th>
               </tr>
             </thead>
-            <tbody>
-              {shortcuts.map((s) => (
-                <tr class="border-t border-slate-200 bg-white">
-                  <td class="p-2 whitespace-nowrap">
-                    {s.keys.map((k, i) => (
-                      <>
-                        {i > 0 && ' + '}
-                        <kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded-sm text-xs font-mono">
-                          {k}
-                        </kbd>
-                      </>
-                    ))}
-                  </td>
-                  <td class="p-2">{s.action}</td>
+            {shortcutGroups.map((g) => (
+              <tbody>
+                <tr class="border-t border-slate-200 bg-slate-50">
+                  <th
+                    colspan="2"
+                    scope="colgroup"
+                    class="p-2 text-left text-xs uppercase tracking-wider text-slate-600"
+                  >
+                    {g.title}
+                  </th>
                 </tr>
-              ))}
-            </tbody>
+                {g.rows.map((r) => (
+                  <tr class="border-t border-slate-200 bg-white">
+                    <td class="p-2 leading-7">
+                      {/* Each combination stays on one line; alternatives wrap on phones. */}
+                      {r.combos.map((combo, ci) => (
+                        <>
+                          {ci > 0 && ' or '}
+                          <span class="whitespace-nowrap">
+                            {combo.map((k, i) => (
+                              <>
+                                {i > 0 && ' + '}
+                                <kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded-sm text-xs font-mono">
+                                  {k}
+                                </kbd>
+                              </>
+                            ))}
+                          </span>
+                        </>
+                      ))}
+                    </td>
+                    <td class="p-2">{r.action}</td>
+                  </tr>
+                ))}
+              </tbody>
+            ))}
           </table>
         </div>
       </section>

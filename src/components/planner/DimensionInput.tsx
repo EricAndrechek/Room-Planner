@@ -13,6 +13,8 @@ interface DimensionInputProps {
   max?: number;
   label?: string;
   unitSystem?: UnitSystem;
+  /** For a visible `<label htmlFor>`. */
+  id?: string;
 }
 
 /**
@@ -29,6 +31,7 @@ export function DimensionInput({
   max = 1000,
   label,
   unitSystem = 'ft-in',
+  id,
 }: DimensionInputProps) {
   // While focused the user edits a draft; otherwise the value is displayed.
   const [draft, setDraft] = useState<string | null>(null);
@@ -70,6 +73,7 @@ export function DimensionInput({
     <div className="relative w-full">
       <div className="relative flex items-center">
         <input
+          id={id}
           type="text"
           inputMode="text"
           value={shown}
@@ -90,7 +94,7 @@ export function DimensionInput({
           </span>
         )}
       </div>
-      {error && <p className="absolute -bottom-5 left-0 text-[10px] text-red-500">{error}</p>}
+      {error && <p className="absolute -bottom-5 left-0 text-[10px] text-red-700">{error}</p>}
     </div>
   );
 }
