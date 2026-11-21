@@ -395,7 +395,10 @@ test("? opens the keyboard shortcuts, grouped, with this keyboard's keys; Escape
     await page.getByRole('button', { name: 'Keyboard shortcuts' }).click();
     await expect(dialog).toBeVisible();
     await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
     await page.getByRole('button', { name: 'Undo' }).hover({ force: true });
-    await expect(page.getByRole('tooltip')).toHaveText(mac ? 'Undo (⌘Z)' : 'Undo (Ctrl+Z)');
+    await expect(page.getByRole('tooltip').filter({ hasText: /^Undo/ })).toHaveText(
+      mac ? 'Undo (⌘Z)' : 'Undo (Ctrl+Z)',
+    );
   }
 });
