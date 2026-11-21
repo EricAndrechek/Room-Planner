@@ -164,22 +164,46 @@ export const angleDelta = (from: number, to: number): number => {
   return d > 180 ? d - 360 : d;
 };
 
-/** Snap increment and capture window used when a rotation drag ends. */
-export const ROTATION_SNAP_STEP = 15;
-export const ROTATION_SNAP_THRESHOLD = 5;
+/** Rotation-handle snapping: magnetic capture (degrees) around the axes and the diagonals. */
+export const ROTATION_SNAP_AXIS = 8;
+export const ROTATION_SNAP_DIAGONAL = 5;
+/** Step used while Shift is held during a rotation drag. */
+export const ROTATION_STEP = 15;
 
 /**
- * Normalize to [0, 360) and snap to the nearest 15° (so also every 45°/90°)
- * when within 5° of it - the behavior of the original rotation handle.
+ * How a rotation drag treats the angle: `magnetic` (default) pulls onto 0/90/180/270 within 8deg
+ * and onto the 45deg diagonals within 5deg; `step` moves in 15deg increments (Shift); `free`
+ * (Alt/Option, or the Snap toggle off) follows the pointer in whole degrees.
  */
-export const snapRotation = (
-  deg: number,
-  step = ROTATION_SNAP_STEP,
-  threshold = ROTATION_SNAP_THRESHOLD,
-): number => {
-  const norm = normalizeDegrees(deg);
-  const nearest = Math.round(norm / step) * step;
-  return Math.abs(norm - nearest) < threshold ? nearest % 360 : norm;
+export type RotationSnapMode = 'magnetic' | 'step' | 'free';
+
+export interface AngleSnap {
+  /** Resulting rotation in [0, 360). */
+  deg: number;
+  /** The angle it locked onto (equal to `deg`), or null when it moved freely. */
+  snapped: number | null;
+}
+
+/** Snap a rotation (degrees, any range) for the rotate handle. Angular, so zoom-independent. */
+export const snapAngle = (raw: number, mode: RotationSnapMode = 'magnetic'): AngleSnap => {
+  const norm = normalizeDegrees(raw);
+  if (mode === 'step') {
+    const deg = normalizeDegrees(Math.round(norm / ROTATION_STEP) * ROTATION_STEP);
+    return { deg, snapped: deg };
+  }
+  if (mode === 'magnetic') {
+    const axis = Math.round(norm / 90) * 90;
+    if (Math.abs(norm - axis) <= ROTATION_SNAP_AXIS) {
+      const deg = normalizeDegrees(axis);
+      return { deg, snapped: deg };
+    }
+    const diagonal = Math.round((norm - 45) / 90) * 90 + 45;
+    if (Math.abs(norm - diagonal) <= ROTATION_SNAP_DIAGONAL) {
+      const deg = normalizeDegrees(diagonal);
+      return { deg, snapped: deg };
+    }
+  }
+  return { deg: normalizeDegrees(Math.round(norm)), snapped: null };
 };
 
 // --- Viewport ---------------------------------------------------------------

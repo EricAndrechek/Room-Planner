@@ -1,4 +1,6 @@
 import { memo, type CSSProperties } from 'react';
+import { Magnet } from 'lucide-react';
+import type { AngleSnap } from '../../lib/geometry';
 import { PIXELS_PER_UNIT } from '../../lib/constants';
 import {
   fitMeasurementLabels,
@@ -20,6 +22,8 @@ interface SnapOverlayProps {
   itemId: Id;
   /** Set while the piece is being dragged; `snap` is null when it moves freely. */
   drag: { snap: SnapResult | null } | null;
+  /** Set while the piece is being rotated with its handle. */
+  rotation?: AngleSnap | null;
 }
 
 const GUIDE = '#e11d48'; // rose-600: reads on white, the grid and every pastel fill
@@ -111,6 +115,60 @@ function MeasureLine({ m, zoom, active }: { m: MeasurementLabel; zoom: number; a
  * while a piece is selected). Decorative: the same information reaches
  * screen readers through the live region ("Against left wall") and each piece's position.
  */
+/**
+ * While rotating with the handle: the live angle in a badge under the piece, which turns rose with
+ * a magnet when it locks onto an angle, plus a faint axis line through the piece at that angle.
+ */
+function RotationFeedback({
+  item,
+  angle,
+  zoom,
+}: {
+  item: FurnitureItem;
+  angle: AngleSnap;
+  zoom: number;
+}) {
+  const b = itemBounds(item);
+  const cx = px((b.left + b.right) / 2);
+  const cy = px((b.top + b.bottom) / 2);
+  const snapped = angle.snapped !== null;
+  const axisLength = px(Math.hypot(item.width, item.height)) + 48 / zoom;
+  return (
+    <>
+      {snapped && (
+        <div
+          className="absolute"
+          style={{
+            left: cx,
+            top: cy,
+            width: axisLength,
+            height: 0,
+            borderTop: `${1.5 / zoom}px dashed ${GUIDE}`,
+            opacity: 0.7,
+            transform: `translate(-50%, -50%) rotate(${angle.deg}deg)`,
+          }}
+          data-testid="rotation-axis"
+        />
+      )}
+      <div
+        className={`absolute flex items-center gap-1 whitespace-nowrap rounded-full px-2 text-xs leading-6 font-semibold tabular-nums shadow-md ${
+          snapped ? 'bg-rose-600 text-white' : 'bg-white text-slate-800 ring-1 ring-slate-300'
+        }`}
+        style={{
+          left: cx,
+          top: px(b.bottom) + 22 / zoom,
+          transform: `translate(-50%, -50%) scale(${1 / zoom})`,
+        }}
+        data-testid="angle-badge"
+        data-snapped={snapped ? 'true' : 'false'}
+      >
+        {snapped && <Magnet className="w-3 h-3" aria-hidden="true" />}
+        {Math.round(angle.deg)}°
+      </div>
+    </>
+  );
+}
+
 export const SnapOverlay = memo(function SnapOverlay({
   items,
   room,
@@ -118,17 +176,21 @@ export const SnapOverlay = memo(function SnapOverlay({
   unitSystem,
   itemId,
   drag,
+  rotation = null,
 }: SnapOverlayProps) {
   const item = items.find((i) => i.id === itemId && i.visible !== false);
   if (!item) return null;
   const bounds = itemBounds(item);
   const guides = drag?.snap ? snapGuides(drag.snap) : [];
-  const labels = fitMeasurementLabels(
-    measureClearances(bounds, items, room, item.id),
-    zoom,
-    PIXELS_PER_UNIT,
-    unitSystem,
-  );
+  // While rotating, the angle is what matters: no clearance labels changing under the pointer.
+  const labels = rotation
+    ? []
+    : fitMeasurementLabels(
+        measureClearances(bounds, items, room, item.id),
+        zoom,
+        PIXELS_PER_UNIT,
+        unitSystem,
+      );
   // Center guides run through the middle of pieces, where their names are: draw them under the
   // furniture (visible in the gaps between pieces). Edge and wall guides and the measurements go
   // on top.
@@ -161,6 +223,7 @@ export const SnapOverlay = memo(function SnapOverlay({
         {labels.map((m) => (
           <MeasureLine key={m.side} m={m} zoom={zoom} active={!!drag} />
         ))}
+        {rotation && <RotationFeedback item={item} angle={rotation} zoom={zoom} />}
       </div>
     </>
   );

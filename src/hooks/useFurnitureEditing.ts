@@ -8,6 +8,7 @@ import {
 import { track } from '../lib/analytics';
 import { randomPresetColor } from '../lib/colors';
 import { PIXELS_PER_UNIT } from '../lib/constants';
+import type { AngleSnap } from '../lib/geometry';
 import {
   SNAP_THRESHOLD_PX,
   SNAP_THRESHOLD_TOUCH_PX,
@@ -44,8 +45,16 @@ interface Options {
   snapEnabled: boolean;
   /** Each drag frame: the piece being dragged and its snap (null when free); null on drop. */
   onDragFrame: (frame: DragFrame | null) => void;
+  /** Each rotate-handle frame: the piece and its angle (snapped or free); null on release. */
+  onRotateFrame: (frame: RotateFrame | null) => void;
   /** Speak a message in the live region. */
   announce: (text: string) => void;
+}
+
+/** What the canvas draws while a piece is being rotated with its handle. */
+export interface RotateFrame {
+  id: Id;
+  angle: AngleSnap;
 }
 
 /** What the canvas draws while a piece is being dragged. */
@@ -66,6 +75,7 @@ export function useFurnitureEditing({
   zoomRef,
   snapEnabled,
   onDragFrame,
+  onRotateFrame,
   announce,
 }: Options) {
   const { present: layout, set: setLayout, apply: applyLayout, commit } = history;
@@ -224,11 +234,18 @@ export function useFurnitureEditing({
       startRotation(e, {
         center: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
         startRotation: item.rotation,
-        onRotate: (deg) => setLayout((l) => patchItem(l, item.id, { rotation: deg })),
-        onEnd: (deg) => applyLayout((l) => patchItem(l, item.id, { rotation: deg })),
+        snapEnabled: () => snapRef.current,
+        onRotate: (angle) => {
+          setLayout((l) => patchItem(l, item.id, { rotation: angle.deg }));
+          onRotateFrame({ id: item.id, angle });
+        },
+        onEnd: (deg) => {
+          applyLayout((l) => patchItem(l, item.id, { rotation: deg }));
+          onRotateFrame(null);
+        },
       });
     },
-    [startRotation, setLayout, applyLayout],
+    [startRotation, setLayout, applyLayout, onRotateFrame],
   );
 
   return {

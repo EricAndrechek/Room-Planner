@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Home, Sofa } from 'lucide-react';
 import { useAnnouncements } from '../../hooks/useAnnouncements';
-import { useFurnitureEditing, type DragFrame } from '../../hooks/useFurnitureEditing';
+import {
+  useFurnitureEditing,
+  type DragFrame,
+  type RotateFrame,
+} from '../../hooks/useFurnitureEditing';
 import { useHistory } from '../../hooks/useHistory';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
@@ -90,6 +94,7 @@ export function Planner({ storage, initial }: PlannerProps) {
     track('snap_toggled', { on: next });
   }, [snapOn, storage]);
   const [dragFrame, setDragFrame] = useState<DragFrame | null>(null);
+  const [rotateFrame, setRotateFrame] = useState<RotateFrame | null>(null);
   // The desktop color popover renders here: in reading order after the sidebar, outside its
   // scroll/transform (which would clip and offset a fixed-position popover).
   const [popoverRoot, setPopoverRoot] = useState<HTMLDivElement | null>(null);
@@ -166,6 +171,7 @@ export function Planner({ storage, initial }: PlannerProps) {
     zoomRef,
     snapEnabled: snapOn,
     onDragFrame: setDragFrame,
+    onRotateFrame: setRotateFrame,
     announce: live.announce,
   });
   const openings = useOpenings({
@@ -416,6 +422,7 @@ export function Planner({ storage, initial }: PlannerProps) {
                   unitSystem={unitSystem}
                   itemId={overlayItemId}
                   drag={dragFrame}
+                  rotation={rotateFrame?.id === overlayItemId ? rotateFrame.angle : null}
                 />
               )
             }

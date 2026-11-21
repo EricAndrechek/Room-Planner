@@ -40,7 +40,8 @@ const shortcuts = [
     keys: ['Alt/Option', 'Shift', 'R'],
     action: 'Rotate the selected item by 1° counter-clockwise',
   },
-  { keys: ['Alt/Option', 'drag'], action: 'Move a piece without snapping' },
+  { keys: ['Alt/Option', 'drag'], action: 'Move or rotate a piece without snapping' },
+  { keys: ['Shift', 'rotate handle'], action: 'Rotate in 15° steps' },
   {
     keys: ['Tab'],
     action:
@@ -246,8 +247,12 @@ const sections = [
       <section id="rotation">
         <h2>Rotating items</h2>
         <p>
-          Select a piece and drag the circular handle above it around the piece. When you let go
-          close to a 15° step (for example 45° or 90°) it snaps exactly onto it. You can also type
+          Select a piece and drag the circular handle above it around the piece. A badge under the
+          piece shows the angle as you turn. Near straight (0°, 90°, 180°, 270°, within 8°) or a
+          diagonal (45°, within 5°) it locks on: the badge turns red with a magnet and a guide line
+          shows the axis. Hold <kbd>Shift</kbd> to turn in 15° steps, or <kbd>Alt</kbd> (
+          <kbd>Option</kbd>
+          on a Mac) to turn freely (so does switching <strong>Snap</strong> off). You can also type
           an exact angle in the sidebar's <strong>Rotation</strong> field, press <kbd>R</kbd> to
           turn the selected item 90°, or <kbd>Alt</kbd>/<kbd>Option</kbd>+<kbd>R</kbd> to turn it 1°
           at a time (add <kbd>Shift</kbd> to turn the other way).

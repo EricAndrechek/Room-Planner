@@ -208,11 +208,23 @@ test('a selected piece shows its clearances; arrow keys snap and announce', asyn
   await expect(labels.and(page.locator('[data-side="left"]'))).toHaveText(`3'`);
   await expect(labels.and(page.locator('[data-side="right"]'))).toHaveText(`2'`);
 
+  // Record every text the live region shows: a later one ("Project saved") can replace it quickly.
+  await page.evaluate(() => {
+    const region = document.querySelector('[role="status"][aria-atomic="true"]')!;
+    const said: string[] = ((window as unknown as { __said: string[] }).__said = []);
+    new MutationObserver(() => said.push(region.textContent ?? '')).observe(region, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+  });
   // Shift+Right twice: 3 -> 4 -> 5, where its right edge is flush with the Bed (announced).
   await page.keyboard.press('Shift+ArrowRight');
   await page.keyboard.press('Shift+ArrowRight');
   await expect.poll(async () => (await stored(page, 'Box')).x).toBe(5);
-  await expect(page.locator('[role="status"][aria-atomic="true"]')).toContainText('Against Bed');
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __said: string[] }).__said.join(' | ')))
+    .toContain('Against Bed');
 
   // Stepping away again is never pulled back onto the edge it just left.
   await page.keyboard.press('ArrowLeft');
@@ -313,4 +325,116 @@ test('metric units nudge in round centimeters', async ({ page }) => {
   await expect.poll(async () => (await stored(page, 'Box')).y).toBeCloseTo(y0 + 30 * cm, 9);
   await page.keyboard.press('Alt+ArrowUp');
   await expect.poll(async () => (await stored(page, 'Box')).y).toBeCloseTo(y0 + 29 * cm, 9);
+});
+
+/**
+ * Turn the Box with its rotate handle by `degrees` (clockwise), with real-looking pointer events
+ * (mouse on desktop, touch on phones) and optional modifier keys. `release` false keeps it held.
+ */
+async function rotateBox(
+  page: Page,
+  degrees: number,
+  {
+    isMobile,
+    shiftKey = false,
+    altKey = false,
+    release = true,
+  }: { isMobile: boolean; shiftKey?: boolean; altKey?: boolean; release?: boolean },
+) {
+  await page.getByRole('button', { name: /^Box,/ }).click();
+  const box = (await page.getByRole('button', { name: /^Box,/ }).boundingBox())!;
+  const handle = (await page.getByTestId('rotate-handle').boundingBox())!;
+  await page.evaluate(
+    async ({ c, h, degrees, shiftKey, altKey, release, type }) => {
+      const r = Math.hypot(h.x - c.x, h.y - c.y);
+      const start = Math.atan2(h.y - c.y, h.x - c.x);
+      const opts = (x: number, y: number, buttons: number) => ({
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        pointerId: 11,
+        pointerType: type,
+        isPrimary: true,
+        clientX: x,
+        clientY: y,
+        button: 0,
+        buttons,
+        shiftKey,
+        altKey,
+      });
+      document
+        .querySelector('[data-testid="rotate-handle"]')!
+        .dispatchEvent(new PointerEvent('pointerdown', opts(h.x, h.y, 1)));
+      const steps = 24;
+      let x = h.x;
+      let y = h.y;
+      for (let i = 1; i <= steps; i++) {
+        const a = start + ((degrees * Math.PI) / 180) * (i / steps);
+        x = c.x + r * Math.cos(a);
+        y = c.y + r * Math.sin(a);
+        window.dispatchEvent(new PointerEvent('pointermove', opts(x, y, 1)));
+        await new Promise((res) => setTimeout(res, 10));
+      }
+      const up = () => window.dispatchEvent(new PointerEvent('pointerup', opts(x, y, 0)));
+      if (release) up();
+      else (window as unknown as { __release: () => void }).__release = up;
+    },
+    {
+      c: { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+      h: { x: handle.x + handle.width / 2, y: handle.y + handle.height / 2 },
+      degrees,
+      shiftKey,
+      altKey,
+      release,
+      type: isMobile ? 'touch' : 'mouse',
+    },
+  );
+}
+
+test('rotating near 90 degrees locks onto exactly 90, with an angle badge', async ({
+  page,
+  isMobile,
+}) => {
+  await seed(page);
+  await rotateBox(page, 84, { isMobile, release: false });
+  const badge = page.getByTestId('angle-badge');
+  await expect(badge).toHaveText('90°');
+  await expect(badge).toHaveAttribute('data-snapped', 'true');
+  await expect(page.getByTestId('rotation-axis')).toHaveCount(1);
+  await page.evaluate(() => (window as unknown as { __release: () => void }).__release());
+  await expect(badge).toHaveCount(0);
+  expect((await stored(page, 'Box')).rotation).toBe(90);
+});
+
+test('a free angle shows in the badge without the lock; Alt/Option rotates freely', async ({
+  page,
+  isMobile,
+}) => {
+  await seed(page);
+  await rotateBox(page, 30, { isMobile, release: false });
+  const badge = page.getByTestId('angle-badge');
+  await expect(badge).toHaveAttribute('data-snapped', 'false');
+  await expect(badge).toHaveText(/^(29|30|31)°$/);
+  await page.evaluate(() => (window as unknown as { __release: () => void }).__release());
+
+  await rotateBox(page, 54, { isMobile, altKey: true }); // ~84: would lock onto 90 without Alt
+  const r = (await stored(page, 'Box')).rotation;
+  expect(r).not.toBe(90);
+  expect(Math.abs(r - 84)).toBeLessThanOrEqual(2);
+});
+
+test('Shift while rotating steps by 15 degrees', async ({ page, isMobile }) => {
+  await seed(page);
+  await rotateBox(page, 37, { isMobile, shiftKey: true });
+  const r = (await stored(page, 'Box')).rotation;
+  expect(r % 15).toBe(0);
+  expect([30, 45]).toContain(r);
+});
+
+test('with Snap off the rotate handle is free', async ({ page, isMobile }) => {
+  await seed(page, { 'room-planner-pref-snap': '0' });
+  await rotateBox(page, 86, { isMobile });
+  const r = (await stored(page, 'Box')).rotation;
+  expect(r).not.toBe(90);
+  expect(Math.abs(r - 86)).toBeLessThanOrEqual(2);
 });

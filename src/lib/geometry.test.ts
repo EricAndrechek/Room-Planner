@@ -8,7 +8,7 @@ import {
   constrainOpening,
   getRotatedCorners,
   isItemInBounds,
-  snapRotation,
+  snapAngle,
   wallLength,
 } from './geometry';
 import type { Door, FurnitureItem } from '../types';
@@ -176,14 +176,27 @@ describe('rotation helpers', () => {
     expect(angleDelta(-170, 170)).toBeCloseTo(-20);
   });
 
-  it('snapRotation normalizes and snaps within 5deg of a 15deg step', () => {
-    expect(snapRotation(43)).toBe(45);
-    expect(snapRotation(48)).toBe(45);
-    expect(snapRotation(52)).toBe(52);
-    expect(snapRotation(-2)).toBe(0);
-    expect(snapRotation(358)).toBe(0);
-    expect(snapRotation(450)).toBe(90);
-    expect(snapRotation(37.5)).toBe(37.5);
+  it('snapAngle pulls onto the axes within 8deg and the diagonals within 5deg', () => {
+    expect(snapAngle(83)).toEqual({ deg: 90, snapped: 90 });
+    expect(snapAngle(97.9)).toEqual({ deg: 90, snapped: 90 });
+    expect(snapAngle(98.5)).toEqual({ deg: 99, snapped: null }); // free: whole degrees
+    expect(snapAngle(-6)).toEqual({ deg: 0, snapped: 0 });
+    expect(snapAngle(355)).toEqual({ deg: 0, snapped: 0 });
+    expect(snapAngle(450)).toEqual({ deg: 90, snapped: 90 });
+    expect(snapAngle(41)).toEqual({ deg: 45, snapped: 45 });
+    expect(snapAngle(229.5)).toEqual({ deg: 225, snapped: 225 });
+    expect(snapAngle(39)).toEqual({ deg: 39, snapped: null });
+    expect(snapAngle(37.4)).toEqual({ deg: 37, snapped: null });
+    expect(snapAngle(-137)).toEqual({ deg: 225, snapped: 225 }); // -137 = 223
+  });
+
+  it('snapAngle steps by 15deg in step mode and never snaps in free mode', () => {
+    expect(snapAngle(37, 'step')).toEqual({ deg: 30, snapped: 30 });
+    expect(snapAngle(38, 'step')).toEqual({ deg: 45, snapped: 45 });
+    expect(snapAngle(-8, 'step')).toEqual({ deg: 345, snapped: 345 });
+    expect(snapAngle(359, 'step')).toEqual({ deg: 0, snapped: 0 });
+    expect(snapAngle(88, 'free')).toEqual({ deg: 88, snapped: null });
+    expect(snapAngle(-2.4, 'free')).toEqual({ deg: 358, snapped: null });
   });
 });
 
