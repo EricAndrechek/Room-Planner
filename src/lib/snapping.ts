@@ -419,7 +419,9 @@ export function measureClearances(
   for (const side of ['left', 'right', 'top', 'bottom'] as const) {
     const n = nearest[side];
     if (!(n.gap > MIN_GAP)) continue; // flush, overlapping, or outside the room on that side
-    const mid = (n.lo + n.hi) / 2;
+    // The top line runs a quarter of the way along instead of through the middle, where the
+    // selected piece's rotate handle sits.
+    const mid = side === 'top' ? n.lo + (n.hi - n.lo) / 4 : (n.lo + n.hi) / 2;
     const to = n.item ? 'item' : 'wall';
     if (side === 'left')
       out.push({
