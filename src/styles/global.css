@@ -232,3 +232,41 @@ summary:focus-visible {
     max-height: calc(100vh - 2px);
   }
 }
+
+/* Long-form text on the static content pages (guides, FAQ). */
+@layer components {
+  .prose-content {
+    @apply text-slate-700 leading-relaxed;
+  }
+  .prose-content h2 {
+    @apply text-xl font-bold text-slate-900 mt-10 mb-3;
+  }
+  .prose-content h3 {
+    @apply font-semibold text-slate-800 mt-6 mb-2;
+  }
+  .prose-content p {
+    @apply mb-3;
+  }
+  .prose-content ul {
+    @apply list-disc pl-5 space-y-1 mb-3;
+  }
+  .prose-content ol {
+    @apply list-decimal pl-5 space-y-1 mb-3;
+  }
+  .prose-content a:not([data-button]) {
+    @apply text-indigo-700 underline hover:text-indigo-900;
+  }
+  .prose-content table {
+    @apply w-full text-sm border border-slate-200 mb-2 bg-white;
+  }
+  .prose-content th,
+  .prose-content td {
+    @apply p-2 text-left align-top border-t border-slate-200;
+  }
+  .prose-content thead th {
+    @apply bg-slate-100 border-t-0;
+  }
+  .prose-content caption {
+    @apply text-left text-sm text-slate-600 mb-2;
+  }
+}

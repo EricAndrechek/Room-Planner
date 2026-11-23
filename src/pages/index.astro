@@ -2,15 +2,15 @@
 import PlannerApp from '../components/PlannerApp';
 import Base from '../layouts/Base.astro';
 import { withBase } from '../lib/paths';
-import { SITE_NAME } from '../lib/site';
+import { FEATURES, SITE_NAME } from '../lib/site';
 ---
 
 <Base app structuredData>
   <div id="app">
     <PlannerApp client:only="react">
       <!-- Static shell: what crawlers and no-JS visitors see; replaced once the planner mounts. -->
-      <div slot="fallback" class="h-full flex items-center justify-center bg-slate-50 p-6">
-        <main class="max-w-md text-center space-y-4">
+      <div slot="fallback" class="h-full overflow-y-auto flex bg-slate-50 p-6">
+        <main class="m-auto max-w-md text-center space-y-4">
           <img src={withBase('favicon.svg')} width="72" height="72" alt="" class="mx-auto" />
           <h1 class="text-2xl font-bold text-slate-800">{SITE_NAME}</h1>
           <p class="text-slate-600">
@@ -25,12 +25,24 @@ import { SITE_NAME } from '../lib/site';
               Room Planner needs JavaScript to run. Please enable it and reload.
             </p>
           </noscript>
-          <p>
-            <a
-              href={withBase('help/')}
-              class="text-sm font-medium text-indigo-600 hover:text-indigo-800 underline"
-            >
+          <p class="text-sm text-slate-600">
+            Free, with no sign-up. Your floor plans are saved in your browser and never uploaded.
+          </p>
+          <h2 class="sr-only">Features</h2>
+          <ul class="text-left text-sm text-slate-600 list-disc pl-5 space-y-0.5">
+            {FEATURES.map((f) => (
+              <li>{f}</li>
+            ))}
+          </ul>
+          <p class="flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm font-medium">
+            <a href={withBase('help/')} class="text-indigo-700 hover:text-indigo-900 underline">
               How to use Room Planner
+            </a>
+            <a href={withBase('guides/')} class="text-indigo-700 hover:text-indigo-900 underline">
+              Room layout guides
+            </a>
+            <a href={withBase('faq/')} class="text-indigo-700 hover:text-indigo-900 underline">
+              FAQ
             </a>
           </p>
         </main>
