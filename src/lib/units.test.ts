@@ -51,6 +51,29 @@ describe('parseToFeet', () => {
     close(parseToFeet(input, 'ft-in'), feet);
   });
 
+  it.each([
+    ['11 7', 11 + 7 / 12],
+    ['10 11', 10 + 11 / 12],
+    ['11  7', 11 + 7 / 12],
+    ['11 7.5', 11 + 7.5 / 12],
+    ['0 6', 0.5],
+    ["11' 7", 11 + 7 / 12],
+    ['11 7"', 11 + 7 / 12],
+    ['11 ft 7', 11 + 7 / 12],
+  ])('in feet & inches, a second bare number is inches: %s', (input, feet) => {
+    close(parseToFeet(input, 'ft-in'), feet);
+  });
+
+  it('a second bare number is still in the active unit outside feet & inches', () => {
+    close(parseToFeet('11 7', 'ft'), 18);
+    close(parseToFeet('11 7', 'in'), 18 / 12);
+    close(parseToFeet('1 20', 'm'), 21 * FEET_PER_METER);
+  });
+
+  it('bare digits without a separator stay one number (rejected later if out of range)', () => {
+    close(parseToFeet('117', 'ft-in'), 117);
+  });
+
   it('explicit units override the active unit system', () => {
     close(parseToFeet(`12'6"`, 'cm'), 12.5);
     close(parseToFeet('150in', 'm'), 12.5);

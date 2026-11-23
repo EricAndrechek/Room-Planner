@@ -71,7 +71,8 @@ const TOKEN_RE =
  * `3.5m`, `350cm`, plain numbers in the active unit system) plus compound and
  * spelled-out forms (`12 ft 6 in`, `1m 20cm`, `5 feet`, `12.5 ft` in any unit
  * system). A bare number after a feet value is inches (`12'6`), after a meter
- * value is centimeters (`1m 20`). Unparseable input yields 0, like before.
+ * value is centimeters (`1m 20`); in feet & inches, a second bare number is inches too
+ * (`11 7` = 11'7"). Unparseable input yields 0, like before.
  */
 export const parseToFeet = (
   input: string | number | null | undefined,
@@ -91,15 +92,20 @@ export const parseToFeet = (
   let total = 0;
   let matched = false;
   let prevUnit: LengthUnit | null = null;
+  // In feet & inches, a bare number counts as feet, so a bare number right after it is inches:
+  // "11 7" is 11'7" (easier to type on a phone keyboard than ' and ").
+  let prevBareFeet = false;
   for (const match of str.matchAll(TOKEN_RE)) {
     const value = parseFloat(match[1]!);
     const rawUnit = match[2];
     let unit: LengthUnit | null = rawUnit ? (UNIT_ALIASES[rawUnit] ?? null) : null;
+    const bare = !unit;
     if (!unit) {
-      if (prevUnit === 'ft') unit = 'in';
+      if (prevUnit === 'ft' || prevBareFeet) unit = 'in';
       else if (prevUnit === 'm') unit = 'cm';
     }
     total += unit ? value * FEET_PER[unit] : value * SYSTEM_FEET_PER[unitSystem];
+    prevBareFeet = bare && !unit && unitSystem === 'ft-in';
     prevUnit = unit;
     matched = true;
   }

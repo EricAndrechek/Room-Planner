@@ -84,4 +84,52 @@ test.describe('locked furniture in room setup', () => {
   });
 });
 
-export { openStep, stored, viewPlan, returningIn, ready, notice };
+test.describe('room size input', () => {
+  test('an over-limit size is rejected with an inline error, not clamped', async ({ page }) => {
+    await returningIn(page, 'room-setup');
+    await page.goto('/');
+    await ready(page);
+    await openStep(page, 'room');
+    const width = page.getByLabel('Room width');
+    await width.fill('117');
+    await width.press('Enter');
+    await expect(width).toHaveAttribute('aria-invalid', 'true');
+    const describedBy = (await width.getAttribute('aria-describedby'))!;
+    await expect(page.locator(`[id="${describedBy}"]`)).toHaveText(
+      `Max 100'. For 11'7", type 11 7`,
+    );
+    await expect(width).toHaveValue(`12'`);
+    expect(await stored(page, 'room-sim-v3-dims')).toEqual({ width: 12, height: 12 });
+
+    // Typing again clears the error; "11 7" is 11'7".
+    await width.fill('11 7');
+    await expect(width).not.toHaveAttribute('aria-invalid');
+    await width.press('Enter');
+    await expect(width).toHaveValue(`11'7"`);
+    await expect
+      .poll(async () => (await stored<{ width: number }>(page, 'room-sim-v3-dims')).width)
+      .toBeCloseTo(11 + 7 / 12, 6);
+  });
+
+  test('the view re-fits after the room size changes, so the whole room stays visible', async ({
+    page,
+  }) => {
+    await returningIn(page, 'room-setup');
+    await page.goto('/');
+    await ready(page);
+    await openStep(page, 'room');
+    const width = page.getByLabel('Room width');
+    await width.fill('60');
+    await width.press('Enter');
+    await viewPlan(page);
+    await page.waitForTimeout(400);
+    const plan = (await page.locator('#floor-plan').boundingBox())!;
+    const room = (await page.getByTestId('room').boundingBox())!;
+    expect(room.x).toBeGreaterThanOrEqual(plan.x - 1);
+    expect(room.x + room.width).toBeLessThanOrEqual(plan.x + plan.width + 1);
+    // And it was not just left tiny: it fills most of the width.
+    expect(room.width).toBeGreaterThan(plan.width * 0.6);
+  });
+});
+
+export { notice };

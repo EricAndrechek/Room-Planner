@@ -14,7 +14,8 @@ export const PIXELS_PER_UNIT = 40;
 
 export const MAX_HISTORY = 50;
 
-export const MIN_ZOOM = 0.25;
+/** Low enough that fitting a large room (up to ~80 ft) still shows all of it on a phone. */
+export const MIN_ZOOM = 0.1;
 export const MAX_ZOOM = 3;
 export const ZOOM_STEP = 0.25;
 

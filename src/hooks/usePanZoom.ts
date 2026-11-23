@@ -9,7 +9,7 @@ const DRAGGABLE_SELECTOR = '[data-draggable], [role="button"], .cursor-grab, .cu
 /**
  * Canvas zoom & pan: trackpad pinch (ctrl+wheel) zooms, two-finger scroll
  * pans, touch pinch zooms + pans, one-finger touch on the background pans.
- * The room is fitted to the view shortly after mount and on window resize.
+ * The room is fitted to the view shortly after mount, on window resize and when its size changes.
  */
 export function usePanZoom(
   containerRef: RefObject<HTMLElement | null>,
@@ -51,6 +51,16 @@ export function usePanZoom(
     const timer = setTimeout(() => fitRef.current(), 500);
     return () => clearTimeout(timer);
   }, []);
+
+  // Re-fit when the room's size changes (typed, undone, another plan opened), so the whole room
+  // stays in view: a room made much bigger or smaller would otherwise be off-screen or tiny.
+  const lastRoom = useRef({ width: room.width, height: room.height });
+  useEffect(() => {
+    const last = lastRoom.current;
+    if (last.width === room.width && last.height === room.height) return;
+    lastRoom.current = { width: room.width, height: room.height };
+    fitRef.current();
+  }, [room.width, room.height]);
 
   // Re-fit on window resize (debounced).
   useEffect(() => {

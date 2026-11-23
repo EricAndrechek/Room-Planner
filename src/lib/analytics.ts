@@ -27,6 +27,8 @@ export type AnalyticsEvent =
   | 'units_changed'
   | 'mode_changed'
   | 'locked_piece_pressed'
+  | 'dimension_rejected'
+  | 'room_resized'
   | 'snap_toggled'
   | 'undo'
   | 'redo'

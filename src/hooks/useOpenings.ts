@@ -82,11 +82,14 @@ export function useOpenings({
   const deselect = (type: 'door' | 'window', id: Id) =>
     setSelection((s) => (s?.type === type && s.id === id ? null : s));
 
-  const updateRoomDims = (dims: RoomDims) =>
-    applyLayout((l) => ({
-      ...l,
-      roomDims: { width: Math.max(1, dims.width || 1), height: Math.max(1, dims.height || 1) },
-    }));
+  const updateRoomDims = (dims: RoomDims) => {
+    const next = { width: Math.max(1, dims.width || 1), height: Math.max(1, dims.height || 1) };
+    const prev = layout.roomDims;
+    if (next.width === prev.width && next.height === prev.height) return;
+    applyLayout((l) => ({ ...l, roomDims: next }));
+    const area = next.width * next.height - prev.width * prev.height;
+    track('room_resized', { direction: area > 0 ? 'larger' : area < 0 ? 'smaller' : 'same_area' });
+  };
 
   const addDoor = () => {
     const spot = findOpeningSpot(layout, NEW_DOOR.width, NEW_DOOR, { swing: NEW_DOOR });

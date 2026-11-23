@@ -207,7 +207,7 @@ describe('rotation helpers', () => {
 describe('computeFitZoom', () => {
   it('fits the room and clamps', () => {
     expect(computeFitZoom({ width: 960, height: 480 }, { width: 12, height: 12 }, 40)).toBe(1);
-    expect(computeFitZoom({ width: 100, height: 100 }, { width: 100, height: 100 }, 40)).toBe(0.25);
+    expect(computeFitZoom({ width: 100, height: 100 }, { width: 100, height: 100 }, 40)).toBe(0.1);
     expect(computeFitZoom({ width: 5000, height: 5000 }, { width: 1, height: 1 }, 40)).toBe(2);
   });
 });

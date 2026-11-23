@@ -271,7 +271,7 @@ export const snapAngle = (raw: number, mode: RotationSnapMode = 'magnetic'): Ang
 
 export const clampZoom = (zoom: number): number => clamp(zoom, MIN_ZOOM, MAX_ZOOM);
 
-/** Zoom that fits the whole room into the available area, clamped to [0.25, 2]. */
+/** Zoom that fits the whole room into the available area, clamped to [MIN_ZOOM, 2]. */
 export const computeFitZoom = (
   available: { width: number; height: number },
   room: RoomDims,
