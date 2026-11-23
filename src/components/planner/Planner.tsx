@@ -22,6 +22,7 @@ import type { BootState } from '../../lib/boot';
 import { migrateColor } from '../../lib/colors';
 import { DESIGN_MODES } from '../../lib/constants';
 import { normalizeDegrees } from '../../lib/geometry';
+import { moveInside, piecesOutside } from '../../lib/placement';
 import { computeLayoutWarnings } from '../../lib/openings';
 import { toShareConfig } from '../../lib/layout';
 import { HELP_PATH } from '../../lib/paths';
@@ -34,7 +35,7 @@ import {
   saveUnitSystem,
   type StorageLike,
 } from '../../lib/storage';
-import type { DesignMode, FurnitureItem, Layout, UnitSystem } from '../../types';
+import type { DesignMode, FurnitureItem, Layout, RoomDims, UnitSystem } from '../../types';
 import { ColorPicker } from './ColorPicker';
 import { ExportModal } from './ExportModal';
 import { FileBrowserModal } from './FileBrowserModal';
@@ -249,6 +250,46 @@ export function Planner({ storage, initial }: PlannerProps) {
     closeFiles: () => setFilesOpen(false),
   });
 
+  // --- Room size: offer to bring pieces back inside a room that shrank -----------------------
+  const layoutRef = useRef(layout);
+  useEffect(() => {
+    layoutRef.current = layout;
+  });
+  const outsideCount = useMemo(
+    () => piecesOutside(layout.items, layout.roomDims).length,
+    [layout.items, layout.roomDims],
+  );
+  const changeRoomDims = (dims: RoomDims) => {
+    const prev = layout.roomDims;
+    const next = openings.updateRoomDims(dims);
+    if (!next || (next.width >= prev.width && next.height >= prev.height)) return;
+    const outside = piecesOutside(layout.items, next).length;
+    if (outside === 0) return;
+    const one = outside === 1;
+    showNotice({
+      key: 'outside-room',
+      message: `${one ? '1 piece is' : `${outside} pieces are`} outside the room.`,
+      action: {
+        label: one ? 'Move it inside' : 'Move them inside',
+        onClick: () => {
+          const cur = layoutRef.current;
+          const count = piecesOutside(cur.items, cur.roomDims).length;
+          history.apply((l) => ({
+            ...l,
+            items: l.items.map((i) => (i.visible === false ? i : moveInside(i, l.roomDims))),
+          }));
+          dismissNotice('outside-room');
+          live.announce(`${count === 1 ? '1 piece' : `${count} pieces`} moved inside the room`);
+          track('pieces_moved_inside', { count });
+        },
+      },
+    });
+  };
+  // The offer goes away once nothing is outside any more (moved by hand, resize undone...).
+  useEffect(() => {
+    if (outsideCount === 0) dismissNotice('outside-room');
+  }, [outsideCount, dismissNotice]);
+
   // --- Keyboard ----------------------------------------------------------------------
   const selectedItem =
     selection?.type === 'item' ? layout.items.find((i) => i.id === selection.id) : undefined;
@@ -388,7 +429,7 @@ export function Planner({ storage, initial }: PlannerProps) {
               doors={layout.doors}
               windows={layout.windows}
               unitSystem={unitSystem}
-              onRoomDimsChange={openings.updateRoomDims}
+              onRoomDimsChange={changeRoomDims}
               onAddDoor={openings.addDoor}
               onUpdateDoor={openings.updateDoor}
               onDeleteDoor={openings.deleteDoor}

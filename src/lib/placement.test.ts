@@ -3,7 +3,7 @@ import type { Door, FurnitureItem, Layout } from '../types';
 import { isItemInBounds } from './geometry';
 import { defaultLayout } from './layout';
 import { computeDoorBlocks, computeLayoutWarnings } from './openings';
-import { findFurnitureSpot } from './placement';
+import { findFurnitureSpot, moveInside, piecesOutside } from './placement';
 
 const piece = (over: Partial<FurnitureItem>): FurnitureItem => ({
   id: 'p',
@@ -93,5 +93,51 @@ describe('findFurnitureSpot', () => {
       y: 1.5,
     });
     expect(findFurnitureSpot(room(2, 2), { width: 3, height: 2 })).toEqual({ x: -0.5, y: 0 });
+  });
+});
+
+describe('moveInside / piecesOutside', () => {
+  const r = { width: 10, height: 8 };
+
+  it('leaves a piece that is inside alone (same object)', () => {
+    const p = piece({ x: 1, y: 1 });
+    expect(moveInside(p, r)).toBe(p);
+  });
+
+  it('shifts a piece back by the least amount, keeping size and rotation', () => {
+    expect(moveInside(piece({ x: 9, y: 7, width: 3, height: 2 }), r)).toMatchObject({
+      x: 7,
+      y: 6,
+      width: 3,
+      height: 2,
+    });
+    expect(moveInside(piece({ x: -1, y: -0.5 }), r)).toMatchObject({ x: 0, y: 0 });
+  });
+
+  it('uses the rotated footprint', () => {
+    // 4 x 2 turned 90deg: its footprint is 2 wide and 4 deep, centred on (x + 2, y + 1).
+    const turned = piece({ x: 8, y: 6, width: 4, height: 2, rotation: 90 });
+    const moved = moveInside(turned, r);
+    expect(isItemInBounds(moved, r)).toBe(true);
+    expect(moved.rotation).toBe(90);
+    // Flush with the right and bottom walls.
+    expect(moved.x + 2 + 1).toBeCloseTo(10, 6);
+    expect(moved.y + 1 + 2).toBeCloseTo(8, 6);
+  });
+
+  it('aligns a piece bigger than the room with the top/left walls', () => {
+    expect(moveInside(piece({ x: 3, y: 3, width: 12, height: 2 }), r)).toMatchObject({
+      x: 0,
+      y: 3,
+    });
+  });
+
+  it('lists only visible pieces outside the room', () => {
+    const items = [
+      piece({ id: 'in', x: 1, y: 1 }),
+      piece({ id: 'out', x: 9, y: 1 }),
+      piece({ id: 'hidden', x: 20, y: 1, visible: false }),
+    ];
+    expect(piecesOutside(items, r).map((i) => i.id)).toEqual(['out']);
   });
 });

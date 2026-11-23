@@ -1,11 +1,13 @@
 /**
- * Where a new furniture piece goes: the free spot nearest the middle of the room.
+ * Placing furniture: where a new piece goes (the free spot nearest the middle of the room), and
+ * moving pieces back inside a room that shrank.
  */
-import type { Layout } from '../types';
+import type { FurnitureItem, Layout, RoomDims } from '../types';
 import {
   GEOMETRY_EPSILON,
   checkItemsCollision,
   getRotatedCorners,
+  isItemInBounds,
   polygonsOverlap,
   shrinkPolygon,
   type Point,
@@ -63,3 +65,24 @@ export function findFurnitureSpot(
 }
 
 const round = (n: number) => Math.round(n * 1e6) / 1e6;
+
+/**
+ * The piece shifted (not resized or turned) by the least amount that puts it inside the room; a
+ * piece wider or deeper than the room is aligned with the top/left wall. Unchanged (same object)
+ * when already inside.
+ */
+export function moveInside<T extends FurnitureItem>(item: T, room: RoomDims): T {
+  const corners = getRotatedCorners(item);
+  const xs = corners.map((c) => c.x);
+  const ys = corners.map((c) => c.y);
+  const shift = (lo: number, hi: number, size: number) =>
+    lo < 0 || hi - lo > size ? -lo : hi > size ? size - hi : 0;
+  const dx = shift(Math.min(...xs), Math.max(...xs), room.width);
+  const dy = shift(Math.min(...ys), Math.max(...ys), room.height);
+  if (Math.abs(dx) < GEOMETRY_EPSILON && Math.abs(dy) < GEOMETRY_EPSILON) return item;
+  return { ...item, x: round(item.x + dx), y: round(item.y + dy) };
+}
+
+/** Visible pieces that are (partly) outside the room. */
+export const piecesOutside = (items: readonly FurnitureItem[], room: RoomDims): FurnitureItem[] =>
+  items.filter((i) => i.visible !== false && !isItemInBounds(i, room));

@@ -160,4 +160,54 @@ test('Add Item lands in free floor near the middle, selected, with its card in v
   await expect(page.getByText(/Overlapping|Outside room|Blocks door/)).toHaveCount(0);
 });
 
+test('shrinking the room offers to move stranded pieces inside, as one undoable step', async ({
+  page,
+}) => {
+  type Item = { label: string; x: number; y: number; width: number; height: number };
+  const outside = async () =>
+    (await stored<Item[]>(page, 'room-sim-v3-items')).filter(
+      (i) => i.x < -0.001 || i.y < -0.001 || i.x + i.width > 8.001 || i.y + i.height > 12.001,
+    ).length;
+  await returningIn(page, 'room-setup');
+  await page.goto('/');
+  await ready(page);
+  await openStep(page, 'room');
+  const width = page.getByLabel('Room width');
+  await width.fill('8');
+  await width.press('Enter');
+  await expect.poll(outside).toBeGreaterThan(0);
+  const n = await outside();
+  await expect(notice(page)).toHaveText(new RegExp(`^${n} pieces are outside the room\\.`));
+
+  await notice(page).getByRole('button', { name: 'Move them inside' }).click();
+  await expect(notice(page)).toHaveCount(0);
+  await expect.poll(outside).toBe(0);
+  // Still 8 wide: only the pieces moved.
+  expect(await stored(page, 'room-sim-v3-dims')).toEqual({ width: 8, height: 12 });
+
+  // One undo puts the pieces back where they were (the room stays 8 wide).
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect.poll(outside).toBe(n);
+  expect(await stored(page, 'room-sim-v3-dims')).toEqual({ width: 8, height: 12 });
+});
+
+test('the shrink notice can be dismissed, and growing the room never shows it', async ({
+  page,
+}) => {
+  await returningIn(page, 'room-setup');
+  await page.goto('/');
+  await ready(page);
+  await openStep(page, 'room');
+  const width = page.getByLabel('Room width');
+  await width.fill('14');
+  await width.press('Enter');
+  await page.waitForTimeout(300);
+  await expect(notice(page)).toHaveCount(0);
+  await width.fill('8');
+  await width.press('Enter');
+  await expect(notice(page)).toBeVisible();
+  await notice(page).getByRole('button', { name: 'Dismiss' }).click();
+  await expect(notice(page)).toHaveCount(0);
+});
+
 export { notice };
