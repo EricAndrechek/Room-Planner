@@ -1,0 +1,42 @@
+name: Playwright cache
+
+# Warms the browser cache on `main`. Caches saved by a PR run are visible only to that PR, so
+# without this the first run after a Playwright bump (every Dependabot merge) downloads the
+# browsers on every PR. Key must match cross-browser.yml.
+on:
+  push:
+    branches: [main]
+    paths: [pnpm-lock.yaml, .github/workflows/playwright-cache.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  warm:
+    name: warm ${{ matrix.browser }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [webkit, firefox, chromium]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - id: pw
+        run: |
+          echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+          echo "os=$(. /etc/os-release; echo "$ID-$VERSION_ID")" >> "$GITHUB_OUTPUT"
+      - id: pw-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ steps.pw.outputs.os }}-${{ matrix.browser }}-${{ steps.pw.outputs.version }}
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install ${{ matrix.browser }}
