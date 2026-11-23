@@ -80,20 +80,50 @@ export interface OpeningSpotOptions {
  * anywhere, the preferred spot is returned unchanged.
  */
 export function findOpeningSpot(
-  layout: Pick<Layout, 'roomDims' | 'doors' | 'windows'> & Partial<Pick<Layout, 'items'>>,
+  layout: SpotLayout,
   width: number,
   preferred: { wall: Wall; position: number },
-  {
-    swing,
-    gap = OPENING_GAP,
-    margin = CORNER_MARGIN,
-    step = PLACEMENT_STEP,
-  }: OpeningSpotOptions = {},
+  options: OpeningSpotOptions = {},
 ): { wall: Wall; position: number } {
+  const walls = [preferred.wall, ...WALL_OPTIONS.filter((w) => w !== preferred.wall)];
+  const spots = openingSpots(layout, width, preferred, walls, options);
+  const best =
+    spots.find((s) => s.inMargin && s.clear) ?? spots.find((s) => s.inMargin) ?? spots[0];
+  return best ? { wall: best.wall, position: best.position } : preferred;
+}
+
+/**
+ * Where an existing door/window goes when it moves to `wall`: the same choice as
+ * {@link findOpeningSpot} (its current `position` first), but on that wall only. `layout` must not
+ * contain the opening itself. Null if it fits nowhere on that wall without overlapping another
+ * opening (or the wall is shorter than it).
+ */
+export function findOpeningSpotOnWall(
+  layout: SpotLayout,
+  width: number,
+  wall: Wall,
+  position: number,
+  options: OpeningSpotOptions = {},
+): number | null {
+  const spots = openingSpots(layout, width, { wall, position }, [wall], options);
+  const best =
+    spots.find((s) => s.inMargin && s.clear) ?? spots.find((s) => s.inMargin) ?? spots[0];
+  return best ? best.position : null;
+}
+
+type SpotLayout = Pick<Layout, 'roomDims' | 'doors' | 'windows'> & Partial<Pick<Layout, 'items'>>;
+
+/** Every free spot on `walls`, in preference order, with what it is good for. */
+function openingSpots(
+  layout: SpotLayout,
+  width: number,
+  preferred: { wall: Wall; position: number },
+  walls: Wall[],
+  { swing, gap = OPENING_GAP, margin = CORNER_MARGIN, step = PLACEMENT_STEP }: OpeningSpotOptions,
+): { wall: Wall; position: number; inMargin: boolean; clear: boolean }[] {
   const eps = 1e-9;
   const room = layout.roomDims;
   const items = (layout.items ?? []).filter((i) => i.visible !== false);
-  const walls = [preferred.wall, ...WALL_OPTIONS.filter((w) => w !== preferred.wall)];
 
   // Every free spot, in preference order, with what it is good for.
   const spots: { wall: Wall; position: number; inMargin: boolean; clear: boolean }[] = [];
@@ -148,9 +178,7 @@ export function findOpeningSpot(
       });
     }
   }
-  const best =
-    spots.find((s) => s.inMargin && s.clear) ?? spots.find((s) => s.inMargin) ?? spots[0];
-  return best ? { wall: best.wall, position: best.position } : preferred;
+  return spots;
 }
 
 // --- Door swing geometry (shared by the canvas and the export) -----------------

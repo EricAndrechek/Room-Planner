@@ -210,4 +210,67 @@ test('the shrink notice can be dismissed, and growing the room never shows it', 
   await expect(notice(page)).toHaveCount(0);
 });
 
+test('wall segmented control moves an opening to a free spot on the new wall', async ({ page }) => {
+  type Opening = { wall: string; position: number; width: number };
+  await returningIn(page, 'room-setup');
+  await page.goto('/');
+  await ready(page);
+  await openStep(page, 'room');
+
+  const windowWall = page.getByRole('radiogroup', { name: 'Window 1 wall' });
+  await expect(windowWall.getByRole('radio', { name: 'Top' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await windowWall.getByRole('radio', { name: 'Left' }).click();
+  await expect(windowWall.getByRole('radio', { name: 'Left' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  const [win] = await stored<Opening[]>(page, 'room-sim-v3-windows');
+  expect(win).toMatchObject({ wall: 'left', position: 4 }); // free there: kept
+
+  // The door (6'..9' on its wall) would land on the window (4'..8'): it goes to a free spot.
+  const doorWall = page.getByRole('radiogroup', { name: 'Door 1 wall' });
+  await doorWall.getByRole('radio', { name: 'Left' }).click();
+  const [door] = await stored<Opening[]>(page, 'room-sim-v3-doors');
+  expect(door!.wall).toBe('left');
+  const clear = door!.position + door!.width <= win!.position || door!.position >= 8;
+  expect(clear, `door at ${door!.position} overlaps the window`).toBe(true);
+
+  // Keyboard: arrows move within the group and pick.
+  await doorWall.getByRole('radio', { name: 'Left' }).focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect(doorWall.getByRole('radio', { name: 'Bottom' })).toBeFocused();
+  await expect(doorWall.getByRole('radio', { name: 'Bottom' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+});
+
+test("an opening that doesn't fit on the chosen wall stays put, and says so", async ({ page }) => {
+  await returningIn(page, 'room-setup');
+  await page.goto('/');
+  await ready(page);
+  await openStep(page, 'room');
+  // A 4' deep room: the 4' window fills the left wall, leaving no room for the door.
+  const length = page.getByLabel('Room length');
+  await length.fill('4');
+  await length.press('Enter');
+  await page
+    .getByRole('radiogroup', { name: 'Window 1 wall' })
+    .getByRole('radio', { name: 'Left' })
+    .click();
+  const doorWall = page.getByRole('radiogroup', { name: 'Door 1 wall' });
+  await doorWall.getByRole('radio', { name: 'Left' }).click();
+  await expect(notice(page)).toContainText(
+    "Door 1 doesn't fit on the left wall, so it stays on the bottom wall.",
+  );
+  await expect(doorWall.getByRole('radio', { name: 'Bottom' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  expect((await stored<{ wall: string }[]>(page, 'room-sim-v3-doors'))[0]!.wall).toBe('bottom');
+});
+
 export { notice };

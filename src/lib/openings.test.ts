@@ -15,6 +15,7 @@ import {
   doorSwingAngle,
   doorSwingGeometry,
   findOpeningSpot,
+  findOpeningSpotOnWall,
   hasHingeSide,
   isSwingDoor,
 } from './openings';
@@ -551,5 +552,37 @@ describe('adding doors to the starter room', () => {
       }
       layout = { ...layout, doors: [...layout.doors, door] };
     }
+  });
+});
+
+describe('findOpeningSpotOnWall', () => {
+  const room = { width: 12, height: 10 };
+  const win = (wall: Wall, position: number, width = 3): RoomWindow => ({
+    id: `w${wall}${position}`,
+    width,
+    position,
+    wall,
+  });
+
+  it('keeps the position when it is free on the new wall', () => {
+    expect(findOpeningSpotOnWall({ roomDims: room, doors: [], windows: [] }, 3, 'left', 4)).toBe(4);
+  });
+
+  it('never lands on another opening: moves along the wall instead', () => {
+    const windows = [win('left', 3, 3)];
+    const pos = findOpeningSpotOnWall({ roomDims: room, doors: [], windows }, 3, 'left', 3)!;
+    expect(pos).not.toBeNull();
+    // At least OPENING_GAP clear of the window at 3..6.
+    expect(pos + 3 <= 3 - 0.5 || pos >= 6 + 0.5).toBe(true);
+  });
+
+  it('is null when the wall is full or shorter than the opening', () => {
+    const full = [win('left', 0, 4.5), win('left', 5.5, 4.5)];
+    expect(
+      findOpeningSpotOnWall({ roomDims: room, doors: [], windows: full }, 3, 'left', 2),
+    ).toBeNull();
+    expect(findOpeningSpotOnWall({ roomDims: room, doors: [], windows: [] }, 11, 'left', 0)).toBe(
+      null,
+    );
   });
 });

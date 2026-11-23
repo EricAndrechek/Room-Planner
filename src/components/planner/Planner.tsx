@@ -35,7 +35,15 @@ import {
   saveUnitSystem,
   type StorageLike,
 } from '../../lib/storage';
-import type { DesignMode, FurnitureItem, Layout, RoomDims, UnitSystem } from '../../types';
+import type {
+  DesignMode,
+  FurnitureItem,
+  Id,
+  Layout,
+  RoomDims,
+  UnitSystem,
+  Wall,
+} from '../../types';
 import { ColorPicker } from './ColorPicker';
 import { ExportModal } from './ExportModal';
 import { FileBrowserModal } from './FileBrowserModal';
@@ -290,6 +298,22 @@ export function Planner({ storage, initial }: PlannerProps) {
     if (outsideCount === 0) dismissNotice('outside-room');
   }, [outsideCount, dismissNotice]);
 
+  // --- Doors & windows: moving one to another wall ----------------------------------------
+  const changeOpeningWall = (type: 'door' | 'window', id: Id, wall: Wall) => {
+    if (openings.moveOpeningToWall(type, id, wall)) {
+      dismissNotice('wall-full');
+      return;
+    }
+    const list: { id: Id; wall: Wall }[] = type === 'door' ? layout.doors : layout.windows;
+    const index = list.findIndex((o) => o.id === id);
+    const name = `${type === 'door' ? 'Door' : 'Window'} ${index + 1}`;
+    showNotice({
+      key: 'wall-full',
+      message: `${name} doesn't fit on the ${wall} wall, so it stays on the ${list[index]?.wall} wall.`,
+      timeoutMs: 6000,
+    });
+  };
+
   // --- Keyboard ----------------------------------------------------------------------
   const selectedItem =
     selection?.type === 'item' ? layout.items.find((i) => i.id === selection.id) : undefined;
@@ -436,6 +460,7 @@ export function Planner({ storage, initial }: PlannerProps) {
               onAddWindow={openings.addWindow}
               onUpdateWindow={openings.updateWindow}
               onDeleteWindow={openings.deleteWindow}
+              onChangeWall={changeOpeningWall}
               highlight={openings.lastAdded}
             />
             <FurniturePanel

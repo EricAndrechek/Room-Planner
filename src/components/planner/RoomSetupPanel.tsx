@@ -18,6 +18,7 @@ import { doorSwingAngle, hasHingeSide, isSwingDoor } from '../../lib/openings';
 import { feetToDisplay, formatArea } from '../../lib/units';
 import type { Door, DoorType, Id, RoomDims, RoomWindow, UnitSystem, Wall } from '../../types';
 import { DimensionInput } from './DimensionInput';
+import { Segmented } from './Segmented';
 
 interface RoomSetupPanelProps {
   isActiveMode: boolean;
@@ -36,6 +37,8 @@ interface RoomSetupPanelProps {
   onAddWindow: () => void;
   onUpdateWindow: (id: Id, updates: Partial<RoomWindow>) => void;
   onDeleteWindow: (id: Id) => void;
+  /** Move a door/window to another wall (at a free spot there). */
+  onChangeWall: (type: 'door' | 'window', id: Id, wall: Wall) => void;
   /** The door/window just added: its card is scrolled into view and briefly highlighted. */
   highlight?: AddedOpening | null;
 }
@@ -44,7 +47,10 @@ interface RoomSetupPanelProps {
 const hingeWord = (type: DoorType | undefined) =>
   type === 'bifold' ? 'Folds to' : type === 'pocket' ? 'Pocket' : 'Hinge';
 
-const wallLabel = (w: Wall) => w.charAt(0).toUpperCase() + w.slice(1);
+const WALL_SEGMENTS = WALL_OPTIONS.map((w) => ({
+  value: w,
+  label: w.charAt(0).toUpperCase() + w.slice(1),
+}));
 const plural = (n: number, word: string) => `${n} ${word}${n !== 1 ? 's' : ''}`;
 
 /** Step 1 group in the sidebar: room size, doors and windows. */
@@ -213,53 +219,39 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 mb-2">
-                      <div>
-                        <label
-                          htmlFor={fid('door', index, 'wall')}
-                          className="block text-[10px] text-slate-500 mb-1"
-                        >
-                          Wall
-                        </label>
-                        <select
-                          id={fid('door', index, 'wall')}
-                          value={door.wall}
-                          onChange={(e) =>
-                            props.onUpdateDoor(door.id, { wall: e.target.value as Wall })
-                          }
-                          className={`${smallInput('focus:ring-indigo-500')} bg-white`}
-                          aria-label={`Door ${index + 1} wall`}
-                        >
-                          {WALL_OPTIONS.map((w) => (
-                            <option key={w} value={w}>
-                              {wallLabel(w)}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label
-                          htmlFor={fid('door', index, 'type')}
-                          className="block text-[10px] text-slate-500 mb-1"
-                        >
-                          Type
-                        </label>
-                        <select
-                          id={fid('door', index, 'type')}
-                          value={door.type}
-                          onChange={(e) =>
-                            props.onUpdateDoor(door.id, { type: e.target.value as DoorType })
-                          }
-                          className={`${smallInput('focus:ring-indigo-500')} bg-white`}
-                          aria-label={`Door ${index + 1} type`}
-                        >
-                          {DOOR_TYPES.map((t) => (
-                            <option key={t.value} value={t.value}>
-                              {t.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                    <div className="mb-2">
+                      <span className="block text-[10px] text-slate-500 mb-1" aria-hidden="true">
+                        Wall
+                      </span>
+                      <Segmented
+                        label={`Door ${index + 1} wall`}
+                        options={WALL_SEGMENTS}
+                        value={door.wall}
+                        onChange={(wall) => props.onChangeWall('door', door.id, wall)}
+                      />
+                    </div>
+                    <div className="mb-2">
+                      <label
+                        htmlFor={fid('door', index, 'type')}
+                        className="block text-[10px] text-slate-500 mb-1"
+                      >
+                        Type
+                      </label>
+                      <select
+                        id={fid('door', index, 'type')}
+                        value={door.type}
+                        onChange={(e) =>
+                          props.onUpdateDoor(door.id, { type: e.target.value as DoorType })
+                        }
+                        className={`${smallInput('focus:ring-indigo-500')} bg-white`}
+                        aria-label={`Door ${index + 1} type`}
+                      >
+                        {DOOR_TYPES.map((t) => (
+                          <option key={t.value} value={t.value}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 mb-2">
@@ -406,30 +398,20 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <label
-                          htmlFor={fid('window', index, 'wall')}
-                          className="block text-[10px] text-slate-500 mb-1"
-                        >
-                          Wall
-                        </label>
-                        <select
-                          id={fid('window', index, 'wall')}
-                          value={win.wall}
-                          onChange={(e) =>
-                            props.onUpdateWindow(win.id, { wall: e.target.value as Wall })
-                          }
-                          className={`${smallInput('focus:ring-blue-500')} bg-white`}
-                          aria-label={`Window ${index + 1} wall`}
-                        >
-                          {WALL_OPTIONS.map((w) => (
-                            <option key={w} value={w}>
-                              {wallLabel(w)}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                    <div className="mb-2">
+                      <span className="block text-[10px] text-slate-500 mb-1" aria-hidden="true">
+                        Wall
+                      </span>
+                      <Segmented
+                        label={`Window ${index + 1} wall`}
+                        options={WALL_SEGMENTS}
+                        value={win.wall}
+                        onChange={(wall) => props.onChangeWall('window', win.id, wall)}
+                        ring="focus-visible:ring-blue-500"
+                        activeText="text-blue-700"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label
                           htmlFor={fid('window', index, 'width')}
