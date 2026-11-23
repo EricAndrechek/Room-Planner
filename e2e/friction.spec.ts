@@ -273,4 +273,25 @@ test("an opening that doesn't fit on the chosen wall stays put, and says so", as
   expect((await stored<{ wall: string }[]>(page, 'room-sim-v3-doors'))[0]!.wall).toBe('bottom');
 });
 
+test('the active step header is a plain label; the inactive one expands its locked section', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await ready(page);
+  await openStep(page, 'furniture');
+  const headers = page.getByTestId('step-header');
+  const active = headers.filter({ hasText: 'Editing' });
+  await expect(active).toHaveCount(1);
+  await expect(active).toContainText('Furniture');
+  expect(await active.evaluate((el) => el.tagName)).toBe('DIV');
+  await expect(active).not.toHaveAttribute('role');
+  await expect(page.getByRole('button', { name: /Editing/ })).toHaveCount(0);
+
+  const inactive = page.getByRole('button', { name: /^Room Setup/ });
+  await expect(inactive).toHaveAttribute('aria-expanded', 'false');
+  await inactive.click();
+  await expect(inactive).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('button', { name: 'Switch to Room Setup Mode' })).toBeVisible();
+});
+
 export { notice };

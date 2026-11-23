@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, Lock, Plus, Sofa, Trash2, Unlock } from 'lucide-react';
+import { Plus, Sofa, Trash2, Unlock } from 'lucide-react';
 import { glowClass, useCardHighlight, type CardRef } from '../../hooks/useCardHighlight';
 import type { ItemWarning } from '../../lib/geometry';
 import type { FurnitureItem, Id, RoomDims, Selection, UnitSystem } from '../../types';
 import { FurnitureCard } from './FurnitureCard';
+import { StepHeader } from './StepHeader';
 
 interface FurniturePanelProps {
   isActiveMode: boolean;
@@ -43,47 +44,21 @@ export function FurniturePanel(props: FurniturePanelProps) {
         isActiveMode ? 'border-emerald-200 bg-white shadow-xs' : 'border-slate-200 bg-slate-50'
       }`}
     >
-      <button
-        type="button"
-        onClick={() => !isActiveMode && props.onToggleExpanded()}
-        className={`w-full flex items-center justify-between p-3 ${
-          !isActiveMode ? 'cursor-pointer hover:bg-slate-100' : 'cursor-default'
-        } rounded-t-xl transition-colors`}
-        aria-expanded={isActiveMode || expanded}
-      >
-        <div className="flex items-center gap-2">
-          <div
-            className={`p-1.5 rounded-lg ${isActiveMode ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-500'}`}
-          >
-            <Sofa className="w-4 h-4" />
-          </div>
-          <div className="text-left">
-            <span className="text-sm font-semibold text-slate-700 block">Furniture</span>
-            <span className="text-[10px] text-slate-600">
-              {items.length} item{items.length !== 1 ? 's' : ''}
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {!isActiveMode && (
-            <>
-              <span className="text-[10px] text-slate-600 flex items-center gap-1">
-                <Lock className="w-3 h-3" /> Locked
-              </span>
-              {expanded ? (
-                <ChevronUp className="w-4 h-4 text-slate-500" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-slate-500" />
-              )}
-            </>
-          )}
-          {isActiveMode && (
-            <span className="text-[10px] text-emerald-800 font-medium px-2 py-0.5 bg-emerald-100 rounded-full">
-              Editing
-            </span>
-          )}
-        </div>
-      </button>
+      <StepHeader
+        isActive={isActiveMode}
+        expanded={expanded}
+        onToggleExpanded={props.onToggleExpanded}
+        icon={<Sofa className="w-4 h-4" />}
+        title="Furniture"
+        summary={
+          <>
+            {items.length} item{items.length !== 1 ? 's' : ''}
+          </>
+        }
+        activeIcon="bg-emerald-100 text-emerald-600"
+        activeText="text-emerald-800"
+        activeDot="bg-emerald-600"
+      />
 
       {!isActiveMode && expanded && (
         <div className="px-3 pb-2">
