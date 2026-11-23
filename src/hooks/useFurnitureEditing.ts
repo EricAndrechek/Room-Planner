@@ -231,6 +231,13 @@ export function useFurnitureEditing({
           onDragFrame(null);
           const said = snap ? describeSnap(snap) : '';
           if (said) announce(said);
+          // A press without a move is a selection, not a move.
+          if (raw.x !== item.x || raw.y !== item.y) {
+            track('item_moved', {
+              snapped: !!(snap && (snap.snapX || snap.snapY)),
+              input: e.pointerType,
+            });
+          }
         },
       });
     },
@@ -256,17 +263,22 @@ export function useFurnitureEditing({
       if (!piece) return;
       // The rotated element's bounding box shares its center with the item.
       const rect = piece.getBoundingClientRect();
+      let lastAngle: AngleSnap | null = null;
       startRotation(e, {
         center: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
         startRotation: item.rotation,
         snapEnabled: () => snapRef.current,
         onRotate: (angle) => {
+          lastAngle = angle;
           setLayout((l) => patchItem(l, item.id, { rotation: angle.deg }));
           onRotateFrame({ id: item.id, angle });
         },
         onEnd: (deg) => {
           applyLayout((l) => patchItem(l, item.id, { rotation: deg }));
           onRotateFrame(null);
+          if (deg !== item.rotation) {
+            track('item_rotated', { snapped: lastAngle?.snapped != null, input: e.pointerType });
+          }
         },
       });
     },

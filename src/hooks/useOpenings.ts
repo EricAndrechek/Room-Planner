@@ -176,15 +176,21 @@ export function useOpenings({
     e.preventDefault();
     setSelection({ id, type: kind === 'doors' ? 'door' : 'window' });
     let last = { x: e.clientX, y: e.clientY };
+    let moved = false;
+    const input = e.pointerType;
     startDrag(e, {
       onMove: (ev) => {
         const scale = PIXELS_PER_UNIT * zoomRef.current;
         const dx = (ev.clientX - last.x) / scale;
         const dy = (ev.clientY - last.y) / scale;
         last = { x: ev.clientX, y: ev.clientY };
+        if (dx || dy) moved = true;
         setLayout((l) => slideOpening(l, kind, id, dx, dy));
       },
-      onEnd: () => commit(),
+      onEnd: () => {
+        commit();
+        if (moved) track('opening_moved', { kind: kind === 'doors' ? 'door' : 'window', input });
+      },
     });
   };
 

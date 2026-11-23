@@ -351,3 +351,67 @@ test('no "Ready to work offline" toast on a first visit (the app is still cached
   await page.waitForTimeout(1000);
   await expect(page.getByTestId('pwa-toast')).toHaveCount(0);
 });
+
+test('canvas actions are tracked as counts and enums only (no names)', async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, 'mouse drag/rotate on the desktop layout');
+  // A stand-in for the PostHog SDK (which stays off under automation): records every capture.
+  await page.addInitScript(() => {
+    const events: [string, Record<string, unknown> | undefined][] = [];
+    (window as unknown as { __events: typeof events }).__events = events;
+    (window as unknown as { posthog: unknown }).posthog = {
+      __SV: 1,
+      capture: (name: string, props?: Record<string, unknown>) => events.push([name, props]),
+    };
+  });
+  const events = () =>
+    page.evaluate(
+      () =>
+        (window as unknown as { __events: [string, Record<string, unknown> | undefined][] })
+          .__events,
+    );
+  const centre = async (selector: string) => {
+    const b = (await page.locator(selector).first().boundingBox())!;
+    return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+  };
+  await page.goto('/');
+  await ready(page);
+
+  // Drag the desk (furniture mode on a first visit).
+  const desk = await centre('role=button[name=/^Desk,/]');
+  await page.mouse.move(desk.x, desk.y);
+  await page.mouse.down();
+  await page.mouse.move(desk.x - 60, desk.y - 40, { steps: 8 });
+  await page.mouse.up();
+  // Turn it with the handle.
+  const handle = await centre('[data-testid="rotate-handle"]');
+  const c = await centre('role=button[name=/^Desk,/]');
+  const r = Math.hypot(handle.x - c.x, handle.y - c.y);
+  await page.mouse.move(handle.x, handle.y);
+  await page.mouse.down();
+  for (let a = -90; a <= -30; a += 6) {
+    const rad = (a * Math.PI) / 180;
+    await page.mouse.move(c.x + r * Math.cos(rad), c.y + r * Math.sin(rad));
+  }
+  await page.mouse.up();
+  // A plain click is a selection, not a move.
+  await page.getByRole('button', { name: /^Bed,/ }).click();
+
+  // Room setup: slide the door along its wall.
+  await openStep(page, 'room');
+  const door = await centre('role=button[name=/^Door handle/]');
+  await page.mouse.move(door.x, door.y);
+  await page.mouse.down();
+  await page.mouse.move(door.x - 50, door.y, { steps: 6 });
+  await page.mouse.up();
+
+  const got = await events();
+  const named = (n: string) => got.filter(([e]) => e === n).map(([, p]) => p);
+  expect(named('item_moved')).toEqual([{ snapped: expect.any(Boolean), input: 'mouse' }]);
+  expect(named('item_rotated')).toEqual([{ snapped: expect.any(Boolean), input: 'mouse' }]);
+  expect(named('opening_moved')).toEqual([{ kind: 'door', input: 'mouse' }]);
+  // Nothing the user typed or named ends up in any event.
+  expect(JSON.stringify(got)).not.toMatch(/Desk|Bed|Floor Plan/);
+});
