@@ -6,7 +6,16 @@ import { createPortal } from 'react-dom';
  * (WCAG 1.4.13). Rendered in a portal and kept inside the viewport; purely visual (the controls
  * carry their own accessible names).
  */
-export function Tooltip({ children, text }: { children: ReactNode; text: string }) {
+export function Tooltip({
+  children,
+  text,
+  disabled = false,
+}: {
+  children: ReactNode;
+  text: string;
+  /** Don't show (e.g. while the control's own menu is open below it). */
+  disabled?: boolean;
+}) {
   const [show, setShow] = useState(false);
   const [tooltipStyle, setTooltipStyle] = useState<CSSProperties>({});
   const [arrowLeft, setArrowLeft] = useState(0);
@@ -53,6 +62,7 @@ export function Tooltip({ children, text }: { children: ReactNode; text: string 
     >
       {children}
       {show &&
+        !disabled &&
         createPortal(
           <div
             className="px-2 py-1 bg-slate-800 text-white text-xs rounded-sm whitespace-nowrap pointer-events-none animate-fade-in"

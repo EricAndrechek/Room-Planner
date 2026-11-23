@@ -52,7 +52,7 @@ export function NewPlanMenu({ unitSystem, onNewPlan }: NewPlanMenuProps) {
     // Phones keep the header for the plan name: there, New plan / Start blank are at the top of
     // My Floor Plans (the folder button) instead.
     <div ref={wrap} className="relative shrink-0 hidden sm:flex">
-      <Tooltip text="New plan">
+      <Tooltip text="New plan" disabled={open}>
         <button
           ref={button}
           type="button"

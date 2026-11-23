@@ -169,7 +169,8 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
               return (
                 <div
                   key={project.id}
-                  className={`flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer ${
+                  // Phones: the actions wrap under the name rather than squeezing it to nothing.
+                  className={`flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-1 p-3 rounded-lg border transition-all cursor-pointer ${
                     project.id === currentProjectId
                       ? 'border-indigo-300 bg-indigo-50'
                       : isSelected
@@ -187,7 +188,7 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
                     )}
                   </div>
 
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-[9rem]">
                     {isEditing ? (
                       <input
                         type="text"
@@ -206,11 +207,11 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
                     ) : (
                       <>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-slate-800 truncate">
+                          <span className="text-sm font-medium text-slate-800 truncate min-w-0">
                             {project.name}
                           </span>
                           {project.id === currentProjectId && (
-                            <span className="text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-sm font-medium">
+                            <span className="shrink-0 text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-sm font-medium">
                               Active
                             </span>
                           )}
@@ -229,7 +230,7 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0 ml-auto">
                     <Tooltip text="Open">
                       <button
                         type="button"
