@@ -9,6 +9,7 @@ import {
 import { useHistory } from '../../hooks/useHistory';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
+import { useNotice } from '../../hooks/useNotice';
 import { useOpenings } from '../../hooks/useOpenings';
 import { usePanZoom } from '../../hooks/usePanZoom';
 import { usePointerDrag } from '../../hooks/usePointerDrag';
@@ -33,7 +34,7 @@ import {
   saveUnitSystem,
   type StorageLike,
 } from '../../lib/storage';
-import type { DesignMode, Layout, UnitSystem } from '../../types';
+import type { DesignMode, FurnitureItem, Layout, UnitSystem } from '../../types';
 import { ColorPicker } from './ColorPicker';
 import { ExportModal } from './ExportModal';
 import { FileBrowserModal } from './FileBrowserModal';
@@ -49,6 +50,10 @@ import { Sidebar } from './Sidebar';
 import { SnapOverlay } from './SnapOverlay';
 import { SnapToggle } from './SnapToggle';
 import { FloatingZoomControls } from './ZoomControls';
+
+/** A repeat press on a locked piece within this time does not bring the notice back. */
+const LOCKED_PROMPT_THROTTLE_MS = 3000;
+const LOCKED_PROMPT_MS = 6000;
 
 interface PlannerProps {
   storage: StorageLike;
@@ -133,14 +138,55 @@ export function Planner({ storage, initial }: PlannerProps) {
     [layout, projectName, unitSystem],
   );
 
+  // --- Notices (bottom toasts) -----------------------------------------------------
+  const notices = useNotice();
+  const { show: showNotice, dismiss: dismissNotice } = notices;
+
   // --- Modes & units ----------------------------------------------------------
   const changeDesignMode = useCallback(
     (mode: DesignMode) => {
       if (mode === designMode) return;
       setDesignMode(mode);
+      if (mode === DESIGN_MODES.FURNITURE) dismissNotice('locked-piece');
       track('mode_changed', { to: mode });
     },
-    [designMode],
+    [designMode, dismissNotice],
+  );
+
+  /**
+   * A piece was pressed (or Enter/arrows/R used on it) while room setup locks furniture: say why
+   * nothing moves, with a one-tap way into Furniture mode that keeps the piece selected.
+   */
+  const lastLockedPrompt = useRef(0);
+  const promptLockedPiece = useCallback(
+    (item: FurnitureItem, input: 'pointer' | 'keyboard') => {
+      const now = Date.now();
+      if (now - lastLockedPrompt.current < LOCKED_PROMPT_THROTTLE_MS) return;
+      lastLockedPrompt.current = now;
+      track('locked_piece_pressed', { mode: DESIGN_MODES.ROOM_SETUP, input });
+      showNotice({
+        key: 'locked-piece',
+        message: 'Furniture is locked while you edit the room.',
+        action: {
+          label: 'Move furniture',
+          onClick: () => {
+            changeDesignMode(DESIGN_MODES.FURNITURE);
+            setSelection({ id: item.id, type: 'item' });
+            dismissNotice('locked-piece');
+          },
+        },
+        timeoutMs: LOCKED_PROMPT_MS,
+      });
+    },
+    [changeDesignMode, dismissNotice, setSelection, showNotice],
+  );
+  const onLockedPointerPress = useCallback(
+    (item: FurnitureItem) => promptLockedPiece(item, 'pointer'),
+    [promptLockedPiece],
+  );
+  const onLockedKeyPress = useCallback(
+    (item: FurnitureItem) => promptLockedPiece(item, 'keyboard'),
+    [promptLockedPiece],
   );
 
   const changeUnitSystem = useCallback(
@@ -181,6 +227,7 @@ export function Planner({ storage, initial }: PlannerProps) {
     onDragFrame: setDragFrame,
     onRotateFrame: setRotateFrame,
     announce: live.announce,
+    onLockedPress: onLockedPointerPress,
   });
   const openings = useOpenings({
     history,
@@ -237,6 +284,10 @@ export function Planner({ storage, initial }: PlannerProps) {
         focusCanvas();
       },
       nudge: (dirX, dirY, size) => {
+        if (isRoomSetup && selectedItem) {
+          promptLockedPiece(selectedItem, 'keyboard');
+          return true;
+        }
         const step = nudgeStep(size, unitSystem);
         if (!canEditSelected) return openings.nudgeOpening(dirX * step, dirY * step);
         // Fine steps place exactly, without snapping (like Alt-dragging).
@@ -245,6 +296,10 @@ export function Planner({ storage, initial }: PlannerProps) {
       },
       showShortcuts: () => setShortcutsOpen(true),
       rotateSelected: (degrees) => {
+        if (isRoomSetup && selectedItem) {
+          promptLockedPiece(selectedItem, 'keyboard');
+          return true;
+        }
         if (!canEditSelected) return false;
         furniture.changeItem(selectedItem.id, {
           rotation: normalizeDegrees(selectedItem.rotation + degrees),
@@ -424,6 +479,7 @@ export function Planner({ storage, initial }: PlannerProps) {
             onItemPointerDown={furniture.onItemPointerDown}
             onRotatePointerDown={furniture.onRotatePointerDown}
             onSelectItem={(item) => selectItem(item.id)}
+            onLockedItemPress={onLockedKeyPress}
             onDoorPointerDown={(e, door) => openings.startOpeningDrag(e, door.id, 'doors')}
             onWindowPointerDown={(e, win) => openings.startOpeningDrag(e, win.id, 'windows')}
             highlightDoorIds={highlightDoorIds}
@@ -488,7 +544,7 @@ export function Planner({ storage, initial }: PlannerProps) {
           {live.message}
         </div>
 
-        <PwaNotices />
+        <PwaNotices notice={notices.notice} onDismissNotice={() => dismissNotice()} />
 
         {colorPickerItem && (
           <ColorPicker

@@ -26,6 +26,7 @@ export type AnalyticsEvent =
   | 'import_json'
   | 'units_changed'
   | 'mode_changed'
+  | 'locked_piece_pressed'
   | 'snap_toggled'
   | 'undo'
   | 'redo'

@@ -1,13 +1,27 @@
 import { useEffect } from 'react';
-import { CircleCheck, Download, RefreshCw, X } from 'lucide-react';
+import { CircleCheck, Download, Info, RefreshCw, X } from 'lucide-react';
+import type { Notice } from '../../hooks/useNotice';
 import { usePwa } from '../../hooks/usePwa';
 import { applyUpdate, dismissOfflineReady, dismissUpdate, promptInstall } from '../../lib/pwa';
 
+const TOAST =
+  'pointer-events-auto w-full max-w-sm bg-slate-900 text-white rounded-xl shadow-xl px-4 py-3 flex items-center gap-3 animate-slide-up';
+const TOAST_ACTION =
+  'shrink-0 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm font-medium transition-colors';
+const TOAST_DISMISS =
+  'shrink-0 p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors';
+
+interface PwaNoticesProps {
+  /** An app notice (e.g. "Furniture is locked…"), shown above the PWA toast. */
+  notice?: Notice | null;
+  onDismissNotice?: () => void;
+}
+
 /**
- * Bottom toasts: "Update available" and the one-time "Ready to work offline". On narrow
- * screens they float above the bottom controls so they never cover them.
+ * Bottom toasts: app notices, "Update available" and the one-time "Ready to work offline". On
+ * narrow screens they float above the bottom controls so they never cover them.
  */
-export function PwaNotices() {
+export function PwaNotices({ notice, onDismissNotice }: PwaNoticesProps = {}) {
   const { needRefresh, offlineReady } = usePwa();
 
   useEffect(() => {
@@ -22,31 +36,43 @@ export function PwaNotices() {
     // announced (a region inserted together with its text often is not). Toasts never take focus.
     // On phones the dock sits above the floating zoom pill and Edit button (see .toast-dock).
     <div
-      className="toast-dock fixed inset-x-0 bottom-0 z-[70] flex justify-center px-3 pointer-events-none"
+      className="toast-dock fixed inset-x-0 bottom-0 z-[70] flex flex-col items-center gap-2 px-3 pointer-events-none"
       role="status"
       aria-live="polite"
       data-testid="pwa-toast-dock"
     >
+      {notice && (
+        <div key={notice.key} data-testid="app-notice" data-notice={notice.key} className={TOAST}>
+          <Info className="w-4 h-4 shrink-0 text-indigo-300" aria-hidden="true" />
+          <p className="text-sm flex-1">{notice.message}</p>
+          {notice.action && (
+            <button type="button" onClick={notice.action.onClick} className={TOAST_ACTION}>
+              {notice.action.label}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onDismissNotice}
+            className={TOAST_DISMISS}
+            aria-label="Dismiss"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       {visible && (
-        <div
-          data-testid="pwa-toast"
-          className="pointer-events-auto w-full max-w-sm bg-slate-900 text-white rounded-xl shadow-xl px-4 py-3 flex items-center gap-3 animate-slide-up"
-        >
+        <div data-testid="pwa-toast" className={TOAST}>
           {needRefresh ? (
             <>
               <RefreshCw className="w-4 h-4 shrink-0 text-indigo-300" aria-hidden="true" />
               <p className="text-sm flex-1">Update available</p>
-              <button
-                type="button"
-                onClick={applyUpdate}
-                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm font-medium transition-colors"
-              >
+              <button type="button" onClick={applyUpdate} className={TOAST_ACTION}>
                 Reload
               </button>
               <button
                 type="button"
                 onClick={dismissUpdate}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+                className={TOAST_DISMISS}
                 aria-label="Dismiss"
               >
                 <X className="w-4 h-4" />
@@ -59,7 +85,7 @@ export function PwaNotices() {
               <button
                 type="button"
                 onClick={dismissOfflineReady}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+                className={TOAST_DISMISS}
                 aria-label="Dismiss"
               >
                 <X className="w-4 h-4" />

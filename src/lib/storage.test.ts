@@ -140,10 +140,25 @@ describe('robustness', () => {
     const state = bootFromStorage(s);
     expect(state.layout).toEqual(defaultLayout());
     expect(state.unitSystem).toBe('ft-in');
-    expect(state.designMode).toBe('room-setup');
+    // First visit: furniture mode, so the sample pieces can be moved right away.
+    expect(state.designMode).toBe('furniture');
+    expect(state.firstVisit).toBe(true);
     expect(state.currentProjectId).toBeNull();
     expect(state.saveStatus).toBe('unsaved');
     expect(state.projects).toEqual([]);
+  });
+
+  it('a stored layout without a stored mode keeps room setup (returning visitors)', () => {
+    const s = createMemoryStorage({ [KEYS.dims]: '{"width":10,"height":10}' });
+    const state = loadPersistedState(s);
+    expect(state.designMode).toBe('room-setup');
+    expect(state.firstVisit).toBe(false);
+  });
+
+  it('a stored mode always wins', () => {
+    const s = createMemoryStorage({ [KEYS.mode]: 'room-setup' });
+    expect(loadPersistedState(s).designMode).toBe('room-setup');
+    expect(loadPersistedState(s).firstVisit).toBe(false);
   });
 
   it('corrupt values fall back to defaults instead of crashing', () => {

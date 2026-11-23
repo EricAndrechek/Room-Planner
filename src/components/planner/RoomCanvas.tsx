@@ -30,6 +30,8 @@ interface RoomCanvasProps {
   onItemPointerDown: (e: ReactPointerEvent<HTMLDivElement>, item: FurnitureItem) => void;
   onRotatePointerDown: (e: ReactPointerEvent<HTMLDivElement>, item: FurnitureItem) => void;
   onSelectItem: (item: FurnitureItem) => void;
+  /** Enter/Space on a piece while room setup locks furniture. */
+  onLockedItemPress?: (item: FurnitureItem) => void;
   onDoorPointerDown: (e: ReactPointerEvent<HTMLDivElement>, door: Door) => void;
   onWindowPointerDown: (e: ReactPointerEvent<HTMLDivElement>, win: RoomWindow) => void;
   /** Doors whose clearance to highlight (a piece being moved is in their way). */
@@ -61,6 +63,7 @@ export function RoomCanvas({
   onItemPointerDown,
   onRotatePointerDown,
   onSelectItem,
+  onLockedItemPress,
   onDoorPointerDown,
   onWindowPointerDown,
   overlay,
@@ -95,6 +98,7 @@ export function RoomCanvas({
         <div
           // One line on any phone: no wrapping (an absolute box at left: 50% would otherwise shrink
           // to half the width), truncated with an ellipsis if it still does not fit.
+          data-testid="mode-badge"
           className={`absolute top-4 left-1/2 -translate-x-1/2 max-w-[calc(100%-1.5rem)] truncate whitespace-nowrap px-3 sm:px-4 py-2 rounded-full shadow-lg text-[11px] sm:text-xs z-20 pointer-events-none animate-fade-in backdrop-blur-xs ${
             isRoomSetup ? 'bg-indigo-600/90 text-white' : 'bg-emerald-700/90 text-white'
           }`}
@@ -103,9 +107,9 @@ export function RoomCanvas({
             <>
               <Home className="w-3 h-3 inline mr-1 -mt-0.5" />
               <span className="hidden sm:inline">
-                Room Setup Mode • Drag door/window handles to reposition
+                Room Setup Mode • Furniture locked • Drag door/window handles to move them
               </span>
-              <span className="sm:hidden">Drag handles to reposition</span>
+              <span className="sm:hidden">Room setup · furniture locked</span>
             </>
           ) : (
             <>
@@ -184,6 +188,7 @@ export function RoomCanvas({
                 onPointerDown={onItemPointerDown}
                 onRotatePointerDown={onRotatePointerDown}
                 onSelect={onSelectItem}
+                onLockedPress={onLockedItemPress}
                 // Only the selected piece draws zoom-dependent UI (its rotate handle): others keep
                 // their memoized render while zooming.
                 zoom={isActive('item', item.id) ? zoom : 1}

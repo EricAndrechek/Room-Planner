@@ -58,8 +58,8 @@ test('tap through the tabs, add furniture, touch-drag it, share link round-trips
   await ready(page);
   await expect(page.getByTestId('room')).toBeVisible();
 
-  // The sidebar is an off-canvas drawer on narrow screens.
-  await page.getByRole('button', { name: 'Edit room settings' }).tap();
+  // The sidebar is an off-canvas drawer on narrow screens (a first visit starts in Furniture mode).
+  await page.getByRole('button', { name: 'Edit furniture' }).tap();
   await page.getByRole('button', { name: /^2\. (Furniture|Items)/ }).tap();
   await page.getByRole('button', { name: 'Add Item' }).tap();
   const piece = page.getByRole('button', { name: /^New Item,/ });
@@ -111,7 +111,9 @@ test('the offline toast never covers the bottom controls: Edit Room works right 
   await animationsSettled(page);
   const t = (await toast.boundingBox())!;
   const controls = page
-    .getByRole('button', { name: /^(Edit room settings|Zoom out|Zoom in|Fit to view)$/ })
+    .getByRole('button', {
+      name: /^(Edit room settings|Edit furniture|Zoom out|Zoom in|Fit to view)$/,
+    })
     .filter({ visible: true });
   expect(await controls.count()).toBeGreaterThanOrEqual(4);
   for (const control of await controls.all()) {
@@ -122,7 +124,9 @@ test('the offline toast never covers the bottom controls: Edit Room works right 
   }
   // Tappable now, while the toast is still up (a covered button would time out here).
   await expect(toast).toBeVisible();
-  await page.getByRole('button', { name: 'Edit room settings' }).tap({ timeout: 1000 });
+  await page
+    .getByRole('button', { name: /^Edit (room settings|furniture)$/ })
+    .tap({ timeout: 1000 });
   await expect(page.getByRole('button', { name: 'View floor plan' })).toBeVisible();
 });
 
@@ -131,7 +135,7 @@ test('touch targets: sidebar icon buttons and the rotate handle are at least 44p
 }) => {
   await page.goto('/');
   await ready(page);
-  await page.getByRole('button', { name: 'Edit room settings' }).tap();
+  await page.getByRole('button', { name: 'Edit furniture' }).tap();
   await page.getByRole('button', { name: /^2\. (Furniture|Items)/ }).tap();
   for (const name of [/^Lock /, /^Hide /, /^Delete /]) {
     const b = (await page.getByRole('button', { name }).first().boundingBox())!;
@@ -188,11 +192,13 @@ for (const size of [
       expect(pill.x).toBeGreaterThanOrEqual(0);
       expect(edit.x + edit.width).toBeLessThanOrEqual(size.width);
       // The mode badge is one line (about 33px tall; two lines would be ~50).
-      const badge = page.getByText(/Drag (to move|handles)/).first();
-      const b = (await badge.locator('xpath=ancestor-or-self::div[1]').boundingBox())!;
+      const badge = page.getByTestId('mode-badge');
+      const b = (await badge.boundingBox())!;
       expect(b.height, 'mode badge wraps').toBeLessThan(40);
       expect(b.x).toBeGreaterThanOrEqual(0);
       expect(b.x + b.width).toBeLessThanOrEqual(size.width);
+      // Not cut off with an ellipsis either.
+      expect(await badge.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
     });
   }
 }

@@ -49,6 +49,8 @@ interface Options {
   onRotateFrame: (frame: RotateFrame | null) => void;
   /** Speak a message in the live region. */
   announce: (text: string) => void;
+  /** A piece was pressed while room setup locks all furniture (to explain why it does not move). */
+  onLockedPress?: (item: FurnitureItem) => void;
 }
 
 /** What the canvas draws while a piece is being rotated with its handle. */
@@ -77,6 +79,7 @@ export function useFurnitureEditing({
   onDragFrame,
   onRotateFrame,
   announce,
+  onLockedPress,
 }: Options) {
   const { present: layout, set: setLayout, apply: applyLayout, commit } = history;
   const { setSelection, forgetItem, clearSelection } = selection;
@@ -179,8 +182,12 @@ export function useFurnitureEditing({
       // Delete act on this piece next (canvas shortcuts only act with focus on the canvas).
       const canvas = e.currentTarget.closest<HTMLElement>('#floor-plan');
       if (canvas && !canvas.contains(document.activeElement)) canvas.focus({ preventScroll: true });
-      // Locked (by mode or individually): selectable, but not movable.
-      if (isRoomSetup || item.locked) return;
+      // Locked (by mode or individually): selectable, but not movable. The mode lock says why.
+      if (isRoomSetup) {
+        onLockedPress?.(item);
+        return;
+      }
+      if (item.locked) return;
       e.stopPropagation();
       e.preventDefault();
       const { items, roomDims } = layoutRef.current;
@@ -219,7 +226,17 @@ export function useFurnitureEditing({
         },
       });
     },
-    [isRoomSetup, startDrag, zoomRef, setLayout, commit, setSelection, onDragFrame, announce],
+    [
+      isRoomSetup,
+      startDrag,
+      zoomRef,
+      setLayout,
+      commit,
+      setSelection,
+      onDragFrame,
+      announce,
+      onLockedPress,
+    ],
   );
 
   const onRotatePointerDown = useCallback(
