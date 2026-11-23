@@ -81,10 +81,10 @@ const tvs = [43, 50, 55, 65, 75, 85].map((d) => ({
           <tr>
             <th scope="row">{t.size} in</th>
             <td>
-              {feetInches(t.near)} ({meters(t.near)} m)
+              {feetInches(t.near)} <span class="whitespace-nowrap">({meters(t.near)} m)</span>
             </td>
             <td>
-              {feetInches(t.far)} ({meters(t.far)} m)
+              {feetInches(t.far)} <span class="whitespace-nowrap">({meters(t.far)} m)</span>
             </td>
           </tr>
         ))}
