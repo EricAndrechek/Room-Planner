@@ -13,7 +13,9 @@ import {
 } from 'lucide-react';
 import { feetToDisplay } from '../../lib/units';
 import type { Project, UnitSystem } from '../../types';
+import type { NewPlanStart } from '../../hooks/useProjectActions';
 import { Modal } from './Modal';
+import { newPlanChoices } from './NewPlanMenu';
 import { Tooltip } from './Tooltip';
 
 interface FileBrowserModalProps {
@@ -22,7 +24,8 @@ interface FileBrowserModalProps {
   projects: Project[];
   currentProjectId: string | null;
   unitSystem: UnitSystem;
-  onNew: () => void;
+  /** Start a new plan (from the sample, or blank); the current one stays in the list. */
+  onNew: (start: NewPlanStart) => void;
   onOpen: (project: Project) => void;
   onRename: (id: string, name: string) => void;
   onDuplicate: (ids: string[]) => void;
@@ -76,13 +79,21 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
       <div className="space-y-4">
         {/* Action Bar */}
         <div className="flex flex-wrap gap-2 pb-3 border-b border-slate-200">
-          <button
-            type="button"
-            onClick={props.onNew}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" /> New
-          </button>
+          {newPlanChoices(unitSystem).map(({ start, label, hint }) => (
+            <button
+              key={start}
+              type="button"
+              onClick={() => props.onNew(start)}
+              title={`${hint}. Your current plan stays in this list.`}
+              className={
+                start === 'sample'
+                  ? 'flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium transition-colors'
+                  : 'flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-medium transition-colors'
+              }
+            >
+              {start === 'sample' && <Plus className="w-3.5 h-3.5" />} {label}
+            </button>
+          ))}
           <button
             type="button"
             onClick={() => {

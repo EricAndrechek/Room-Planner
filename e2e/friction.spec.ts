@@ -294,4 +294,43 @@ test('the active step header is a plain label; the inactive one expands its lock
   await expect(page.getByRole('button', { name: 'Switch to Room Setup Mode' })).toBeVisible();
 });
 
+test('New plan (header and My Floor Plans) keeps the current plan', async ({ page }) => {
+  await page.goto('/');
+  await ready(page);
+  await page.getByTitle('Click to rename').click();
+  await page.getByLabel('Floor plan name').fill('Old plan');
+  await page.getByLabel('Floor plan name').press('Enter');
+  await openStep(page, 'furniture');
+  await page.getByRole('button', { name: 'Add Item' }).click();
+  await viewPlan(page);
+
+  // Header: New plan -> Start blank, right away (before autosave has run).
+  await page.getByRole('button', { name: 'New plan', exact: true }).click();
+  const menu = page.getByTestId('new-plan-menu');
+  await expect(menu).toContainText('Your current plan stays in My Floor Plans.');
+  await menu.getByRole('button', { name: /^Start blank/ }).click();
+  await expect(notice(page)).toContainText(
+    'New plan started. "Old plan" is still in My Floor Plans.',
+  );
+  await expect(page.getByRole('button', { name: /^(Bed|New Item),/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Door handle/ })).toHaveCount(0);
+  await expect(page.getByTestId('save-status')).toContainText('Saved');
+
+  // My Floor Plans lists both; the old one opens with everything (including the last edit).
+  await page.getByRole('button', { name: 'Open file browser' }).click();
+  await expect(page.getByTestId('project-row')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Open Old plan' }).click();
+  await expect(page.getByRole('button', { name: /^Bed,/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^New Item,/ })).toBeVisible();
+
+  // My Floor Plans: "New plan" starts from the sample, again keeping the others.
+  await page.getByRole('button', { name: 'Open file browser' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'New plan', exact: true }).click();
+  await expect(page.getByRole('button', { name: /^Bed,/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^New Item,/ })).toHaveCount(0);
+  await expect(page.getByTestId('save-status')).toContainText('Saved');
+  await page.getByRole('button', { name: 'Open file browser' }).click();
+  await expect(page.getByTestId('project-row')).toHaveCount(3);
+});
+
 export { notice };

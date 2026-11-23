@@ -13,7 +13,7 @@ import { useNotice } from '../../hooks/useNotice';
 import { useOpenings } from '../../hooks/useOpenings';
 import { usePanZoom } from '../../hooks/usePanZoom';
 import { usePointerDrag } from '../../hooks/usePointerDrag';
-import { useProjectActions } from '../../hooks/useProjectActions';
+import { useProjectActions, type NewPlanStart } from '../../hooks/useProjectActions';
 import { useProjects } from '../../hooks/useProjects';
 import { useRotationDrag } from '../../hooks/useRotationDrag';
 import { useSelection } from '../../hooks/useSelection';
@@ -314,6 +314,19 @@ export function Planner({ storage, initial }: PlannerProps) {
     });
   };
 
+  // --- New plan (the current one is kept) -------------------------------------------------
+  const startNewPlan = (start: NewPlanStart) => {
+    const previous = projects.currentProject?.name;
+    projectActions.newProject(start);
+    const kept = previous ? `"${previous}" is` : 'Your previous plan is';
+    // The notice is in the polite toast region, so it is announced too.
+    showNotice({
+      key: 'new-plan',
+      message: `New plan started. ${kept} still in My Floor Plans.`,
+      timeoutMs: 5000,
+    });
+  };
+
   // --- Keyboard ----------------------------------------------------------------------
   const selectedItem =
     selection?.type === 'item' ? layout.items.find((i) => i.id === selection.id) : undefined;
@@ -414,6 +427,7 @@ export function Planner({ storage, initial }: PlannerProps) {
           onToggleSnap={toggleSnap}
           helpHref={HELP_PATH}
           onOpenFiles={() => setFilesOpen(true)}
+          onNewPlan={startNewPlan}
           onRename={projectActions.renameCurrent}
           onUndo={undo}
           onRedo={redo}
@@ -592,7 +606,7 @@ export function Planner({ storage, initial }: PlannerProps) {
           projects={projects.projects}
           currentProjectId={projects.currentProjectId}
           unitSystem={unitSystem}
-          onNew={projectActions.newProject}
+          onNew={startNewPlan}
           onOpen={projectActions.openProject}
           onRename={projects.rename}
           onDuplicate={projects.duplicate}

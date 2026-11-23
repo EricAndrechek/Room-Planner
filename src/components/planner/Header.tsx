@@ -16,6 +16,8 @@ import { detectPlatform, toolbarHint } from '../../lib/shortcuts';
 import { feetToDisplay, formatArea } from '../../lib/units';
 import { useNow } from '../../hooks/useNow';
 import type { RoomDims, SaveStatus, UnitSystem } from '../../types';
+import type { NewPlanStart } from '../../hooks/useProjectActions';
+import { NewPlanMenu } from './NewPlanMenu';
 import { Tooltip } from './Tooltip';
 import { InstallButton } from './PwaNotices';
 import { HeaderZoomControls } from './ZoomControls';
@@ -34,6 +36,8 @@ interface HeaderProps {
   onToggleSnap: () => void;
   helpHref: string;
   onOpenFiles: () => void;
+  /** Start a new plan (the current one is kept in My Floor Plans). */
+  onNewPlan: (start: NewPlanStart) => void;
   /** Rename the current plan (creating it first if it was never saved). */
   onRename: (name: string) => void;
   onUndo: () => void;
@@ -74,6 +78,7 @@ export function Header(props: HeaderProps) {
             <FolderOpen className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </Tooltip>
+        <NewPlanMenu unitSystem={props.unitSystem} onNewPlan={props.onNewPlan} />
 
         <div className="min-w-0 flex-1 max-w-[200px] sm:max-w-none">
           {editingName !== null ? (

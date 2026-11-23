@@ -1,11 +1,20 @@
 import { track } from '../lib/analytics';
 import { downloadFile } from '../lib/browser';
 import { DESIGN_MODES, isDesignMode, isUnitSystem } from '../lib/constants';
-import { defaultLayout, fromShareConfig, normalizeLayout, type ShareConfig } from '../lib/layout';
+import {
+  blankLayout,
+  defaultLayout,
+  fromShareConfig,
+  normalizeLayout,
+  type ShareConfig,
+} from '../lib/layout';
 import { buildExportFile, exportFileName } from '../lib/projects';
 import type { DesignMode, Layout, Project, Selection, UnitSystem } from '../types';
 import type { History } from './useHistory';
 import type { useProjects } from './useProjects';
+
+/** What a new plan starts from: the sample bedroom, or an empty room. */
+export type NewPlanStart = 'sample' | 'blank';
 
 interface Options {
   history: History<Layout>;
@@ -46,10 +55,15 @@ export function useProjectActions({
     track('project_opened');
   };
 
-  const newProject = () => {
-    history.reset(defaultLayout());
+  /**
+   * Start a new plan from the sample room or an empty one. The current plan is kept: its last
+   * edits are saved first (autosave may not have run yet), and it stays in My Floor Plans.
+   */
+  const newProject = (start: NewPlanStart = 'sample') => {
+    if (projects.saveStatus !== 'saved') projects.saveNow();
+    history.reset(start === 'blank' ? blankLayout() : defaultLayout());
     setDesignMode(DESIGN_MODES.ROOM_SETUP);
-    projects.startNew();
+    projects.startNew(start === 'blank' ? 'new_blank' : 'new');
     setSelection(null);
     closeFiles();
   };
