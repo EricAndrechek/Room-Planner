@@ -103,17 +103,22 @@ test('no horizontal page scroll on the narrow layout', async ({ page }) => {
 test('the offline toast never covers the bottom controls: Edit Room works right away', async ({
   page,
 }) => {
+  // A returning visitor (a layout is stored) whose service worker installs now: the one-time
+  // "Ready to work offline" toast shows (a first visit never shows it).
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('seeded')) return;
+    sessionStorage.setItem('seeded', '1');
+    localStorage.setItem('room-sim-v3-mode', 'room-setup');
+    localStorage.setItem('room-sim-v3-dims', JSON.stringify({ width: 12, height: 12 }));
+  });
   await page.goto('/');
   await page.waitForSelector('html[data-planner-ready]');
-  // The one-time "Ready to work offline" toast shows once the service worker has installed.
   const toast = page.getByTestId('pwa-toast');
   await expect(toast).toBeVisible({ timeout: 15_000 });
   await animationsSettled(page);
   const t = (await toast.boundingBox())!;
   const controls = page
-    .getByRole('button', {
-      name: /^(Edit room settings|Edit furniture|Zoom out|Zoom in|Fit to view)$/,
-    })
+    .getByRole('button', { name: /^(Edit room settings|Zoom out|Zoom in|Fit to view)$/ })
     .filter({ visible: true });
   expect(await controls.count()).toBeGreaterThanOrEqual(4);
   for (const control of await controls.all()) {
@@ -124,9 +129,7 @@ test('the offline toast never covers the bottom controls: Edit Room works right 
   }
   // Tappable now, while the toast is still up (a covered button would time out here).
   await expect(toast).toBeVisible();
-  await page
-    .getByRole('button', { name: /^Edit (room settings|furniture)$/ })
-    .tap({ timeout: 1000 });
+  await page.getByRole('button', { name: 'Edit room settings' }).tap({ timeout: 1000 });
   await expect(page.getByRole('button', { name: 'View floor plan' })).toBeVisible();
 });
 

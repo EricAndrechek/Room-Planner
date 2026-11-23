@@ -1,6 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import { isNarrow, openStep, viewPlan } from './ui';
 
+// Fixes for friction seen in real sessions (see the PR): each test names the behaviour it guards.
+
 /** Wait for the island to mount and for the initial auto-fit zoom (500ms) to settle. */
 async function ready(page: Page) {
   await page.waitForSelector('html[data-planner-ready]');
@@ -333,4 +335,19 @@ test('New plan (header and My Floor Plans) keeps the current plan', async ({ pag
   await expect(page.getByTestId('project-row')).toHaveCount(3);
 });
 
-export { notice };
+test('no "Ready to work offline" toast on a first visit (the app is still cached)', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await ready(page);
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await expect
+    .poll(() => page.evaluate(() => !!navigator.serviceWorker.controller), { timeout: 15_000 })
+    .toBe(true);
+  // The one-time notice has been used up silently.
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem('room-planner-offline-notice')))
+    .toBe('1');
+  await page.waitForTimeout(1000);
+  await expect(page.getByTestId('pwa-toast')).toHaveCount(0);
+});

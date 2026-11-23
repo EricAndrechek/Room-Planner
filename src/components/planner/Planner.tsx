@@ -625,7 +625,11 @@ export function Planner({ storage, initial }: PlannerProps) {
           {live.message}
         </div>
 
-        <PwaNotices notice={notices.notice} onDismissNotice={() => dismissNotice()} />
+        <PwaNotices
+          notice={notices.notice}
+          onDismissNotice={() => dismissNotice()}
+          firstVisit={initial.firstVisit}
+        />
 
         {colorPickerItem && (
           <ColorPicker

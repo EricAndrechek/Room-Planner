@@ -15,14 +15,23 @@ interface PwaNoticesProps {
   /** An app notice (e.g. "Furniture is locked…"), shown above the PWA toast. */
   notice?: Notice | null;
   onDismissNotice?: () => void;
+  /**
+   * A first visit: skip "Ready to work offline" (people dismissed it within seconds on their first
+   * look at the app). It is shown once only, so on a first visit it is simply never shown; the
+   * help page explains offline use. "Update available" is unaffected.
+   */
+  firstVisit?: boolean;
 }
 
 /**
- * Bottom toasts: app notices, "Update available" and the one-time "Ready to work offline". On
+ * Bottom toasts: app notices, "Update available" and the one-time "Ready to work offline" (not on
+ * a first visit). On
  * narrow screens they float above the bottom controls so they never cover them.
  */
-export function PwaNotices({ notice, onDismissNotice }: PwaNoticesProps = {}) {
-  const { needRefresh, offlineReady } = usePwa();
+export function PwaNotices({ notice, onDismissNotice, firstVisit = false }: PwaNoticesProps = {}) {
+  const pwa = usePwa();
+  const needRefresh = pwa.needRefresh;
+  const offlineReady = pwa.offlineReady && !firstVisit;
 
   useEffect(() => {
     if (!offlineReady) return;
