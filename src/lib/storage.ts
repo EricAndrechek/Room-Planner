@@ -230,3 +230,13 @@ export const saveCurrentProjectId = (s: StorageLike, id: string | null): void =>
 
 export const saveProjects = (s: StorageLike, projects: Project[]): boolean =>
   safeSet(s, KEYS.projects, JSON.stringify(projects));
+
+// --- Preferences (per device; not part of a plan or of the share/export format) ---------------
+
+/** Snapping on/off. Stored as '0' when off; anything else (including missing) means on. */
+export const SNAP_PREF_KEY = 'room-planner-pref-snap';
+
+export const loadSnapPreference = (s: StorageLike): boolean => safeGet(s, SNAP_PREF_KEY) !== '0';
+
+export const saveSnapPreference = (s: StorageLike, on: boolean): void =>
+  void safeSet(s, SNAP_PREF_KEY, on ? '1' : '0');

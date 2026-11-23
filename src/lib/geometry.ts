@@ -93,9 +93,70 @@ export const isItemInBounds = (item: Box, room: RoomDims): boolean =>
       c.y <= room.height + GEOMETRY_EPSILON,
   );
 
+// --- Polygons -------------------------------------------------------------------------------
+
+/** Move every vertex `by` towards the centroid (so shapes that only touch do not overlap). */
+export const shrinkPolygon = (pts: Point[], by: number): Point[] => {
+  const cx = pts.reduce((a, p) => a + p.x, 0) / pts.length;
+  const cy = pts.reduce((a, p) => a + p.y, 0) / pts.length;
+  return pts.map((p) => {
+    const dx = p.x - cx;
+    const dy = p.y - cy;
+    const d = Math.hypot(dx, dy) || 1;
+    const k = Math.max(0, d - by) / d;
+    return { x: cx + dx * k, y: cy + dy * k };
+  });
+};
+
+const cross = (o: Point, a: Point, b: Point) =>
+  (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+
+/** Whether segments ab and cd cross at a point inside both (not merely touching). */
+const segmentsCross = (a: Point, b: Point, c: Point, d: Point): boolean => {
+  const d1 = cross(c, d, a);
+  const d2 = cross(c, d, b);
+  const d3 = cross(a, b, c);
+  const d4 = cross(a, b, d);
+  return d1 * d2 < 0 && d3 * d4 < 0;
+};
+
+/** Even-odd point-in-polygon test (any simple polygon, convex or not). */
+export const pointInPolygon = (p: Point, poly: Point[]): boolean => {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i]!;
+    const b = poly[j]!;
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) {
+      inside = !inside;
+    }
+  }
+  return inside;
+};
+
+/**
+ * Whether two simple polygons (convex or not, e.g. a rotated piece and a door's swing) overlap:
+ * an edge of one crosses an edge of the other, or one has a vertex inside the other.
+ */
+export const polygonsOverlap = (a: Point[], b: Point[]): boolean => {
+  for (let i = 0; i < a.length; i++) {
+    const a1 = a[i]!;
+    const a2 = a[(i + 1) % a.length]!;
+    for (let j = 0; j < b.length; j++) {
+      if (segmentsCross(a1, a2, b[j]!, b[(j + 1) % b.length]!)) return true;
+    }
+  }
+  return a.some((p) => pointInPolygon(p, b)) || b.some((p) => pointInPolygon(p, a));
+};
+
 export interface ItemWarning {
   outOfBounds: boolean;
   collision: boolean;
+  /** In a door's swing, fold or sliding track (softer warning; see `computeLayoutWarnings`). */
+  blocksDoor?: boolean;
+  /** Standing in a doorway (softer warning). */
+  blocksDoorway?: boolean;
+  /** The doors it blocks. */
+  doorIds?: Id[];
 }
 
 /**
@@ -164,22 +225,46 @@ export const angleDelta = (from: number, to: number): number => {
   return d > 180 ? d - 360 : d;
 };
 
-/** Snap increment and capture window used when a rotation drag ends. */
-export const ROTATION_SNAP_STEP = 15;
-export const ROTATION_SNAP_THRESHOLD = 5;
+/** Rotation-handle snapping: magnetic capture (degrees) around the axes and the diagonals. */
+export const ROTATION_SNAP_AXIS = 8;
+export const ROTATION_SNAP_DIAGONAL = 5;
+/** Step used while Shift is held during a rotation drag. */
+export const ROTATION_STEP = 15;
 
 /**
- * Normalize to [0, 360) and snap to the nearest 15° (so also every 45°/90°)
- * when within 5° of it - the behavior of the original rotation handle.
+ * How a rotation drag treats the angle: `magnetic` (default) pulls onto 0/90/180/270 within 8deg
+ * and onto the 45deg diagonals within 5deg; `step` moves in 15deg increments (Shift); `free`
+ * (Alt/Option, or the Snap toggle off) follows the pointer in whole degrees.
  */
-export const snapRotation = (
-  deg: number,
-  step = ROTATION_SNAP_STEP,
-  threshold = ROTATION_SNAP_THRESHOLD,
-): number => {
-  const norm = normalizeDegrees(deg);
-  const nearest = Math.round(norm / step) * step;
-  return Math.abs(norm - nearest) < threshold ? nearest % 360 : norm;
+export type RotationSnapMode = 'magnetic' | 'step' | 'free';
+
+export interface AngleSnap {
+  /** Resulting rotation in [0, 360). */
+  deg: number;
+  /** The angle it locked onto (equal to `deg`), or null when it moved freely. */
+  snapped: number | null;
+}
+
+/** Snap a rotation (degrees, any range) for the rotate handle. Angular, so zoom-independent. */
+export const snapAngle = (raw: number, mode: RotationSnapMode = 'magnetic'): AngleSnap => {
+  const norm = normalizeDegrees(raw);
+  if (mode === 'step') {
+    const deg = normalizeDegrees(Math.round(norm / ROTATION_STEP) * ROTATION_STEP);
+    return { deg, snapped: deg };
+  }
+  if (mode === 'magnetic') {
+    const axis = Math.round(norm / 90) * 90;
+    if (Math.abs(norm - axis) <= ROTATION_SNAP_AXIS) {
+      const deg = normalizeDegrees(axis);
+      return { deg, snapped: deg };
+    }
+    const diagonal = Math.round((norm - 45) / 90) * 90 + 45;
+    if (Math.abs(norm - diagonal) <= ROTATION_SNAP_DIAGONAL) {
+      const deg = normalizeDegrees(diagonal);
+      return { deg, snapped: deg };
+    }
+  }
+  return { deg: normalizeDegrees(Math.round(norm)), snapped: null };
 };
 
 // --- Viewport ---------------------------------------------------------------

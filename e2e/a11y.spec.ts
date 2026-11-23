@@ -76,6 +76,61 @@ for (const [name, viewport] of [
       await expectNoSeriousViolations(page);
     });
 
+    test('planner mid-drag (guides and measurements showing) has no serious violations', async ({
+      page,
+      isMobile,
+    }) => {
+      await page.goto('/');
+      await ready(page);
+      await openStep(page, 'furniture');
+      await viewPlan(page);
+      const chair = (await page.getByRole('button', { name: /^Chair,/ }).boundingBox())!;
+      const x = chair.x + chair.width / 2;
+      const y = chair.y + chair.height / 2;
+      if (isMobile) {
+        await page.evaluate(
+          ({ x, y }) => {
+            const o = (cx: number, cy: number) => ({
+              bubbles: true,
+              pointerId: 5,
+              pointerType: 'touch',
+              isPrimary: true,
+              clientX: cx,
+              clientY: cy,
+              buttons: 1,
+            });
+            document
+              .querySelector('[aria-label^="Chair,"]')!
+              .dispatchEvent(new PointerEvent('pointerdown', o(x, y)));
+            window.dispatchEvent(new PointerEvent('pointermove', o(x - 30, y + 5)));
+          },
+          { x, y },
+        );
+      } else {
+        await page.mouse.move(x, y);
+        await page.mouse.down();
+        await page.mouse.move(x - 30, y + 5, { steps: 5 });
+      }
+      await expect(page.getByTestId('snap-overlay')).toHaveAttribute('data-dragging', 'true');
+      await expect(page.getByTestId('measurement').first()).toBeVisible();
+      await expectNoSeriousViolations(page);
+      if (!isMobile) await page.mouse.up();
+    });
+
+    test('planner with the keyboard shortcuts panel open has no serious violations', async ({
+      page,
+    }) => {
+      await page.goto('/');
+      await ready(page);
+      await page.keyboard.press('?');
+      // Found by its heading (see the Export dialog test above for why not by name).
+      const dialog = page
+        .getByRole('dialog')
+        .filter({ has: page.getByRole('heading', { name: 'Keyboard shortcuts' }) });
+      await expect(dialog).toBeVisible();
+      await expectNoSeriousViolations(page);
+    });
+
     test('help page has no serious violations', async ({ page }) => {
       await page.goto('/help/');
       await expectNoSeriousViolations(page);
@@ -133,6 +188,11 @@ test('furniture can be selected, moved, rotated, undone and removed with the key
   await expect.poll(async () => (await itemOf()).rotation).toBe(0);
   await page.keyboard.press('r');
   await expect.poll(async () => (await itemOf()).rotation).toBe(90);
+  // Alt/Option+R: 1 degree at a time (Shift: the other way).
+  await page.keyboard.press('Alt+r');
+  await expect.poll(async () => (await itemOf()).rotation).toBe(91);
+  await page.keyboard.press('Alt+Shift+R');
+  await expect.poll(async () => (await itemOf()).rotation).toBe(90);
 
   // Undo steps back through the rotation, and the live region announces it (debounced). Record
   // every text the region shows: a later announcement ("Project saved") can replace it quickly.
@@ -146,6 +206,8 @@ test('furniture can be selected, moved, rotated, undone and removed with the key
     });
   });
   await page.keyboard.press('ControlOrMeta+z');
+  await page.keyboard.press('ControlOrMeta+z');
+  await page.keyboard.press('ControlOrMeta+z');
   await expect.poll(async () => (await itemOf()).rotation).toBe(0);
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __said: string[] }).__said.join(' | ')))
@@ -155,6 +217,17 @@ test('furniture can be selected, moved, rotated, undone and removed with the key
   await page.keyboard.press('Escape');
   await expect(piece).toHaveAttribute('aria-pressed', 'false');
   await expect(piece).not.toBeFocused();
+
+  // Canvas shortcuts do nothing while focus is on a control outside the canvas, even with the
+  // piece selected: arrows, R, Delete and Escape belong to the canvas.
+  await piece.focus();
+  const before = await itemOf();
+  const outside = page.getByRole('button', { name: 'Open file browser' });
+  await outside.focus();
+  for (const key of ['ArrowRight', 'r', 'Delete', 'Escape']) await page.keyboard.press(key);
+  await expect(outside).toBeFocused();
+  expect(await itemOf()).toEqual(before);
+  await expect(piece).toHaveAttribute('aria-pressed', 'true');
 
   // Delete removes it (and undo brings it back).
   await piece.focus();
@@ -193,4 +266,143 @@ test('door handles are keyboard operable in room setup', async ({ page }) => {
   const before = await handle.getAttribute('aria-label');
   await page.keyboard.press('Shift+ArrowRight');
   await expect(handle).not.toHaveAttribute('aria-label', before!);
+
+  // Delete removes the focused door, announced, and undo brings it back.
+  const doors = page.getByRole('button', { name: /^Door handle/ });
+  const count = await doors.count();
+  await page.keyboard.press('Delete');
+  await expect(doors).toHaveCount(count - 1);
+  await expect(page.locator('[role="status"][aria-atomic="true"]')).toContainText(
+    /Door \d+ removed/,
+  );
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(doors).toHaveCount(count);
+});
+
+test('tooltips show on keyboard focus and close on Escape', async ({ page }) => {
+  await page.goto('/');
+  await ready(page);
+  // Keyboard focus (WebKit does not Tab to buttons by default, so focus it after a key press:
+  // script focus that follows keyboard use counts as keyboard focus, i.e. :focus-visible).
+  await page.keyboard.press('Shift');
+  await page.getByRole('button', { name: 'Open file browser' }).focus();
+  await expect(page.getByRole('button', { name: 'Open file browser' })).toBeFocused();
+  const tip = page.getByRole('tooltip');
+  await expect(tip).toHaveText('My Floor Plans');
+  await page.keyboard.press('Escape');
+  await expect(tip).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Open file browser' })).toBeFocused();
+});
+
+test('page structure: the plan name heading is not inside a button; labels name their fields', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await ready(page);
+  const heading = page.getByRole('heading', { level: 1 });
+  await expect(heading).toBeVisible();
+  expect(await heading.evaluate((h) => h.closest('button, [role="button"]'))).toBeNull();
+  // Renaming still works from its own button.
+  await page.getByRole('button', { name: 'Rename floor plan' }).click();
+  await expect(page.getByLabel('Floor plan name')).toBeFocused();
+  await page.getByLabel('Floor plan name').press('Escape');
+
+  // Visible labels are associated with their inputs (clicking one focuses its field).
+  await openStep(page, 'furniture');
+  const card = page.getByTestId('furniture-card').first();
+  const label = card.locator('label', { hasText: /^Depth$/ });
+  const id = await label.getAttribute('for');
+  expect(id).toBeTruthy();
+  const field = card.locator(`[id="${id}"]`);
+  await expect(field).toHaveAccessibleName(/^Depth of /);
+  await label.click();
+  await expect(field).toBeFocused();
+  // Ids are unique across cards.
+  const ids = await page
+    .locator('[data-testid="furniture-card"] label[for]')
+    .evaluateAll((ls) => ls.map((l) => l.getAttribute('for')));
+  expect(new Set(ids).size).toBe(ids.length);
+});
+
+test('desktop color popover is a modal dialog that follows the sidebar in reading order', async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, 'phones get a bottom sheet');
+  await page.goto('/');
+  await ready(page);
+  await openStep(page, 'furniture');
+  await page.locator('[data-color-button]').first().click();
+  const dialog = page.getByRole('dialog', { name: 'Choose color' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute('aria-modal', 'true');
+  expect(await dialog.evaluate((d) => !!d.closest('[data-popover-root]'))).toBe(true);
+  // Positioned under its trigger, on screen.
+  const trigger = (await page.locator('[data-color-button]').first().boundingBox())!;
+  const box = (await dialog.boundingBox())!;
+  const below = Math.abs(box.y - (trigger.y + trigger.height + 4));
+  const above = Math.abs(box.y + 280 - (trigger.y - 4)); // flipped above when there is no room
+  expect(Math.min(below, above)).toBeLessThan(2);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+});
+
+test('toasts live in a polite region that is always present (so they are announced)', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await ready(page);
+  const dock = page.getByTestId('pwa-toast-dock');
+  await expect(dock).toHaveAttribute('role', 'status');
+  await expect(dock).toHaveAttribute('aria-live', 'polite');
+});
+
+test("? opens the keyboard shortcuts, grouped, with this keyboard's keys; Escape closes it", async ({
+  page,
+  isMobile,
+}) => {
+  await page.goto('/');
+  await ready(page);
+  await openStep(page, 'furniture');
+  await viewPlan(page);
+  const piece = page.getByRole('button', { name: /^Bed,/ });
+  await piece.focus();
+  await page.keyboard.press('?');
+  const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+  await expect(dialog).toBeVisible();
+  for (const group of ['Move', 'Rotate', 'Edit', 'View']) {
+    await expect(dialog.getByRole('heading', { name: group })).toBeVisible();
+  }
+  // The same detection as the app (the emulated device's userAgentData wins over navigator.platform).
+  const mac = await page.evaluate(() => {
+    const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
+    return /mac|iphone|ipad|ipod/i.test(nav.userAgentData?.platform || nav.platform || '');
+  });
+  const undo = dialog
+    .locator('div')
+    .filter({ has: page.getByText('Undo', { exact: true }) })
+    .last();
+  await expect(undo.locator('kbd').first()).toHaveText(mac ? '⌘' : 'Ctrl');
+  // Canvas keys do nothing while the panel is open.
+  await page.keyboard.press('Delete');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(piece).toBeFocused();
+  await expect(piece).toHaveCount(1);
+
+  if (!isMobile) {
+    // Also from the top bar, whose Undo/Redo tooltips show their keys.
+    await page.getByRole('button', { name: 'Keyboard shortcuts' }).click();
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    // Something to undo, so the button is enabled (a disabled one gets no hover in Chromium).
+    await piece.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled();
+    await page.getByRole('button', { name: 'Undo' }).hover();
+    await expect(page.getByRole('tooltip').filter({ hasText: /^Undo/ })).toHaveText(
+      mac ? 'Undo (⌘Z)' : 'Undo (Ctrl+Z)',
+    );
+  }
 });

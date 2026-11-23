@@ -204,7 +204,7 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
                             </span>
                           )}
                         </div>
-                        <div className="text-[10px] text-slate-500 mt-0.5">
+                        <div className="text-[10px] text-slate-600 mt-0.5">
                           {project.data?.roomDims && (
                             <span>
                               {feetToDisplay(project.data.roomDims.width, unitSystem)} ×{' '}

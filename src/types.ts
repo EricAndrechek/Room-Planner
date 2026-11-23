@@ -9,7 +9,23 @@ export type DesignMode = 'room-setup' | 'furniture';
 
 export type Wall = 'top' | 'right' | 'bottom' | 'left';
 
-export type DoorType = 'swing-in' | 'swing-out' | 'sliding';
+/**
+ * Door kinds. `swing-in`/`swing-out`: one hinged leaf; `double-in`/`double-out`: two leaves (French
+ * doors); `sliding`: bypass/barn panels along the inside face; `pocket`: slides into the wall;
+ * `bifold`: folds into the room towards the hinge side; `opening`: a doorway with no door.
+ */
+export type DoorType =
+  | 'swing-in'
+  | 'swing-out'
+  | 'double-in'
+  | 'double-out'
+  | 'sliding'
+  | 'pocket'
+  | 'bifold'
+  | 'opening';
+
+/** How far a swing door opens: 90 (default) or 180 degrees (flat against the wall). */
+export type SwingAngle = 90 | 180;
 
 export type Hinge = 'left' | 'right';
 
@@ -29,6 +45,8 @@ export interface Door {
   wall: Wall;
   hinge: Hinge;
   type: DoorType;
+  /** Swing doors only (single and double); missing means 90. */
+  swingAngle?: SwingAngle;
   /** Legacy (v2) field kept when importing old single-door configs. */
   open?: 'in' | 'out';
 }

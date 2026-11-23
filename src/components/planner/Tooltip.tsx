@@ -1,7 +1,11 @@
-import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
-/** Hover tooltip rendered in a portal and kept inside the viewport. */
+/**
+ * Tooltip on hover and on keyboard focus (not on a mouse click's focus), dismissed with Escape
+ * (WCAG 1.4.13). Rendered in a portal and kept inside the viewport; purely visual (the controls
+ * carry their own accessible names).
+ */
 export function Tooltip({ children, text }: { children: ReactNode; text: string }) {
   const [show, setShow] = useState(false);
   const [tooltipStyle, setTooltipStyle] = useState<CSSProperties>({});
@@ -9,7 +13,7 @@ export function Tooltip({ children, text }: { children: ReactNode; text: string 
   const [position, setPosition] = useState<'top' | 'bottom'>('top');
   const triggerRef = useRef<HTMLDivElement>(null);
 
-  const handleMouseEnter = () => {
+  const open = () => {
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
       const tooltipHeight = 32;
@@ -26,20 +30,35 @@ export function Tooltip({ children, text }: { children: ReactNode; text: string 
     setShow(true);
   };
 
+  // Escape hides it without moving focus or triggering anything else.
+  useEffect(() => {
+    if (!show) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShow(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [show]);
+
   return (
     <div
       ref={triggerRef}
       className="relative inline-flex"
-      onMouseEnter={handleMouseEnter}
+      onMouseEnter={open}
       onMouseLeave={() => setShow(false)}
+      onFocus={(e) => {
+        if (e.target.matches(':focus-visible')) open();
+      }}
+      onBlur={() => setShow(false)}
     >
       {children}
       {show &&
         createPortal(
           <div
-            className="px-2 py-1 bg-slate-800 text-white text-xs rounded-sm whitespace-nowrap pointer-events-none"
+            className="px-2 py-1 bg-slate-800 text-white text-xs rounded-sm whitespace-nowrap pointer-events-none animate-fade-in"
             style={tooltipStyle}
             role="tooltip"
+            data-testid="tooltip"
           >
             {text}
             <div

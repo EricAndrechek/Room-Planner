@@ -110,10 +110,16 @@ export const INITIAL_ITEMS: FurnitureItem[] = [
 
 export const WALL_OPTIONS: Wall[] = ['top', 'right', 'bottom', 'left'];
 
+/** Door types, in the order the door card lists them, with their labels. */
 export const DOOR_TYPES: { value: DoorType; label: string }[] = [
-  { value: 'swing-in', label: 'Swing In' },
-  { value: 'swing-out', label: 'Swing Out' },
-  { value: 'sliding', label: 'Sliding' },
+  { value: 'swing-in', label: 'Swing in' },
+  { value: 'swing-out', label: 'Swing out' },
+  { value: 'double-in', label: 'Double (French), in' },
+  { value: 'double-out', label: 'Double (French), out' },
+  { value: 'sliding', label: 'Sliding (bypass / barn)' },
+  { value: 'pocket', label: 'Pocket (slides into wall)' },
+  { value: 'bifold', label: 'Bi-fold' },
+  { value: 'opening', label: 'Opening (no door)' },
 ];
 
 export const UNIT_SYSTEMS: { value: UnitSystem; label: string }[] = [

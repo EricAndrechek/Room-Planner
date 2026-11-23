@@ -160,8 +160,27 @@ export function useOpenings({
     return true;
   };
 
+  /**
+   * Delete key on a focused door/window handle (room setup only): remove it as one undo step and
+   * say so. False if no door/window is selected.
+   */
+  const deleteSelectedOpening = (): boolean => {
+    if (!isRoomSetup || (selection?.type !== 'door' && selection?.type !== 'window')) return false;
+    const isDoor = selection.type === 'door';
+    const list: { id: Id }[] = isDoor ? layout.doors : layout.windows;
+    const index = list.findIndex((o) => o.id === selection.id);
+    if (index < 0) return false;
+    if (isDoor) deleteDoor(selection.id);
+    else deleteWindow(selection.id);
+    announce(
+      `${isDoor ? 'Door' : 'Window'} ${index + 1} removed. Press Control or Command Z to undo.`,
+    );
+    return true;
+  };
+
   return {
     lastAdded,
+    deleteSelectedOpening,
     updateRoomDims,
     addDoor,
     updateDoor,

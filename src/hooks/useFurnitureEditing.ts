@@ -1,7 +1,24 @@
-import { useCallback, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
+} from 'react';
 import { track } from '../lib/analytics';
 import { randomPresetColor } from '../lib/colors';
 import { PIXELS_PER_UNIT } from '../lib/constants';
+import type { AngleSnap } from '../lib/geometry';
+import {
+  SNAP_THRESHOLD_PX,
+  SNAP_THRESHOLD_TOUCH_PX,
+  buildSnapCandidates,
+  describeSnap,
+  snapItem,
+  snapNudge,
+  thresholdFeet,
+  type SnapResult,
+} from '../lib/snapping';
 import type { FurnitureItem, Id, Layout } from '../types';
 import type { History } from './useHistory';
 import type { usePointerDrag } from './usePointerDrag';
@@ -24,6 +41,26 @@ interface Options {
   startDrag: ReturnType<typeof usePointerDrag>;
   startRotation: ReturnType<typeof useRotationDrag>;
   zoomRef: RefObject<number>;
+  /** Snapping preference (the Snap toggle); Alt/Option during a drag bypasses it. */
+  snapEnabled: boolean;
+  /** Each drag frame: the piece being dragged and its snap (null when free); null on drop. */
+  onDragFrame: (frame: DragFrame | null) => void;
+  /** Each rotate-handle frame: the piece and its angle (snapped or free); null on release. */
+  onRotateFrame: (frame: RotateFrame | null) => void;
+  /** Speak a message in the live region. */
+  announce: (text: string) => void;
+}
+
+/** What the canvas draws while a piece is being rotated with its handle. */
+export interface RotateFrame {
+  id: Id;
+  angle: AngleSnap;
+}
+
+/** What the canvas draws while a piece is being dragged. */
+export interface DragFrame {
+  id: Id;
+  snap: SnapResult | null;
 }
 
 /** Adding, editing, removing, dragging and rotating furniture pieces. */
@@ -36,9 +73,20 @@ export function useFurnitureEditing({
   startDrag,
   startRotation,
   zoomRef,
+  snapEnabled,
+  onDragFrame,
+  onRotateFrame,
+  announce,
 }: Options) {
   const { present: layout, set: setLayout, apply: applyLayout, commit } = history;
   const { setSelection, forgetItem, clearSelection } = selection;
+  // Read at drag start / per move without re-creating the (memoized) pointer handlers.
+  const layoutRef = useRef(layout);
+  const snapRef = useRef(snapEnabled);
+  useEffect(() => {
+    layoutRef.current = layout;
+    snapRef.current = snapEnabled;
+  });
 
   const addItem = () => {
     const { width, height } = layout.roomDims;
@@ -97,40 +145,81 @@ export function useFurnitureEditing({
     [applyLayout],
   );
 
-  /** Move a piece by (dx, dy) feet as one undo step. */
+  /**
+   * Keyboard move by a fixed (dx, dy) step as one undo step. With snapping on (and `snap` true; fine
+   * steps pass false), a step that lands within the snap threshold of a wall or piece edge snaps
+   * onto it, and that is announced.
+   */
   const moveItem = useCallback(
-    (id: Id, dx: number, dy: number) =>
-      applyLayout((l) => ({
-        ...l,
-        items: l.items.map((i) => (i.id === id ? { ...i, x: i.x + dx, y: i.y + dy } : i)),
-      })),
-    [applyLayout],
+    (id: Id, dx: number, dy: number, snap = true) => {
+      const l = layoutRef.current;
+      const item = l.items.find((i) => i.id === id);
+      if (!item) return;
+      let x = item.x + dx;
+      let y = item.y + dy;
+      let said = '';
+      if (snap && snapRef.current) {
+        const threshold = thresholdFeet(SNAP_THRESHOLD_PX, zoomRef.current, PIXELS_PER_UNIT);
+        const r = snapNudge(item, dx, dy, buildSnapCandidates(l.items, l.roomDims, id), threshold);
+        x = r.x;
+        y = r.y;
+        said = describeSnap(r);
+      }
+      applyLayout((cur) => patchItem(cur, id, { x, y }));
+      if (said) announce(said);
+    },
+    [applyLayout, announce, zoomRef],
   );
 
   const onItemPointerDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>, item: FurnitureItem) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       setSelection({ id: item.id, type: 'item' });
+      // If focus is elsewhere (a sidebar control), bring it back to the canvas so arrows, R and
+      // Delete act on this piece next (canvas shortcuts only act with focus on the canvas).
+      const canvas = e.currentTarget.closest<HTMLElement>('#floor-plan');
+      if (canvas && !canvas.contains(document.activeElement)) canvas.focus({ preventScroll: true });
       // Locked (by mode or individually): selectable, but not movable.
       if (isRoomSetup || item.locked) return;
       e.stopPropagation();
       e.preventDefault();
+      const { items, roomDims } = layoutRef.current;
+      // The other pieces stay put during the drag: collect their lines once.
+      const candidates = buildSnapCandidates(items, roomDims, item.id);
+      const thresholdPx = e.pointerType === 'touch' ? SNAP_THRESHOLD_TOUCH_PX : SNAP_THRESHOLD_PX;
+      // Where the pointer alone would put the piece; snapping is applied on top each frame.
+      const raw = { x: item.x, y: item.y };
       let last = { x: e.clientX, y: e.clientY };
+      let snap: SnapResult | null = null;
       startDrag(e, {
         onMove: (ev) => {
           const scale = PIXELS_PER_UNIT * zoomRef.current;
-          const dx = (ev.clientX - last.x) / scale;
-          const dy = (ev.clientY - last.y) / scale;
+          raw.x += (ev.clientX - last.x) / scale;
+          raw.y += (ev.clientY - last.y) / scale;
           last = { x: ev.clientX, y: ev.clientY };
-          setLayout((l) => ({
-            ...l,
-            items: l.items.map((i) => (i.id === item.id ? { ...i, x: i.x + dx, y: i.y + dy } : i)),
-          }));
+          snap =
+            snapRef.current && !ev.altKey
+              ? snapItem(
+                  { ...item, x: raw.x, y: raw.y },
+                  candidates,
+                  thresholdFeet(thresholdPx, zoomRef.current, PIXELS_PER_UNIT),
+                )
+              : null;
+          const pos = snap ?? raw;
+          const x = pos.x;
+          const y = pos.y;
+          setLayout((l) => patchItem(l, item.id, { x, y }));
+          onDragFrame({ id: item.id, snap: snap && (snap.snapX || snap.snapY) ? snap : null });
         },
-        onEnd: () => commit(),
+        onEnd: () => {
+          commit();
+          onDragFrame(null);
+          const said = snap ? describeSnap(snap) : '';
+          if (said) announce(said);
+        },
       });
     },
-    [isRoomSetup, startDrag, zoomRef, setLayout, commit, setSelection],
+    [isRoomSetup, startDrag, zoomRef, setLayout, commit, setSelection, onDragFrame, announce],
   );
 
   const onRotatePointerDown = useCallback(
@@ -138,18 +227,25 @@ export function useFurnitureEditing({
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       e.stopPropagation();
       e.preventDefault();
-      const piece = e.currentTarget.parentElement;
+      const piece = e.currentTarget.closest<HTMLElement>('[data-item-id]');
       if (!piece) return;
       // The rotated element's bounding box shares its center with the item.
       const rect = piece.getBoundingClientRect();
       startRotation(e, {
         center: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
         startRotation: item.rotation,
-        onRotate: (deg) => setLayout((l) => patchItem(l, item.id, { rotation: deg })),
-        onEnd: (deg) => applyLayout((l) => patchItem(l, item.id, { rotation: deg })),
+        snapEnabled: () => snapRef.current,
+        onRotate: (angle) => {
+          setLayout((l) => patchItem(l, item.id, { rotation: angle.deg }));
+          onRotateFrame({ id: item.id, angle });
+        },
+        onEnd: (deg) => {
+          applyLayout((l) => patchItem(l, item.id, { rotation: deg }));
+          onRotateFrame(null);
+        },
       });
     },
-    [startRotation, setLayout, applyLayout],
+    [startRotation, setLayout, applyLayout, onRotateFrame],
   );
 
   return {
