@@ -419,6 +419,7 @@ export function Planner({ storage, initial }: PlannerProps) {
               onDeleteItem={furniture.deleteItem}
               onToggleColorPicker={sel.toggleColorPicker}
               onCloseColorPicker={sel.closeColorPicker}
+              highlight={furniture.lastAdded}
             />
           </Sidebar>
           <div ref={setPopoverRoot} className="contents" data-popover-root />

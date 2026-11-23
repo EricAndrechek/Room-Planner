@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react';
@@ -9,6 +10,7 @@ import { track } from '../lib/analytics';
 import { randomPresetColor } from '../lib/colors';
 import { PIXELS_PER_UNIT } from '../lib/constants';
 import type { AngleSnap } from '../lib/geometry';
+import { findFurnitureSpot } from '../lib/placement';
 import {
   SNAP_THRESHOLD_PX,
   SNAP_THRESHOLD_TOUCH_PX,
@@ -20,6 +22,7 @@ import {
   type SnapResult,
 } from '../lib/snapping';
 import type { FurnitureItem, Id, Layout } from '../types';
+import type { CardRef } from './useCardHighlight';
 import type { History } from './useHistory';
 import type { usePointerDrag } from './usePointerDrag';
 import type { useRotationDrag } from './useRotationDrag';
@@ -91,20 +94,25 @@ export function useFurnitureEditing({
     snapRef.current = snapEnabled;
   });
 
+  /** The piece added last, for the sidebar to scroll to and highlight. */
+  const [lastAdded, setLastAdded] = useState<CardRef | null>(null);
+
+  /** A new piece goes to the free spot nearest the middle of the room, and is selected. */
   const addItem = () => {
-    const { width, height } = layout.roomDims;
+    const size = { width: 3, height: 2 };
+    const spot = findFurnitureSpot(layout, size);
     const newItem: FurnitureItem = {
       id: Date.now(),
       label: 'New Item',
-      width: 3,
-      height: 2,
-      x: width / 2 - 1.5,
-      y: height / 2 - 1,
+      ...size,
+      ...spot,
       rotation: 0,
       color: randomPresetColor(),
       visible: true,
     };
     applyLayout((l) => ({ ...l, items: [...l.items, newItem] }));
+    setSelection({ id: newItem.id, type: 'item' });
+    setLastAdded({ type: 'item', id: newItem.id });
     track('furniture_added', { count: layout.items.length + 1 });
     if (isMobile) closeMobileSidebar();
   };
@@ -266,6 +274,7 @@ export function useFurnitureEditing({
   );
 
   return {
+    lastAdded,
     addItem,
     deleteItem,
     changeItem,

@@ -63,7 +63,8 @@ test('add, drag, rotate, undo, share, reopen and reload', async ({ page, browser
   const piece = page.getByRole('button', { name: /^New Item,/ });
   await expect(piece).toBeVisible();
   const before = (await storedItems(page)).find((i: { label: string }) => i.label === 'New Item');
-  expect(before).toMatchObject({ x: 4.5, y: 5, width: 3, height: 2, rotation: 0 });
+  // The free spot nearest the middle (the middle itself is the bed).
+  expect(before).toMatchObject({ x: 4.5, y: 6.5, width: 3, height: 2, rotation: 0 });
 
   // Drag it.
   const start = await center(page, 'role=button[name=/^New Item,/]');

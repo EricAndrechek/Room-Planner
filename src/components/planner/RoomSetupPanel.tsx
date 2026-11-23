@@ -9,9 +9,9 @@ import {
   Trash2,
   Unlock,
 } from 'lucide-react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId } from 'react';
+import { glowClass, useCardHighlight } from '../../hooks/useCardHighlight';
 import type { AddedOpening } from '../../hooks/useOpenings';
-import { prefersReducedMotion } from '../../lib/browser';
 import { DOOR_TYPES, WALL_OPTIONS } from '../../lib/constants';
 import { wallLength } from '../../lib/geometry';
 import { doorSwingAngle, hasHingeSide, isSwingDoor } from '../../lib/openings';
@@ -40,38 +40,6 @@ interface RoomSetupPanelProps {
   highlight?: AddedOpening | null;
 }
 
-/** How long a new door/window card stays highlighted. */
-const HIGHLIGHT_MS = 1500;
-const cardKey = (o: AddedOpening) => `${o.type}:${o.id}`;
-
-/**
- * Bring the card of a just-added door/window into view (inside the sidebar, which
- * is the scrolling sheet on phones) and report whether it should still glow.
- */
-function useCardHighlight(highlight: AddedOpening | null | undefined) {
-  const cards = useRef(new Map<string, HTMLElement>());
-  const [faded, setFaded] = useState<string | null>(null);
-  const key = highlight ? cardKey(highlight) : null;
-
-  useEffect(() => {
-    if (!key) return;
-    cards.current.get(key)?.scrollIntoView({
-      block: 'nearest',
-      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
-    });
-    const timer = setTimeout(() => setFaded(key), HIGHLIGHT_MS);
-    return () => clearTimeout(timer);
-  }, [key]);
-
-  /** Ref callback registering a card under its key. */
-  const register = (o: AddedOpening) => (el: HTMLElement | null) => {
-    if (el) cards.current.set(cardKey(o), el);
-    else cards.current.delete(cardKey(o));
-  };
-  const isHighlighted = (o: AddedOpening) => key === cardKey(o) && faded !== key;
-  return { register, isHighlighted };
-}
-
 /** What a door's `hinge` setting is called for its type. */
 const hingeWord = (type: DoorType | undefined) =>
   type === 'bifold' ? 'Folds to' : type === 'pocket' ? 'Pocket' : 'Hinge';
@@ -86,9 +54,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
   // Ids for the visible field labels (`htmlFor`), unique per panel and per door/window row.
   const uid = useId();
   const fid = (...parts: (string | number)[]) => [uid, ...parts].join('-');
-  // Ring that fades out (transition) when the highlight ends; instant with reduced motion.
-  const glow = (on: boolean, ring: string) =>
-    `scroll-mt-20 scroll-mb-4 transition-shadow duration-700 ${on ? `ring-2 ${ring}` : ''}`;
+  const glow = glowClass;
   const inputClass =
     'w-full p-2 border border-slate-200 rounded-sm focus:ring-2 focus:ring-indigo-500 outline-hidden';
   const smallInput = (ring: string) =>

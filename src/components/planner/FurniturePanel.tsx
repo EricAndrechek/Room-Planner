@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, Lock, Plus, Sofa, Trash2, Unlock } from 'lucide-react';
+import { glowClass, useCardHighlight, type CardRef } from '../../hooks/useCardHighlight';
 import type { ItemWarning } from '../../lib/geometry';
 import type { FurnitureItem, Id, RoomDims, Selection, UnitSystem } from '../../types';
 import { FurnitureCard } from './FurnitureCard';
@@ -27,12 +28,15 @@ interface FurniturePanelProps {
   onDeleteItem: (id: Id) => void;
   onToggleColorPicker: (id: Id) => void;
   onCloseColorPicker: () => void;
+  /** The piece just added: its card is scrolled into view and briefly highlighted. */
+  highlight?: CardRef | null;
 }
 
 /** Step 2 group in the sidebar: the furniture list. */
 export function FurniturePanel(props: FurniturePanelProps) {
   const { isActiveMode, expanded, items } = props;
   const [confirmingClear, setConfirmingClear] = useState(false);
+  const { register, isHighlighted } = useCardHighlight(props.highlight);
   return (
     <div
       className={`rounded-xl border-2 transition-all duration-300 ${
@@ -147,26 +151,36 @@ export function FurniturePanel(props: FurniturePanelProps) {
           </div>
 
           <div className="space-y-3">
-            {items.map((item) => (
-              <FurnitureCard
-                key={item.id}
-                item={item}
-                warning={props.warnings.get(item.id)}
-                isSelected={props.selection?.type === 'item' && props.selection.id === item.id}
-                isMobile={props.isMobile}
-                colorPickerOpen={props.colorPickerItemId === item.id}
-                roomDims={props.roomDims}
-                unitSystem={props.unitSystem}
-                onSelect={props.onSelectItem}
-                onChange={props.onChangeItem}
-                onCommit={props.onCommit}
-                onToggleLock={props.onToggleLock}
-                onToggleVisibility={props.onToggleVisibility}
-                onDelete={props.onDeleteItem}
-                onToggleColorPicker={props.onToggleColorPicker}
-                onCloseColorPicker={props.onCloseColorPicker}
-              />
-            ))}
+            {items.map((item) => {
+              const card = { type: 'item', id: item.id } as const;
+              const lit = isHighlighted(card);
+              return (
+                <div
+                  key={item.id}
+                  ref={register(card)}
+                  className={`rounded-lg ${glowClass(lit, 'ring-emerald-300 ring-offset-2')}`}
+                  data-highlighted={lit || undefined}
+                >
+                  <FurnitureCard
+                    item={item}
+                    warning={props.warnings.get(item.id)}
+                    isSelected={props.selection?.type === 'item' && props.selection.id === item.id}
+                    isMobile={props.isMobile}
+                    colorPickerOpen={props.colorPickerItemId === item.id}
+                    roomDims={props.roomDims}
+                    unitSystem={props.unitSystem}
+                    onSelect={props.onSelectItem}
+                    onChange={props.onChangeItem}
+                    onCommit={props.onCommit}
+                    onToggleLock={props.onToggleLock}
+                    onToggleVisibility={props.onToggleVisibility}
+                    onDelete={props.onDeleteItem}
+                    onToggleColorPicker={props.onToggleColorPicker}
+                    onCloseColorPicker={props.onCloseColorPicker}
+                  />
+                </div>
+              );
+            })}
             {items.length === 0 && (
               <div className="text-center py-6 text-slate-500 text-xs italic border-2 border-dashed border-slate-200 rounded-lg">
                 No furniture added. Click &quot;Add Item&quot; to start.

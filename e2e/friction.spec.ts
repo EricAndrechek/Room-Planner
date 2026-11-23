@@ -132,4 +132,32 @@ test.describe('room size input', () => {
   });
 });
 
+test('Add Item lands in free floor near the middle, selected, with its card in view', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await ready(page);
+  await openStep(page, 'furniture');
+  await page.getByRole('button', { name: 'Add Item' }).click();
+  const piece = page.getByRole('button', { name: /^New Item,/ });
+  await expect(piece).toHaveAttribute('aria-pressed', 'true');
+  const items = await stored<{ label: string; x: number; y: number }[]>(page, 'room-sim-v3-items');
+  // Not dropped on the bed in the middle: the nearest free spot (touching the foot of the bed).
+  expect(items.find((i) => i.label === 'New Item')).toMatchObject({ x: 4.5, y: 6.5 });
+  await expect(page.getByText(/Overlapping|Outside room|Blocks door/)).toHaveCount(0);
+  if (!isNarrow(page)) {
+    // The sidebar keeps the new card in view, briefly highlighted.
+    const card = page
+      .locator('[data-highlighted]')
+      .filter({ has: page.getByTestId('furniture-card') });
+    await expect(card).toBeInViewport();
+  }
+
+  // Again: the second one finds another free spot.
+  await openStep(page, 'furniture');
+  await page.getByRole('button', { name: 'Add Item' }).click();
+  await expect(page.getByRole('button', { name: /^New Item,/ })).toHaveCount(2);
+  await expect(page.getByText(/Overlapping|Outside room|Blocks door/)).toHaveCount(0);
+});
+
 export { notice };
