@@ -312,11 +312,22 @@ test('door handles are keyboard operable in room setup', async ({ page }) => {
   // Delete removes the focused door, announced, and undo brings it back.
   const doors = page.getByRole('button', { name: /^Door handle/ });
   const count = await doors.count();
+  // Record everything the live region says: an autosave's "Project saved" can follow quickly.
+  await page.evaluate(() => {
+    const region = document.querySelector('[role="status"][aria-atomic="true"]')!;
+    const said: string[] = [];
+    (window as unknown as { __said: string[] }).__said = said;
+    new MutationObserver(() => said.push(region.textContent ?? '')).observe(region, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+  });
   await page.keyboard.press('Delete');
   await expect(doors).toHaveCount(count - 1);
-  await expect(page.locator('[role="status"][aria-atomic="true"]')).toContainText(
-    /Door \d+ removed/,
-  );
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __said: string[] }).__said.join(' | ')))
+    .toMatch(/Door \d+ removed/);
   await page.keyboard.press('ControlOrMeta+z');
   await expect(doors).toHaveCount(count);
 });
