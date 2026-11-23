@@ -590,6 +590,7 @@ export function Planner({ storage, initial }: PlannerProps) {
           onClose={() => setShareOpen(false)}
           config={shareConfig}
           onImport={projectActions.importConfig}
+          showQr={!isMobile}
         />
 
         <ExportModal

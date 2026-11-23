@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Copy, Download, Share2, Upload } from 'lucide-react';
+import { Check, Copy, Download, Mail, MonitorSmartphone, Share, Upload } from 'lucide-react';
 import { captureError, track } from '../../lib/analytics';
 import { copyText } from '../../lib/browser';
 import { isShareConfig, type ShareConfig } from '../../lib/layout';
+import { makeQr, qrPath, type QrMatrix } from '../../lib/qr';
 import { buildShareUrl } from '../../lib/share';
 import { Modal } from './Modal';
 
@@ -13,10 +14,46 @@ interface ShareModalProps {
   config: ShareConfig;
   /** Load a pasted config; return an error message or null on success. */
   onImport: (config: ShareConfig) => void;
+  /** Wide screen (not the phone layout): offer a QR code a phone can scan off the screen. */
+  showQr: boolean;
+}
+
+/** Whether this browser can open the system share sheet for a link. */
+const canShareLink = (url: string): boolean => {
+  try {
+    if (typeof navigator.share !== 'function') return false;
+    return typeof navigator.canShare === 'function' ? navigator.canShare({ url }) : true;
+  } catch {
+    return false;
+  }
+};
+
+/** Target size of the QR code; each module is a whole number of CSS pixels for a crisp code. */
+const QR_TARGET_PX = 248;
+const QR_QUIET = 4;
+
+function QrCode({ code }: { code: QrMatrix }) {
+  const modules = code.size + 2 * QR_QUIET;
+  const px = Math.max(2, Math.floor(QR_TARGET_PX / modules)) * modules;
+  return (
+    <svg
+      width={px}
+      height={px}
+      viewBox={`${-QR_QUIET} ${-QR_QUIET} ${modules} ${modules}`}
+      shapeRendering="crispEdges"
+      role="img"
+      aria-label="QR code of the link to this plan"
+      data-testid="handoff-qr"
+      className="bg-white"
+    >
+      <rect x={-QR_QUIET} y={-QR_QUIET} width={modules} height={modules} fill="#fff" />
+      <path d={qrPath(code)} fill="#0f172a" />
+    </svg>
+  );
 }
 
 /** Share link + JSON export/import. */
-export function ShareModal({ isOpen, onClose, config, onImport }: ShareModalProps) {
+export function ShareModal({ isOpen, onClose, config, onImport, showQr }: ShareModalProps) {
   const [shareUrl, setShareUrl] = useState<{ for: ShareConfig; url: string } | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<'url' | 'json' | null>(null);
   const [importText, setImportText] = useState('');
@@ -47,6 +84,51 @@ export function ShareModal({ isOpen, onClose, config, onImport }: ShareModalProp
   }, [isOpen, config]);
 
   const url = shareUrl?.for === config ? shareUrl.url : '';
+  const shareable = !!url && canShareLink(url);
+
+  // The QR code (wide screens only), generated lazily once the link is ready; null: too long.
+  const [qr, setQr] = useState<{ for: string; code: QrMatrix | null } | null>(null);
+  const qrTracked = useRef(false);
+  useEffect(() => {
+    if (!isOpen || !showQr || !url) return;
+    let cancelled = false;
+    makeQr(url)
+      .then((code) => {
+        if (cancelled) return;
+        setQr({ for: url, code });
+        if (code && !qrTracked.current) {
+          qrTracked.current = true;
+          track('handoff_qr_shown');
+        }
+      })
+      .catch((err: unknown) => captureError(err, { source: 'share_qr' }));
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, showQr, url]);
+  useEffect(() => {
+    if (!isOpen) qrTracked.current = false;
+  }, [isOpen]);
+  const qrCode = qr?.for === url ? qr.code : undefined;
+
+  const planName = typeof config.name === 'string' && config.name ? config.name : 'Floor plan';
+  const mailto = url
+    ? `mailto:?subject=${encodeURIComponent(`Room Planner: ${planName}`)}&body=${encodeURIComponent(
+        `Open this link to continue the plan on this device:\n\n${url}\n`,
+      )}`
+    : undefined;
+
+  const shareLink = async () => {
+    track('handoff_share');
+    try {
+      await navigator.share({ title: `Room Planner: ${planName}`, url });
+    } catch (err) {
+      // Closing the share sheet is not an error.
+      if (!(err instanceof DOMException && err.name === 'AbortError')) {
+        captureError(err, { source: 'share_sheet' });
+      }
+    }
+  };
 
   const handleCopy = async (text: string, type: 'url' | 'json') => {
     try {
@@ -54,6 +136,7 @@ export function ShareModal({ isOpen, onClose, config, onImport }: ShareModalProp
       setCopyFeedback(type);
       setTimeout(() => setCopyFeedback(null), 2000);
       if (type === 'json') track('export_json', { kind: 'layout' });
+      else track('handoff_copy');
     } catch (err) {
       console.error('Failed to copy:', err);
       alert('Failed to copy to clipboard');
@@ -76,41 +159,82 @@ export function ShareModal({ isOpen, onClose, config, onImport }: ShareModalProp
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Share & Save Layout">
       <div className="space-y-6">
-        <div>
-          <label
-            className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2"
-            htmlFor="share-url"
+        <section aria-labelledby="handoff-heading" data-testid="handoff">
+          <h4
+            id="handoff-heading"
+            className="text-sm font-medium text-slate-700 mb-1 flex items-center gap-2"
           >
-            <Share2 className="w-4 h-4" /> Direct Link (Snapshot)
-          </label>
-          <p className="text-[10px] text-slate-500 mb-2">
-            This link captures your current layout. Any changes you make after sharing won&apos;t be
-            reflected — it&apos;s a snapshot, not a live link.
+            <MonitorSmartphone className="w-4 h-4" aria-hidden="true" /> Open on another device
+          </h4>
+          <p className="text-[11px] text-slate-500 mb-3">
+            This link holds the whole plan. Open it on your phone or another computer (or send it to
+            someone) and it is saved there as its own plan. It&apos;s a snapshot: changes made later
+            aren&apos;t synced.
           </p>
+          <label htmlFor="share-url" className="sr-only">
+            Link to this plan
+          </label>
           <div className="flex gap-2">
             <input
               id="share-url"
               readOnly
               value={url}
               placeholder="Generating link…"
-              className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 font-mono truncate select-all"
+              className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 font-mono truncate select-all"
               onFocus={(e) => e.currentTarget.select()}
             />
             <button
               type="button"
               onClick={() => url && handleCopy(url, 'url')}
               disabled={!url}
-              className="px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg text-slate-600 transition-colors"
-              aria-label="Copy share link"
+              className="shrink-0 flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
             >
               {copyFeedback === 'url' ? (
-                <Check className="w-4 h-4 text-green-600" />
+                <Check className="w-4 h-4" aria-hidden="true" />
               ) : (
-                <Copy className="w-4 h-4" />
+                <Copy className="w-4 h-4" aria-hidden="true" />
               )}
+              {copyFeedback === 'url' ? 'Copied' : 'Copy link'}
             </button>
           </div>
-        </div>
+          <div className="flex flex-wrap gap-2 mt-2">
+            {shareable && (
+              <button
+                type="button"
+                onClick={() => void shareLink()}
+                className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-medium transition-colors"
+              >
+                <Share className="w-4 h-4" aria-hidden="true" /> Share…
+              </button>
+            )}
+            <a
+              href={mailto}
+              aria-disabled={!url || undefined}
+              onClick={() => url && track('handoff_email')}
+              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-medium transition-colors"
+            >
+              <Mail className="w-4 h-4" aria-hidden="true" /> Email it to me
+            </a>
+          </div>
+          {showQr && url && qrCode !== undefined && (
+            <div className="mt-4 flex items-center gap-4" data-testid="handoff-qr-block">
+              {qrCode ? (
+                <>
+                  <div className="shrink-0 rounded-lg border border-slate-200 p-1 bg-white">
+                    <QrCode code={qrCode} />
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    Scan with your phone&apos;s camera to open this plan there.
+                  </p>
+                </>
+              ) : (
+                <p className="text-[11px] text-slate-500">
+                  This plan is too big for a QR code: copy, share or email the link instead.
+                </p>
+              )}
+            </div>
+          )}
+        </section>
 
         <div className="border-t border-slate-100 my-4"></div>
 

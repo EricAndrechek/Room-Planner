@@ -50,6 +50,47 @@ for (const [name, viewport] of [
       await ready(page);
       await page.getByRole('button', { name: 'Share / Save' }).click();
       await expect(page.getByRole('dialog')).toBeVisible();
+      // "Open on another device": the QR code on wide screens, Share… / email on phones.
+      await expect(page.locator('#share-url')).toHaveValue(/#s=/);
+      if (viewport.width >= 768) await expect(page.getByTestId('handoff-qr')).toBeVisible();
+      await expectNoSeriousViolations(page);
+    });
+
+    test('room setup: locked-piece notice, wall controls and a size error have no serious violations', async ({
+      page,
+    }) => {
+      await page.addInitScript(() => {
+        if (sessionStorage.getItem('seeded')) return;
+        sessionStorage.setItem('seeded', '1');
+        localStorage.setItem('room-sim-v3-mode', 'room-setup');
+        localStorage.setItem('room-sim-v3-dims', JSON.stringify({ width: 12, height: 12 }));
+      });
+      await page.goto('/');
+      await ready(page);
+      await page.getByRole('button', { name: /^Desk,/ }).click();
+      await expect(page.getByTestId('app-notice')).toBeVisible();
+      await expectNoSeriousViolations(page);
+
+      await openStep(page, 'room');
+      await expect(page.getByRole('radiogroup', { name: 'Door 1 wall' })).toBeVisible();
+      const width = page.getByLabel('Room width');
+      await width.fill('500');
+      await width.press('Enter');
+      await expect(width).toHaveAttribute('aria-invalid', 'true');
+      await expectNoSeriousViolations(page);
+
+      // Shrinking strands pieces: the "Move them inside" notice.
+      await width.fill('6');
+      await width.press('Enter');
+      await expect(page.getByTestId('app-notice')).toContainText('outside the room');
+      await expectNoSeriousViolations(page);
+    });
+
+    test('the New plan menu has no serious violations', async ({ page }) => {
+      await page.goto('/');
+      await ready(page);
+      await page.getByRole('button', { name: 'New plan', exact: true }).click();
+      await expect(page.getByTestId('new-plan-menu')).toBeVisible();
       await expectNoSeriousViolations(page);
     });
 
