@@ -306,11 +306,18 @@ test('New plan (header and My Floor Plans) keeps the current plan', async ({ pag
   await page.getByRole('button', { name: 'Add Item' }).click();
   await viewPlan(page);
 
-  // Header: New plan -> Start blank, right away (before autosave has run).
-  await page.getByRole('button', { name: 'New plan', exact: true }).click();
-  const menu = page.getByTestId('new-plan-menu');
-  await expect(menu).toContainText('Your current plan stays in My Floor Plans.');
-  await menu.getByRole('button', { name: /^Start blank/ }).click();
+  // Start blank, right away (before autosave has run): from the header's New plan menu, or on
+  // phones (no room in the header) from My Floor Plans.
+  if (isNarrow(page)) {
+    await expect(page.getByRole('button', { name: 'New plan', exact: true })).toBeHidden();
+    await page.getByRole('button', { name: 'Open file browser' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Start blank' }).click();
+  } else {
+    await page.getByRole('button', { name: 'New plan', exact: true }).click();
+    const menu = page.getByTestId('new-plan-menu');
+    await expect(menu).toContainText('Your current plan stays in My Floor Plans.');
+    await menu.getByRole('button', { name: /^Start blank/ }).click();
+  }
   await expect(notice(page)).toContainText(
     'New plan started. "Old plan" is still in My Floor Plans.',
   );

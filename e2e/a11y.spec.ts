@@ -87,6 +87,7 @@ for (const [name, viewport] of [
     });
 
     test('the New plan menu has no serious violations', async ({ page }) => {
+      test.skip(viewport.width < 640, 'phones start new plans from My Floor Plans');
       await page.goto('/');
       await ready(page);
       await page.getByRole('button', { name: 'New plan', exact: true }).click();
