@@ -17,7 +17,7 @@ test('pages load without CSP violations or console errors', async ({ page }) => 
     if (isProblem(m)) problems.push(m.text());
   });
   page.on('pageerror', (e) => problems.push(String(e)));
-  for (const path of ['/', '/help/']) {
+  for (const path of ['/', '/help/', '/faq/', '/guides/', '/guides/bedroom-layout/']) {
     await page.goto(path);
     await page.waitForLoadState('networkidle');
   }

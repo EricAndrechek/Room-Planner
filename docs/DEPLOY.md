@@ -13,7 +13,12 @@ Cloudflare builds from GitHub on push; there are no GitHub Actions deploy jobs a
 secrets. (`.github/workflows/ci.yml` only runs the tests on PRs.)
 
 - **Production**: a push to `main` builds and deploys the Worker.
-  Build command `pnpm build:ci`, deploy command `pnpm run deploy` (`wrangler deploy`).
+  Build command `pnpm build:ci`, deploy command `pnpm run deploy`
+  (`wrangler deploy && node scripts/indexnow.mjs`). After the upload, `scripts/indexnow.mjs`
+  submits the sitemap URLs whose `<lastmod>` is in the last 7 days to IndexNow
+  (`api.indexnow.org`: Bing, Yandex, Seznam...). It only runs when `WORKERS_CI_BRANCH` is `main`,
+  never fails the deploy, and logs one `indexnow:` line in the build log. Its key is the public
+  file `public/<key>.txt` (the key is in the script); to rotate it, replace both.
   **Gotcha (only relevant if a second Worker is ever deployed from this repo):** Workers Builds
   sets `WRANGLER_CI_OVERRIDE_NAME` (and `WRANGLER_CI_MATCH_TAG`) for the connected Worker, and
   Wrangler applies them to _every_ deploy in the build, so a second `wrangler deploy -c other/...`

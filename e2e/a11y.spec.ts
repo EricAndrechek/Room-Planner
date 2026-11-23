@@ -136,6 +136,20 @@ for (const [name, viewport] of [
       await expectNoSeriousViolations(page);
     });
 
+    for (const path of [
+      '/faq/',
+      '/guides/',
+      '/guides/bedroom-layout/',
+      '/guides/living-room-layout/',
+      '/guides/studio-and-dorm-layout/',
+      '/guides/home-office-layout/',
+    ]) {
+      test(`${path} has no serious violations`, async ({ page }) => {
+        await page.goto(path);
+        await expectNoSeriousViolations(page);
+      });
+    }
+
     test('404 page has no serious violations', async ({ page }) => {
       await page.goto('/404');
       await expectNoSeriousViolations(page);
