@@ -55,16 +55,26 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Resolve Playwright version
+      - name: Resolve Playwright version and image
         id: pw
-        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+          # (`env.ImageOS` is not visible to the expression context, so the old key silently lacked it.)
+          echo "os=$(. /etc/os-release; echo "$ID-$VERSION_ID")" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
         id: pw-cache
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ env.ImageOS }}-${{ matrix.browser }}-${{ steps.pw.outputs.version }}
+          key: playwright-${{ steps.pw.outputs.os }}-${{ matrix.browser }}-${{ steps.pw.outputs.version }}
+
+      # The default apt mirror (ec2 us-east-2) once took 8+ minutes for the ~200 WebKit/GStreamer
+      # packages; the Azure mirror sits next to the runners. Retries below still cover blips.
+      - name: Use the Azure apt mirror
+        run: |
+          sudo sed -i 's|http://[a-z0-9.-]*archive.ubuntu.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null || true
 
       # Downloads retried: a CDN/apt blip should not turn into a failure email.
       - name: Install Playwright ${{ matrix.browser }} (with system deps)
