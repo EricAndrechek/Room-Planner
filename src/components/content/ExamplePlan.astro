@@ -1,0 +1,60 @@
+---
+/**
+ * One example layout on a guide page: the plan (inline SVG, drawn at build time by the export
+ * pipeline), what to notice, what is in it, and a share link that opens it in the planner.
+ */
+import type { Example } from '../../lib/guides/examples';
+import { exampleShareFragment, exampleSvg } from '../../lib/guides/render';
+import { withBase } from '../../lib/paths';
+
+interface Props {
+  example: Example;
+}
+
+const { example } = Astro.props;
+const svg = exampleSvg(example);
+const href = `${withBase('')}#${await exampleShareFragment(example)}`;
+
+// "2 × Nightstand (20 × 16 in)": identical pieces listed once.
+const inches = (feet: number) => Math.round(feet * 12);
+const pieces = new Map<string, number>();
+for (const item of example.layout.items) {
+  const key = `${item.label} (${inches(item.width)} × ${inches(item.height)} in)`;
+  pieces.set(key, (pieces.get(key) ?? 0) + 1);
+}
+const contents = [...pieces].map(([key, n]) => (n > 1 ? `${n} × ${key}` : key)).join(', ');
+---
+
+<figure
+  class="my-8 bg-white border border-slate-200 rounded-xl overflow-hidden"
+  data-example={example.id}
+>
+  <div
+    class="bg-white p-2 sm:p-4 [&>svg]:w-full [&>svg]:h-auto [&>svg]:max-h-[70vh]"
+    set:html={svg}
+  />
+  <figcaption class="border-t border-slate-200 bg-slate-50 p-4 text-sm space-y-3">
+    <h3 class="!m-0 font-semibold text-slate-900 text-base">{example.name}</h3>
+    <ul class="list-disc pl-5 space-y-1">
+      {example.notes.map((n) => (
+        <li>{n}</li>
+      ))}
+    </ul>
+    <p class="text-slate-600">
+      <span class="font-medium text-slate-700">In this plan:</span> {contents}.
+    </p>
+    <p>
+      <a
+        href={href}
+        data-button
+        data-open-example={example.id}
+        class="inline-block px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
+      >
+        Open this layout in the planner<span class="sr-only"> ({example.name})</span>
+      </a>
+      <span class="block mt-2 text-slate-600">
+        It opens as a new plan in your browser. Change the room size and move anything you like.
+      </span>
+    </p>
+  </figcaption>
+</figure>

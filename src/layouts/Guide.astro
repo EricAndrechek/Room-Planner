@@ -1,0 +1,79 @@
+---
+/** A room layout guide: title, intro, the page's content, and a closing call to action. */
+import { findGuide, guidePath } from '../lib/guides';
+import { withBase } from '../lib/paths';
+import { SITE_NAME } from '../lib/site';
+import { lastModified } from '../../scripts/lastmod.mjs';
+import Content from './Content.astro';
+
+interface Props {
+  slug: string;
+}
+
+const { slug } = Astro.props;
+const guide = findGuide(slug);
+const site = Astro.site ?? new URL(Astro.url.origin);
+const abs = (path: string) => new URL(withBase(path), site).toString();
+const updated = lastModified(Astro.url.pathname);
+const ogImage = {
+  path: `og/${slug}.png`,
+  width: 1200,
+  height: 630,
+  alt: `${guide.heading}, with an example floor plan`,
+};
+
+const jsonLd = [
+  {
+    '@type': 'Article',
+    '@id': `${abs(guidePath(slug))}#article`,
+    headline: guide.heading,
+    description: guide.description,
+    url: abs(guidePath(slug)),
+    image: abs(ogImage.path),
+    inLanguage: 'en',
+    dateModified: updated.toISOString(),
+    author: { '@type': 'Organization', name: SITE_NAME, url: abs('') },
+    publisher: { '@type': 'Organization', name: SITE_NAME, url: abs('') },
+    isPartOf: { '@id': `${abs('')}#website` },
+    mainEntityOfPage: abs(guidePath(slug)),
+  },
+];
+const updatedText = updated.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+---
+
+<Content
+  title={guide.title}
+  description={guide.description}
+  breadcrumbs={[
+    { name: 'Guides', path: 'guides/' },
+    { name: guide.label, path: guidePath(slug) },
+  ]}
+  jsonLd={jsonLd}
+  ogImage={ogImage}
+  ogType="article"
+>
+  <article class="prose-content">
+    <h1 class="text-3xl font-bold text-slate-900 mb-2">{guide.heading}</h1>
+    <p class="text-sm text-slate-600 mb-6">
+      Updated <time datetime={updated.toISOString()}>{updatedText}</time>
+    </p>
+    <slot />
+    <section class="mt-12 bg-white border border-slate-200 rounded-xl p-5">
+      <h2 class="!mt-0">Plan your own room</h2>
+      <p>
+        {SITE_NAME} is free and needs no account. Enter your room's size, add its doors and windows,
+        then drag in furniture at its real size; it warns you when a piece overlaps another, sticks
+        out of the room or blocks a door.
+      </p>
+      <p class="!mb-0">
+        <a
+          href={withBase('')}
+          data-button
+          class="inline-block px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
+        >
+          Start from scratch
+        </a>
+      </p>
+    </section>
+  </article>
+</Content>

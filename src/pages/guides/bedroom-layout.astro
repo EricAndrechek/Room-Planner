@@ -1,0 +1,185 @@
+---
+import ExamplePlan from '../../components/content/ExamplePlan.astro';
+import Guide from '../../layouts/Guide.astro';
+import { examplesFor } from '../../lib/guides/examples';
+import { cm, feetInches, len, range, size } from '../../lib/guides/measure';
+import { withBase } from '../../lib/paths';
+
+const slug = 'bedroom-layout';
+
+// Standard US mattress sizes (inches).
+const beds = [
+  { name: 'Twin', w: 38, l: 75 },
+  { name: 'Twin XL', w: 38, l: 80 },
+  { name: 'Full (double)', w: 54, l: 75 },
+  { name: 'Queen', w: 60, l: 80 },
+  { name: 'King', w: 76, l: 80 },
+  { name: 'California King', w: 72, l: 84 },
+];
+
+// The smallest floor area that keeps a 24 in walkway on both sides and at the foot of the bed.
+const WALK = 24;
+const minRooms = beds.map((b) => ({
+  name: b.name,
+  w: b.w + 2 * WALK,
+  l: b.l + WALK,
+}));
+---
+
+<Guide slug={slug}>
+  <p class="text-lg text-slate-600">
+    A bedroom layout comes down to three numbers: the size of the bed, the space you leave around
+    it, and the room you need in front of storage. Below are the standard sizes, the clearances
+    designers work with, and example floor plans you can open in the planner and adjust to your own
+    room.
+  </p>
+
+  <h2 id="mattress-sizes">Standard mattress sizes</h2>
+  <div class="overflow-x-auto">
+    <table>
+      <caption>US mattress sizes, width × length</caption>
+      <thead>
+        <tr>
+          <th scope="col">Bed</th>
+          <th scope="col">Mattress size</th>
+        </tr>
+      </thead>
+      <tbody>
+        {beds.map((b) => (
+          <tr>
+            <th scope="row">{b.name}</th>
+            <td>{size(b.w, b.l)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+  <p class="text-sm text-slate-600">
+    These are mattress sizes. A frame, headboard or footboard usually adds a few inches, so measure
+    your bed if you already have it. Sizes differ outside the US: a European double, for example, is
+    usually 140 × 200 cm.
+  </p>
+
+  <h2 id="clearances">How much space to leave around a bed</h2>
+  <p>These are the rules of thumb most designers use:</p>
+  <div class="overflow-x-auto">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Where</th>
+          <th scope="col">Minimum</th>
+          <th scope="col">Comfortable</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Walkway along each side of the bed you get in from</th>
+          <td>{len(24)}</td>
+          <td>{range(30, 36)}</td>
+        </tr>
+        <tr>
+          <th scope="row">Between the foot of the bed and a wall or furniture</th>
+          <td>{len(24)}</td>
+          <td>{len(36)}</td>
+        </tr>
+        <tr>
+          <th scope="row">In front of a dresser, to open the drawers and stand</th>
+          <td>{len(36)}</td>
+          <td>{len(42)}</td>
+        </tr>
+        <tr>
+          <th scope="row">In front of a closet or wardrobe</th>
+          <td>{len(36)}</td>
+          <td>{len(42)}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    A bed pushed against a wall (common with twins and in small rooms) only needs a walkway on its
+    open side. Keep the door's swing clear too: a hinged door sweeps a quarter circle as wide as the
+    door, so a 32 in (81 cm) door needs 32 in of empty floor in front of it.
+  </p>
+
+  <h2 id="room-size">How big a room each bed needs</h2>
+  <p>
+    The smallest floor area that keeps a {len(WALK)} walkway on both sides and at the foot of the
+    bed, with the headboard against a wall. Add the depth of any dresser plus {len(36)} in front of
+    it.
+  </p>
+  <div class="overflow-x-auto">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Bed</th>
+          <th scope="col">Clear floor (width × length)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {minRooms.map((r) => (
+          <tr>
+            <th scope="row">{r.name}</th>
+            <td>
+              {feetInches(r.w / 12)} × {feetInches(r.l / 12)} ({cm(r.w)} × {cm(r.l)} cm)
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+  <p>
+    So a queen bed fits a 10 × 10 ft room. Put an 18 in deep dresser across from it and the room
+    needs to be at least {feetInches((80 + 36 + 18) / 12)} long (80 + 36 + 18 in); the first example
+    below is a 10 × 12 ft room laid out that way.
+  </p>
+
+  <h2 id="furniture-sizes">Nightstand and dresser sizes</h2>
+  <ul>
+    <li>
+      <strong>Nightstands</strong> are usually {range(18, 24)} wide and {range(14, 18)} deep. Pick
+      one whose top is about level with the top of your mattress.
+    </li>
+    <li>
+      <strong>Dressers</strong> (wide, low) run from about {range(30, 72)} wide and are{' '}
+      {range(16, 20)} deep.
+    </li>
+    <li>
+      <strong>Chests of drawers</strong> (tall, narrow) are about {range(30, 40)} wide and the same
+      depth as a dresser, so they save floor in a small room.
+    </li>
+  </ul>
+
+  <h2 id="tips">Layout tips</h2>
+  <ul>
+    <li>
+      <strong>Place the bed first.</strong> It is the largest piece. The usual spot is with the
+      headboard against the longest solid wall, facing the door but not in the door's path.
+    </li>
+    <li>
+      <strong>Under a window is fine</strong> if the headboard is lower than the sill and you can
+      still reach the window and any radiator or vent.
+    </li>
+    <li>
+      <strong>Check the paths:</strong> from the door to each side of the bed, to the closet and to
+      the dresser. Each should be at least {len(24)} wide.
+    </li>
+    <li>
+      <strong>Measure the bed you have,</strong> including the frame, rather than using the mattress
+      size.
+    </li>
+  </ul>
+
+  <h2 id="examples">Example bedroom layouts</h2>
+  <p>
+    Open any of these in the planner, then change the room size and the pieces to match your own.
+    The planner warns you if a piece overlaps another, sticks out of the room or is in a door's way.
+  </p>
+  {examplesFor(slug).map((e) => (
+    <ExamplePlan example={e} />
+  ))}
+
+  <p>
+    Next: <a href={withBase('guides/studio-and-dorm-layout/')}>studio and dorm room layouts</a>, or
+    the <a href={withBase('faq/')}>FAQ</a>.
+  </p>
+</Guide>

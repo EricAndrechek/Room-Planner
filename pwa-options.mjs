@@ -57,13 +57,14 @@ export const pwaOptions = {
     ],
   },
   generateSW: {
-    // The whole app shell: pages, hashed JS/CSS, fonts, icons. Excluded: social card,
+    // The whole app shell: pages, hashed JS/CSS, fonts, icons. Excluded: social cards,
     // store screenshots and source maps (only fetched by crawlers / the installer / devtools).
     globPatterns: ['**/*.{html,js,css,svg,png,ico,woff2}'],
     globIgnores: [
       // Cloudflare redirects /404/ -> /404 and serves it with status 404, which fails precaching.
       '404.html',
       'og-image.png',
+      'og/**',
       'screenshots/**',
       '**/*.map',
       'sitemap*.xml',

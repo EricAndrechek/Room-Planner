@@ -1,0 +1,130 @@
+---
+import ExamplePlan from '../../components/content/ExamplePlan.astro';
+import Guide from '../../layouts/Guide.astro';
+import { examplesFor } from '../../lib/guides/examples';
+import { len, range } from '../../lib/guides/measure';
+import { withBase } from '../../lib/paths';
+
+const slug = 'home-office-layout';
+---
+
+<Guide slug={slug}>
+  <p class="text-lg text-slate-600">
+    A home office has one job: a desk you can sit at comfortably for hours, with room to move and
+    good light. That decides most of the layout. Here are the sizes and clearances to plan with, and
+    example floor plans you can open and adjust.
+  </p>
+
+  <h2 id="desk-sizes">Desk sizes</h2>
+  <div class="overflow-x-auto">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Desk</th>
+          <th scope="col">Typical size</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Compact (laptop, small space)</th>
+          <td>
+            about {range(36, 48)} wide, {range(20, 24)} deep
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">Standard (one monitor)</th>
+          <td>
+            about {range(48, 60)} wide, {range(24, 30)} deep
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">Large (two monitors, paperwork)</th>
+          <td>
+            about {range(60, 72)} wide, {range(30, 36)} deep
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">Height (sitting)</th>
+          <td>about {range(28, 30)} for most adults</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    Depth matters more than it looks: a monitor needs to sit at least {len(20)} from your eyes, so a
+    desk shallower than about {len(24)} pushes it too close.
+  </p>
+
+  <h2 id="clearances">Chair and walkway clearances</h2>
+  <div class="overflow-x-auto">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Where</th>
+          <th scope="col">Clear space</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Behind the desk, to roll the chair back and stand up</th>
+          <td>at least {len(36)}</td>
+        </tr>
+        <tr>
+          <th scope="row">Behind the desk if people also walk behind you</th>
+          <td>{range(44, 48)}</td>
+        </tr>
+        <tr>
+          <th scope="row">Office chair footprint</th>
+          <td>about {range(24, 28)} across the base</td>
+        </tr>
+        <tr>
+          <th scope="row">In front of a filing cabinet, to open a drawer</th>
+          <td>about {len(36)}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="screen">Monitor distance and height</h2>
+  <ul>
+    <li>
+      <strong>Distance:</strong> OSHA's workstation guidance puts the screen at least {len(20)} from
+      your eyes, usually {range(20, 40)}, about an arm's length.
+    </li>
+    <li>
+      <strong>Height:</strong> the top of the screen at or slightly below eye level.
+    </li>
+  </ul>
+
+  <h2 id="window">Where to put the desk</h2>
+  <ul>
+    <li>
+      <strong>Window to the side.</strong> A desk at right angles to the window gives you daylight
+      without glare on the screen (window behind you) or squinting into it (window behind the
+      screen).
+    </li>
+    <li>
+      <strong>Facing the room</strong> (back to a wall) feels less boxed in and puts a plain wall
+      behind you on video calls, but needs more floor.
+    </li>
+    <li>
+      <strong>Facing a wall</strong> uses the least floor and suits a small room or a desk in a
+      corner of another room.
+    </li>
+    <li>
+      <strong>Keep the door swing clear</strong> of the chair's path, and plan an outlet near the
+      desk.
+    </li>
+  </ul>
+
+  <h2 id="examples">Example home office layouts</h2>
+  {examplesFor(slug).map((e) => (
+    <ExamplePlan example={e} />
+  ))}
+
+  <p>
+    Short on space? See the{' '}
+    <a href={withBase('guides/studio-and-dorm-layout/')}>studio and dorm layout guide</a>, or the{' '}
+    <a href={withBase('guides/living-room-layout/')}>living room guide</a>.
+  </p>
+</Guide>

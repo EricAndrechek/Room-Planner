@@ -1,0 +1,71 @@
+---
+import Content from '../../layouts/Content.astro';
+import { examplesFor } from '../../lib/guides/examples';
+import { GUIDES, guidePath } from '../../lib/guides';
+import { withBase } from '../../lib/paths';
+
+const title = 'Room Layout Guides: Sizes, Clearances & Example Floor Plans — Room Planner';
+const description =
+  'Practical room layout guides for bedrooms, living rooms, studios, dorms and home offices: standard furniture sizes, clearances and example floor plans you can open and edit for free.';
+
+const site = Astro.site ?? new URL(Astro.url.origin);
+const abs = (path: string) => new URL(withBase(path), site).toString();
+const jsonLd = [
+  {
+    '@type': 'CollectionPage',
+    '@id': `${abs('guides/')}#page`,
+    name: 'Room layout guides',
+    description,
+    url: abs('guides/'),
+    inLanguage: 'en',
+    isPartOf: { '@id': `${abs('')}#website` },
+    hasPart: GUIDES.map((g) => ({ '@id': `${abs(guidePath(g.slug))}#article` })),
+  },
+];
+---
+
+<Content
+  title={title}
+  description={description}
+  breadcrumbs={[{ name: 'Guides', path: 'guides/' }]}
+  jsonLd={jsonLd}
+>
+  <h1 class="text-3xl font-bold text-slate-900 mb-3">Room layout guides</h1>
+  <p class="text-lg text-slate-600 mb-8">
+    Standard furniture sizes, the clearances designers use, and example floor plans for common
+    rooms. Every example opens in the planner, where you can change it to fit your own room.
+  </p>
+  <ul class="space-y-4">
+    {GUIDES.map((g) => (
+      <li class="bg-white border border-slate-200 rounded-xl p-5">
+        <h2 class="text-xl font-bold text-slate-900 mb-1">
+          <a
+            href={withBase(guidePath(g.slug))}
+            class="text-indigo-700 underline hover:text-indigo-900"
+          >
+            {g.heading}
+          </a>
+        </h2>
+        <p class="text-slate-700">{g.description}</p>
+        <p class="text-sm text-slate-600 mt-2">
+          Examples:{' '}
+          {examplesFor(g.slug)
+            .map((e) => e.name)
+            .join('; ')}
+          .
+        </p>
+      </li>
+    ))}
+  </ul>
+  <p class="mt-10">
+    New to the planner? The{' '}
+    <a href={withBase('help/')} class="text-indigo-700 underline">
+      help page
+    </a>{' '}
+    explains every feature, and the{' '}
+    <a href={withBase('faq/')} class="text-indigo-700 underline">
+      FAQ
+    </a>{' '}
+    has short answers.
+  </p>
+</Content>
