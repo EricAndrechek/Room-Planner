@@ -74,9 +74,10 @@ export const pwaOptions = {
     // from it; /help/ and 404 are precached pages of their own; unknown paths go to the network (404).
     navigateFallback: '/',
     // Only `/` may fall back to the app shell (so unknown URLs still get the real 404 online);
-    // the denylist is belt and braces for /help/.
+    // the denylist is belt and braces for /help/, the MCP server (served by the Worker) and the
+    // discovery files.
     navigateFallbackAllowlist: [/^\/(\?.*)?$/],
-    navigateFallbackDenylist: [/^\/help\//],
+    navigateFallbackDenylist: [/^\/help\//, /^\/mcp/, /^\/\.well-known\//],
     // `/?config=...` (legacy share links) and tracking params must hit the precached `/`.
     ignoreURLParametersMatching: [/.*/],
     cleanupOutdatedCaches: true,

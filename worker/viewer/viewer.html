@@ -107,12 +107,13 @@
         max-height: 70vh;
       }
       /* Issues on the drawing: the pieces and doors an issue names. */
-      g[data-role='item'].hl-error > :first-child {
-        stroke: #dc2626;
-        stroke-width: 3.5px;
-      }
       g[data-role='item'].hl-warning > :first-child {
         stroke: #d97706;
+        stroke-width: 3.5px;
+      }
+      /* After the warning rule: a piece with both is marked as an error. */
+      g[data-role='item'].hl-error > :first-child {
+        stroke: #dc2626;
         stroke-width: 3.5px;
       }
       g[data-role='door'].hl-warning path,
@@ -186,6 +187,22 @@
       }
       .ok {
         color: var(--muted);
+      }
+      details {
+        margin-top: 8px;
+      }
+      details > summary {
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 13px;
+        padding: 4px 0;
+      }
+      details > summary:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      details > ul {
+        margin-top: 6px;
       }
       .actions {
         display: flex;
@@ -380,57 +397,75 @@
             ? ids.flatMap((id) => [...svg.querySelectorAll(`g[data-id="${CSS.escape(id)}"]`)])
             : [];
 
+        const issueButton = (issue, onPick) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'issue';
+          button.setAttribute('aria-pressed', 'false');
+          const badge = document.createElement('span');
+          badge.className = `badge ${issue.severity}`;
+          badge.textContent = issue.severity;
+          const msg = document.createElement('span');
+          msg.textContent = issue.message;
+          button.append(badge, msg);
+          button.addEventListener('click', () => onPick(button, issue));
+          return button;
+        };
+
         const renderIssues = (issues, svg) => {
-          // Errors and warnings are marked on the drawing; info (tight gaps) only on request.
+          // Errors and warnings are marked on the drawing; info (tight gaps) only when chosen.
           for (const issue of issues) {
             if (issue.severity === 'info') continue;
             for (const el of entities(svg, issue.ids || [])) {
               el.classList.add(issue.severity === 'error' ? 'hl-error' : 'hl-warning');
             }
           }
+          const section = $('issues-section');
           const list = $('issues');
           list.replaceChildren();
-          $('issues-section').hidden = false;
-          if (!issues.length) {
-            const li = document.createElement('li');
-            li.className = 'ok';
-            li.textContent = 'No layout issues found.';
-            list.append(li);
-            return;
-          }
-          const order = { error: 0, warning: 1, info: 2 };
-          const sorted = [...issues].sort((a, b) => order[a.severity] - order[b.severity]);
+          for (const d of section.querySelectorAll('details')) d.remove();
+          section.hidden = false;
+
           let active = null;
-          const focus = (button, issue) => {
+          const pick = (button, issue) => {
+            active = active === issue ? null : issue;
+            for (const b of section.querySelectorAll('button')) {
+              b.setAttribute('aria-pressed', 'false');
+            }
             if (!svg) return;
             for (const el of svg.querySelectorAll('.focus')) el.classList.remove('focus');
             svg.classList.remove('focusing');
-            for (const b of list.querySelectorAll('button'))
-              b.setAttribute('aria-pressed', 'false');
-            if (!issue) return;
-            const found = entities(svg, issue.ids || []);
+            if (!active) return;
+            const found = entities(svg, active.ids || []);
             for (const el of found) el.classList.add('focus');
             svg.classList.toggle('focusing', found.length > 0);
             button.setAttribute('aria-pressed', 'true');
           };
-          for (const issue of sorted) {
+          const item = (issue) => {
             const li = document.createElement('li');
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'issue';
-            button.setAttribute('aria-pressed', 'false');
-            const badge = document.createElement('span');
-            badge.className = `badge ${issue.severity}`;
-            badge.textContent = issue.severity;
-            const msg = document.createElement('span');
-            msg.textContent = issue.message;
-            button.append(badge, msg);
-            button.addEventListener('click', () => {
-              active = active === issue ? null : issue;
-              focus(button, active);
-            });
-            li.append(button);
+            li.append(issueButton(issue, pick));
+            return li;
+          };
+
+          const main = issues.filter((i) => i.severity !== 'info');
+          main.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'error' ? -1 : 1));
+          for (const issue of main) list.append(item(issue));
+          if (!main.length) {
+            const li = document.createElement('li');
+            li.className = 'ok';
+            li.textContent = 'No overlaps, blocked doors or pieces outside the room.';
             list.append(li);
+          }
+          // Tight gaps (info) are many and minor: listed under a closed disclosure.
+          const infos = issues.filter((i) => i.severity === 'info');
+          if (infos.length) {
+            const details = document.createElement('details');
+            const summary = document.createElement('summary');
+            summary.textContent = infos.length === 1 ? '1 tight gap' : `${infos.length} tight gaps`;
+            const ul = document.createElement('ul');
+            for (const issue of infos) ul.append(item(issue));
+            details.append(summary, ul);
+            section.append(details);
           }
         };
 

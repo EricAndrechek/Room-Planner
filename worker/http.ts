@@ -20,10 +20,12 @@ export interface Env {
 }
 
 /** The registry name (server.json) and the card's `name`. */
-export const REGISTRY_NAME = 'io.github.ericandrechek/room-planner';
+export const REGISTRY_NAME = 'io.github.EricAndrechek/room-planner';
 /** Largest request body the endpoint reads (a 500-piece plan is about 100 KB). */
 export const MAX_BODY = 256 * 1024;
 export const RETRY_AFTER_SECONDS = 60;
+/** The per-request protocol revision (the SDK does not export its constant). */
+export const MODERN_PROTOCOL_VERSION = '2026-07-28';
 
 const BASE_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -90,7 +92,8 @@ export const serverCard = (origin: string) => ({
     {
       type: 'streamable-http',
       url: `${origin}/mcp`,
-      supportedProtocolVersions: [...SUPPORTED_PROTOCOL_VERSIONS],
+      // createMcpHandler serves the 2026-07-28 revision and every 2025-era one.
+      supportedProtocolVersions: [MODERN_PROTOCOL_VERSION, ...SUPPORTED_PROTOCOL_VERSIONS],
     },
   ],
 });

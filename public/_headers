@@ -55,3 +55,8 @@
   Cache-Control: no-cache
 /*.html
   Cache-Control: no-cache
+
+# Discovery (docs/design/plan-format.md, section 7): the AI Catalog points at the MCP server card.
+/.well-known/ai-catalog.json
+  Content-Type: application/ai-catalog+json
+  Access-Control-Allow-Origin: *

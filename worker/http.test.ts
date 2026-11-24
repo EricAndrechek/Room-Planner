@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest';
 import { readPlanLink } from '../src/core/share/plan';
 import worker from './index';
 import { MAX_BODY, type Env } from './http';
+import catalog from '../public/.well-known/ai-catalog.json';
+import server from '../server.json';
 import { VIEW_META_KEY, VIEWER_MIME_TYPE, VIEWER_URI } from './viewer';
 
 const ORIGIN = 'https://room-planner.andrechek.com';
@@ -293,10 +295,27 @@ describe('HTTP', () => {
     const card = (await r.json()) as {
       name: string;
       description: string;
-      remotes: { url: string }[];
+      remotes: { url: string; supportedProtocolVersions: string[] }[];
     };
-    expect(card.name).toBe('io.github.ericandrechek/room-planner');
+    expect(card.name).toBe('io.github.EricAndrechek/room-planner');
     expect(card.description.length).toBeLessThanOrEqual(100);
     expect(card.remotes[0]!.url).toBe(`${ORIGIN}/mcp`);
+    expect(
+      (card.remotes[0] as { supportedProtocolVersions: string[] }).supportedProtocolVersions,
+    ).toEqual(expect.arrayContaining(['2026-07-28', '2025-06-18']));
+  });
+});
+
+describe('registry entry', () => {
+  it('server.json and the AI Catalog agree with the server card', async () => {
+    const card = (await (await call(new Request(`${ORIGIN}/mcp/server-card`))).json()) as Record<
+      string,
+      unknown
+    >;
+    expect(server.name).toBe(card.name);
+    expect(server.version).toBe(card.version);
+    expect(server.description.length).toBeLessThanOrEqual(100);
+    expect(server.remotes[0].url).toBe(`${ORIGIN}/mcp`);
+    expect(catalog.entries[0].url).toBe(`${ORIGIN}/mcp/server-card`);
   });
 });

@@ -152,7 +152,7 @@ describe('read_plan', () => {
     const plan = (s.structured as { plan: { unit: string; items: { placement: unknown }[] } }).plan;
     expect(plan.unit).toBe('in');
     expect(plan.items[0]!.placement).toEqual({ x: 30, y: 40, rotation: 0 });
-    expect(s.view!.url.startsWith(`${ORIGIN}/#s=`)).toBe(true);
+    expect(s.view!.url!.startsWith(`${ORIGIN}/#s=`)).toBe(true);
     const legacy = await readPlan(
       {
         url: `https://evil.example/?config=${encodeURIComponent(encodeLegacyConfig(config as never))}`,
@@ -160,7 +160,7 @@ describe('read_plan', () => {
       ORIGIN,
     );
     expect(legacy.isError).toBeFalsy();
-    expect(legacy.view!.url.startsWith(`${ORIGIN}/?config=`)).toBe(true);
+    expect(legacy.view!.url!.startsWith(`${ORIGIN}/?config=`)).toBe(true);
   });
 
   it('explains what is wrong with a link', async () => {

@@ -40,6 +40,9 @@ export interface ToolOutcome {
   view?: ViewData;
 }
 
+/** Where a tool result carries the viewer's data, `ViewData` (result `_meta`, not for the model). */
+export const VIEW_META_KEY = 'com.andrechek.room-planner/view';
+
 /** The plan viewer's input (see viewer/viewer.html). */
 export interface ViewData {
   title: string;
@@ -165,7 +168,11 @@ const nameList = (names: string[]): string =>
     : `${names.slice(0, 5).join(', ')} and ${names.length - 5} more`;
 
 /** One paragraph: each room's size and area, its openings, and where the pieces are. */
-export function summarize(plan: Plan, unitSystem: UnitSystem = displayUnitOf(plan)): string {
+export function summarize(
+  plan: Plan,
+  unitSystem: UnitSystem = displayUnitOf(plan),
+  { name = true }: { name?: boolean } = {},
+): string {
   const len = (feet: number) => feetToDisplay(feet, unitSystem);
   const rooms = plan.rooms.map((room) => {
     const name = room.name || room.id;
@@ -188,7 +195,7 @@ export function summarize(plan: Plan, unitSystem: UnitSystem = displayUnitOf(pla
   if (stored.length)
     pieces.push(`In the inventory: ${nameList(stored.map((i) => i.label || i.id))}.`);
   const head = plan.rooms.length > 1 ? [`${count(plan.rooms.length, 'room')}.`] : [];
-  return [`"${plan.name}":`, ...head, ...rooms, ...pieces].join(' ');
+  return [...(name ? [`"${plan.name}":`] : []), ...head, ...rooms, ...pieces].join(' ');
 }
 
 const issueLines = (issues: Issue[]): string[] =>
@@ -239,7 +246,13 @@ export async function createPlan(args: { plan?: unknown }, origin: string): Prom
   return {
     text,
     structured: { plan: fromFeet(plan, unit), issues, summary, url: link.url },
-    view: { title: plan.name, summary, svg: planDrawing(plan, unitSystem), issues, url: link.url },
+    view: {
+      title: plan.name,
+      summary: summarize(plan, unitSystem, { name: false }),
+      svg: planDrawing(plan, unitSystem),
+      issues,
+      url: link.url,
+    },
   };
 }
 
@@ -306,7 +319,7 @@ export async function readPlan(args: { url?: unknown }, origin: string): Promise
     structured: { plan: fromFeet(plan, unitOfDisplay(unitSystem)), issues, summary },
     view: {
       title: plan.name,
-      summary,
+      summary: summarize(plan, unitSystem, { name: false }),
       svg: planDrawing(plan, unitSystem),
       issues,
       url: own,
