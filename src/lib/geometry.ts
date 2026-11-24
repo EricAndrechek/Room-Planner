@@ -1,5 +1,5 @@
 import type { FurnitureItem, Id, RoomDims, Wall } from '../types';
-import { MAX_ZOOM, MIN_ZOOM } from './constants';
+import { FIT_MIN_ZOOM, MAX_ZOOM, MIN_ZOOM } from './constants';
 import { clamp } from './units';
 
 export interface Point {
@@ -269,9 +269,14 @@ export const snapAngle = (raw: number, mode: RotationSnapMode = 'magnetic'): Ang
 
 // --- Viewport ---------------------------------------------------------------
 
-export const clampZoom = (zoom: number): number => clamp(zoom, MIN_ZOOM, MAX_ZOOM);
+/** Zoom kept within [`min`, MAX_ZOOM]; `min` is MIN_ZOOM unless a fitted room needs less. */
+export const clampZoom = (zoom: number, min: number = MIN_ZOOM): number =>
+  clamp(zoom, Math.min(min, MIN_ZOOM), MAX_ZOOM);
 
-/** Zoom that fits the whole room into the available area, clamped to [0.25, 2]. */
+/**
+ * Zoom that fits the whole room into the available area, clamped to [FIT_MIN_ZOOM, 2]: below
+ * MIN_ZOOM only when the room is too big to show at MIN_ZOOM.
+ */
 export const computeFitZoom = (
   available: { width: number; height: number },
   room: RoomDims,
@@ -281,5 +286,5 @@ export const computeFitZoom = (
   const zoomY = available.height / (room.height * pixelsPerUnit);
   const fit = Math.min(zoomX, zoomY);
   if (!Number.isFinite(fit)) return 1;
-  return Math.max(MIN_ZOOM, Math.min(2, fit));
+  return Math.max(FIT_MIN_ZOOM, Math.min(2, fit));
 };

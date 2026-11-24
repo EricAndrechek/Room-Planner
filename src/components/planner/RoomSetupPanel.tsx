@@ -1,23 +1,15 @@
-import {
-  ArrowLeftRight,
-  ArrowRight,
-  ChevronDown,
-  ChevronUp,
-  Home,
-  Lock,
-  Plus,
-  Trash2,
-  Unlock,
-} from 'lucide-react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { ArrowLeftRight, ArrowRight, Home, Plus, Trash2, Unlock } from 'lucide-react';
+import { useId, useState } from 'react';
+import { glowClass, useCardHighlight } from '../../hooks/useCardHighlight';
 import type { AddedOpening } from '../../hooks/useOpenings';
-import { prefersReducedMotion } from '../../lib/browser';
 import { DOOR_TYPES, WALL_OPTIONS } from '../../lib/constants';
 import { wallLength } from '../../lib/geometry';
 import { doorSwingAngle, hasHingeSide, isSwingDoor } from '../../lib/openings';
-import { feetToDisplay, formatArea } from '../../lib/units';
+import { feetToDisplay, formatArea, roomConfirmAboveFeet, roomMaxFeet } from '../../lib/units';
 import type { Door, DoorType, Id, RoomDims, RoomWindow, UnitSystem, Wall } from '../../types';
 import { DimensionInput } from './DimensionInput';
+import { StepHeader } from './StepHeader';
+import { Segmented } from './Segmented';
 
 interface RoomSetupPanelProps {
   isActiveMode: boolean;
@@ -36,59 +28,32 @@ interface RoomSetupPanelProps {
   onAddWindow: () => void;
   onUpdateWindow: (id: Id, updates: Partial<RoomWindow>) => void;
   onDeleteWindow: (id: Id) => void;
+  /** Move a door/window to another wall (at a free spot there). */
+  onChangeWall: (type: 'door' | 'window', id: Id, wall: Wall) => void;
   /** The door/window just added: its card is scrolled into view and briefly highlighted. */
   highlight?: AddedOpening | null;
-}
-
-/** How long a new door/window card stays highlighted. */
-const HIGHLIGHT_MS = 1500;
-const cardKey = (o: AddedOpening) => `${o.type}:${o.id}`;
-
-/**
- * Bring the card of a just-added door/window into view (inside the sidebar, which
- * is the scrolling sheet on phones) and report whether it should still glow.
- */
-function useCardHighlight(highlight: AddedOpening | null | undefined) {
-  const cards = useRef(new Map<string, HTMLElement>());
-  const [faded, setFaded] = useState<string | null>(null);
-  const key = highlight ? cardKey(highlight) : null;
-
-  useEffect(() => {
-    if (!key) return;
-    cards.current.get(key)?.scrollIntoView({
-      block: 'nearest',
-      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
-    });
-    const timer = setTimeout(() => setFaded(key), HIGHLIGHT_MS);
-    return () => clearTimeout(timer);
-  }, [key]);
-
-  /** Ref callback registering a card under its key. */
-  const register = (o: AddedOpening) => (el: HTMLElement | null) => {
-    if (el) cards.current.set(cardKey(o), el);
-    else cards.current.delete(cardKey(o));
-  };
-  const isHighlighted = (o: AddedOpening) => key === cardKey(o) && faded !== key;
-  return { register, isHighlighted };
 }
 
 /** What a door's `hinge` setting is called for its type. */
 const hingeWord = (type: DoorType | undefined) =>
   type === 'bifold' ? 'Folds to' : type === 'pocket' ? 'Pocket' : 'Hinge';
 
-const wallLabel = (w: Wall) => w.charAt(0).toUpperCase() + w.slice(1);
+const WALL_SEGMENTS = WALL_OPTIONS.map((w) => ({
+  value: w,
+  label: w.charAt(0).toUpperCase() + w.slice(1),
+}));
 const plural = (n: number, word: string) => `${n} ${word}${n !== 1 ? 's' : ''}`;
 
 /** Step 1 group in the sidebar: room size, doors and windows. */
 export function RoomSetupPanel(props: RoomSetupPanelProps) {
   const { isActiveMode, expanded, roomDims, doors, windows, unitSystem } = props;
   const { register, isHighlighted } = useCardHighlight(props.highlight);
+  // Full-width row under Width and Length for their errors and "did you mean?" prompts.
+  const [dimsMessages, setDimsMessages] = useState<HTMLDivElement | null>(null);
   // Ids for the visible field labels (`htmlFor`), unique per panel and per door/window row.
   const uid = useId();
   const fid = (...parts: (string | number)[]) => [uid, ...parts].join('-');
-  // Ring that fades out (transition) when the highlight ends; instant with reduced motion.
-  const glow = (on: boolean, ring: string) =>
-    `scroll-mt-20 scroll-mb-4 transition-shadow duration-700 ${on ? `ring-2 ${ring}` : ''}`;
+  const glow = glowClass;
   const inputClass =
     'w-full p-2 border border-slate-200 rounded-sm focus:ring-2 focus:ring-indigo-500 outline-hidden';
   const smallInput = (ring: string) =>
@@ -100,50 +65,23 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
         isActiveMode ? 'border-indigo-200 bg-white shadow-xs' : 'border-slate-200 bg-slate-50'
       }`}
     >
-      {/* Group Header */}
-      <button
-        type="button"
-        onClick={() => !isActiveMode && props.onToggleExpanded()}
-        className={`w-full flex items-center justify-between p-3 ${
-          !isActiveMode ? 'cursor-pointer hover:bg-slate-100' : 'cursor-default'
-        } rounded-t-xl transition-colors`}
-        aria-expanded={isActiveMode || expanded}
-      >
-        <div className="flex items-center gap-2">
-          <div
-            className={`p-1.5 rounded-lg ${isActiveMode ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-500'}`}
-          >
-            <Home className="w-4 h-4" />
-          </div>
-          <div className="text-left">
-            <span className="text-sm font-semibold text-slate-700 block">Room Setup</span>
-            <span className="text-[10px] text-slate-600">
-              {feetToDisplay(roomDims.width, unitSystem)} ×{' '}
-              {feetToDisplay(roomDims.height, unitSystem)} • {plural(doors.length, 'door')} •{' '}
-              {plural(windows.length, 'window')}
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {!isActiveMode && (
-            <>
-              <span className="text-[10px] text-slate-600 flex items-center gap-1">
-                <Lock className="w-3 h-3" /> Locked
-              </span>
-              {expanded ? (
-                <ChevronUp className="w-4 h-4 text-slate-500" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-slate-500" />
-              )}
-            </>
-          )}
-          {isActiveMode && (
-            <span className="text-[10px] text-indigo-600 font-medium px-2 py-0.5 bg-indigo-100 rounded-full">
-              Editing
-            </span>
-          )}
-        </div>
-      </button>
+      <StepHeader
+        isActive={isActiveMode}
+        expanded={expanded}
+        onToggleExpanded={props.onToggleExpanded}
+        icon={<Home className="w-4 h-4" />}
+        title="Room Setup"
+        summary={
+          <>
+            {feetToDisplay(roomDims.width, unitSystem)} ×{' '}
+            {feetToDisplay(roomDims.height, unitSystem)} • {plural(doors.length, 'door')} •{' '}
+            {plural(windows.length, 'window')}
+          </>
+        }
+        activeIcon="bg-indigo-100 text-indigo-600"
+        activeText="text-indigo-700"
+        activeDot="bg-indigo-500"
+      />
 
       {/* Unlock button when in furniture mode */}
       {!isActiveMode && expanded && (
@@ -181,7 +119,10 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                   className={inputClass}
                   placeholder="e.g. 12"
                   min={1}
-                  max={100}
+                  max={roomMaxFeet(unitSystem)}
+                  confirmAbove={roomConfirmAboveFeet(unitSystem)}
+                  messageSlot={dimsMessages}
+                  messageLabel="Width"
                   label="Room width"
                   unitSystem={unitSystem}
                 />
@@ -197,12 +138,16 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                   className={inputClass}
                   placeholder="e.g. 12"
                   min={1}
-                  max={100}
+                  max={roomMaxFeet(unitSystem)}
+                  confirmAbove={roomConfirmAboveFeet(unitSystem)}
+                  messageSlot={dimsMessages}
+                  messageLabel="Length"
                   label="Room length"
                   unitSystem={unitSystem}
                 />
               </div>
             </div>
+            <div ref={setDimsMessages} data-testid="room-dims-messages" />
             <div className="mt-2 text-xs text-slate-500">
               Total area: <strong>{formatArea(roomDims.width, roomDims.height)}</strong>
             </div>
@@ -247,53 +192,39 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 mb-2">
-                      <div>
-                        <label
-                          htmlFor={fid('door', index, 'wall')}
-                          className="block text-[10px] text-slate-500 mb-1"
-                        >
-                          Wall
-                        </label>
-                        <select
-                          id={fid('door', index, 'wall')}
-                          value={door.wall}
-                          onChange={(e) =>
-                            props.onUpdateDoor(door.id, { wall: e.target.value as Wall })
-                          }
-                          className={`${smallInput('focus:ring-indigo-500')} bg-white`}
-                          aria-label={`Door ${index + 1} wall`}
-                        >
-                          {WALL_OPTIONS.map((w) => (
-                            <option key={w} value={w}>
-                              {wallLabel(w)}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label
-                          htmlFor={fid('door', index, 'type')}
-                          className="block text-[10px] text-slate-500 mb-1"
-                        >
-                          Type
-                        </label>
-                        <select
-                          id={fid('door', index, 'type')}
-                          value={door.type}
-                          onChange={(e) =>
-                            props.onUpdateDoor(door.id, { type: e.target.value as DoorType })
-                          }
-                          className={`${smallInput('focus:ring-indigo-500')} bg-white`}
-                          aria-label={`Door ${index + 1} type`}
-                        >
-                          {DOOR_TYPES.map((t) => (
-                            <option key={t.value} value={t.value}>
-                              {t.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                    <div className="mb-2">
+                      <span className="block text-[10px] text-slate-500 mb-1" aria-hidden="true">
+                        Wall
+                      </span>
+                      <Segmented
+                        label={`Door ${index + 1} wall`}
+                        options={WALL_SEGMENTS}
+                        value={door.wall}
+                        onChange={(wall) => props.onChangeWall('door', door.id, wall)}
+                      />
+                    </div>
+                    <div className="mb-2">
+                      <label
+                        htmlFor={fid('door', index, 'type')}
+                        className="block text-[10px] text-slate-500 mb-1"
+                      >
+                        Type
+                      </label>
+                      <select
+                        id={fid('door', index, 'type')}
+                        value={door.type}
+                        onChange={(e) =>
+                          props.onUpdateDoor(door.id, { type: e.target.value as DoorType })
+                        }
+                        className={`${smallInput('focus:ring-indigo-500')} bg-white`}
+                        aria-label={`Door ${index + 1} type`}
+                      >
+                        {DOOR_TYPES.map((t) => (
+                          <option key={t.value} value={t.value}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 mb-2">
@@ -440,30 +371,20 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <label
-                          htmlFor={fid('window', index, 'wall')}
-                          className="block text-[10px] text-slate-500 mb-1"
-                        >
-                          Wall
-                        </label>
-                        <select
-                          id={fid('window', index, 'wall')}
-                          value={win.wall}
-                          onChange={(e) =>
-                            props.onUpdateWindow(win.id, { wall: e.target.value as Wall })
-                          }
-                          className={`${smallInput('focus:ring-blue-500')} bg-white`}
-                          aria-label={`Window ${index + 1} wall`}
-                        >
-                          {WALL_OPTIONS.map((w) => (
-                            <option key={w} value={w}>
-                              {wallLabel(w)}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                    <div className="mb-2">
+                      <span className="block text-[10px] text-slate-500 mb-1" aria-hidden="true">
+                        Wall
+                      </span>
+                      <Segmented
+                        label={`Window ${index + 1} wall`}
+                        options={WALL_SEGMENTS}
+                        value={win.wall}
+                        onChange={(wall) => props.onChangeWall('window', win.id, wall)}
+                        ring="focus-visible:ring-blue-500"
+                        activeText="text-blue-700"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label
                           htmlFor={fid('window', index, 'width')}

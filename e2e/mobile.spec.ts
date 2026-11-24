@@ -58,8 +58,8 @@ test('tap through the tabs, add furniture, touch-drag it, share link round-trips
   await ready(page);
   await expect(page.getByTestId('room')).toBeVisible();
 
-  // The sidebar is an off-canvas drawer on narrow screens.
-  await page.getByRole('button', { name: 'Edit room settings' }).tap();
+  // The sidebar is an off-canvas drawer on narrow screens (a first visit starts in Furniture mode).
+  await page.getByRole('button', { name: 'Edit furniture' }).tap();
   await page.getByRole('button', { name: /^2\. (Furniture|Items)/ }).tap();
   await page.getByRole('button', { name: 'Add Item' }).tap();
   const piece = page.getByRole('button', { name: /^New Item,/ });
@@ -103,9 +103,16 @@ test('no horizontal page scroll on the narrow layout', async ({ page }) => {
 test('the offline toast never covers the bottom controls: Edit Room works right away', async ({
   page,
 }) => {
+  // A returning visitor (a layout is stored) whose service worker installs now: the one-time
+  // "Ready to work offline" toast shows (a first visit never shows it).
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('seeded')) return;
+    sessionStorage.setItem('seeded', '1');
+    localStorage.setItem('room-sim-v3-mode', 'room-setup');
+    localStorage.setItem('room-sim-v3-dims', JSON.stringify({ width: 12, height: 12 }));
+  });
   await page.goto('/');
   await page.waitForSelector('html[data-planner-ready]');
-  // The one-time "Ready to work offline" toast shows once the service worker has installed.
   const toast = page.getByTestId('pwa-toast');
   await expect(toast).toBeVisible({ timeout: 15_000 });
   await animationsSettled(page);
@@ -131,7 +138,7 @@ test('touch targets: sidebar icon buttons and the rotate handle are at least 44p
 }) => {
   await page.goto('/');
   await ready(page);
-  await page.getByRole('button', { name: 'Edit room settings' }).tap();
+  await page.getByRole('button', { name: 'Edit furniture' }).tap();
   await page.getByRole('button', { name: /^2\. (Furniture|Items)/ }).tap();
   for (const name of [/^Lock /, /^Hide /, /^Delete /]) {
     const b = (await page.getByRole('button', { name }).first().boundingBox())!;
@@ -188,11 +195,13 @@ for (const size of [
       expect(pill.x).toBeGreaterThanOrEqual(0);
       expect(edit.x + edit.width).toBeLessThanOrEqual(size.width);
       // The mode badge is one line (about 33px tall; two lines would be ~50).
-      const badge = page.getByText(/Drag (to move|handles)/).first();
-      const b = (await badge.locator('xpath=ancestor-or-self::div[1]').boundingBox())!;
+      const badge = page.getByTestId('mode-badge');
+      const b = (await badge.boundingBox())!;
       expect(b.height, 'mode badge wraps').toBeLessThan(40);
       expect(b.x).toBeGreaterThanOrEqual(0);
       expect(b.x + b.width).toBeLessThanOrEqual(size.width);
+      // Not cut off with an ellipsis either.
+      expect(await badge.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
     });
   }
 }

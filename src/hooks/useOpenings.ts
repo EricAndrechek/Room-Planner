@@ -8,7 +8,7 @@ import {
 import { track } from '../lib/analytics';
 import { PIXELS_PER_UNIT } from '../lib/constants';
 import { constrainOpening, isHorizontalWall, wallLength } from '../lib/geometry';
-import { findOpeningSpot } from '../lib/openings';
+import { findOpeningSpot, findOpeningSpotOnWall } from '../lib/openings';
 import { clamp } from '../lib/units';
 import type { Door, Id, Layout, RoomDims, RoomWindow, Selection, Wall } from '../types';
 import type { History } from './useHistory';
@@ -82,11 +82,16 @@ export function useOpenings({
   const deselect = (type: 'door' | 'window', id: Id) =>
     setSelection((s) => (s?.type === type && s.id === id ? null : s));
 
-  const updateRoomDims = (dims: RoomDims) =>
-    applyLayout((l) => ({
-      ...l,
-      roomDims: { width: Math.max(1, dims.width || 1), height: Math.max(1, dims.height || 1) },
-    }));
+  /** Resize the room (one undo step). Returns the new size, or null if nothing changed. */
+  const updateRoomDims = (dims: RoomDims): RoomDims | null => {
+    const next = { width: Math.max(1, dims.width || 1), height: Math.max(1, dims.height || 1) };
+    const prev = layout.roomDims;
+    if (next.width === prev.width && next.height === prev.height) return null;
+    applyLayout((l) => ({ ...l, roomDims: next }));
+    const area = next.width * next.height - prev.width * prev.height;
+    track('room_resized', { direction: area > 0 ? 'larger' : area < 0 ? 'smaller' : 'same_area' });
+    return next;
+  };
 
   const addDoor = () => {
     const spot = findOpeningSpot(layout, NEW_DOOR.width, NEW_DOOR, { swing: NEW_DOOR });
@@ -132,6 +137,38 @@ export function useOpenings({
     track('window_removed', { count: layout.windows.filter((w) => w.id !== id).length });
   };
 
+  /**
+   * Move a door/window to another wall, at a free spot there (its position kept if that is free;
+   * never on top of another opening). One undo step; the opening is selected and the move
+   * announced. False, and nothing changes, if it fits nowhere on that wall.
+   */
+  const moveOpeningToWall = (type: 'door' | 'window', id: Id, wall: Wall): boolean => {
+    const kind: OpeningKind = type === 'door' ? 'doors' : 'windows';
+    const list: (Door | RoomWindow)[] = layout[kind];
+    const index = list.findIndex((o) => o.id === id);
+    const opening = list[index];
+    if (!opening) return false;
+    if (opening.wall === wall) return true;
+    const others = { ...layout, [kind]: list.filter((o) => o.id !== id) };
+    const position = findOpeningSpotOnWall(
+      others,
+      opening.width,
+      wall,
+      opening.position,
+      type === 'door' ? { swing: opening as Door } : {},
+    );
+    if (position === null) return false;
+    applyLayout((l) => ({
+      ...l,
+      [kind]: (l[kind] as (Door | RoomWindow)[]).map((o) =>
+        o.id === id ? { ...o, wall, position } : o,
+      ),
+    }));
+    setSelection({ id, type });
+    announce(`${type === 'door' ? 'Door' : 'Window'} ${index + 1} moved to the ${wall} wall`);
+    return true;
+  };
+
   /** Drag a door/window handle along its wall (room setup only). */
   const startOpeningDrag = (e: ReactPointerEvent<HTMLDivElement>, id: Id, kind: OpeningKind) => {
     if (!isRoomSetup || (e.pointerType === 'mouse' && e.button !== 0)) return;
@@ -139,15 +176,21 @@ export function useOpenings({
     e.preventDefault();
     setSelection({ id, type: kind === 'doors' ? 'door' : 'window' });
     let last = { x: e.clientX, y: e.clientY };
+    let moved = false;
+    const input = e.pointerType;
     startDrag(e, {
       onMove: (ev) => {
         const scale = PIXELS_PER_UNIT * zoomRef.current;
         const dx = (ev.clientX - last.x) / scale;
         const dy = (ev.clientY - last.y) / scale;
         last = { x: ev.clientX, y: ev.clientY };
+        if (dx || dy) moved = true;
         setLayout((l) => slideOpening(l, kind, id, dx, dy));
       },
-      onEnd: () => commit(),
+      onEnd: () => {
+        commit();
+        if (moved) track('opening_moved', { kind: kind === 'doors' ? 'door' : 'window', input });
+      },
     });
   };
 
@@ -188,6 +231,7 @@ export function useOpenings({
     addWindow,
     updateWindow,
     deleteWindow,
+    moveOpeningToWall,
     startOpeningDrag,
     nudgeOpening,
   };

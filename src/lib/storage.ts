@@ -171,6 +171,11 @@ export interface PersistedState {
   designMode: DesignMode;
   currentProjectId: string | null;
   projects: Project[];
+  /**
+   * Nothing was stored yet (no working layout, mode or saved plans): a first visit on this device.
+   * Read-only; not persisted.
+   */
+  firstVisit: boolean;
 }
 
 const isProject = (p: unknown): p is Project =>
@@ -193,6 +198,9 @@ export const loadPersistedState = (s: StorageLike): PersistedState => {
 
   const units = safeGet(s, KEYS.units);
   const mode = safeGet(s, KEYS.mode);
+  const hasStoredLayout = [KEYS.dims, KEYS.doors, KEYS.windows, KEYS.items].some(
+    (k) => safeGet(s, k) !== null,
+  );
   const projectsRaw = read(KEYS.projects);
   const projects = Array.isArray(projectsRaw)
     ? projectsRaw.filter(isProject).map((p) => ({
@@ -204,9 +212,17 @@ export const loadPersistedState = (s: StorageLike): PersistedState => {
   return {
     layout,
     unitSystem: isUnitSystem(units) ? units : 'ft-in',
-    designMode: isDesignMode(mode) ? mode : DESIGN_MODES.ROOM_SETUP,
+    // A stored mode always wins. Without one, someone who already has a layout keeps the old
+    // default (room setup); a first-time visitor starts in Furniture mode, so the sample pieces
+    // they reach for first can be moved.
+    designMode: isDesignMode(mode)
+      ? mode
+      : hasStoredLayout
+        ? DESIGN_MODES.ROOM_SETUP
+        : DESIGN_MODES.FURNITURE,
     currentProjectId: safeGet(s, KEYS.currentProject) || null,
     projects,
+    firstVisit: !hasStoredLayout && mode === null && projectsRaw === undefined,
   };
 };
 

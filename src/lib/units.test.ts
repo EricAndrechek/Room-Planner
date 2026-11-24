@@ -10,6 +10,9 @@ import {
   roundNum,
   unitValueToFeet,
   nudgeStep,
+  roomConfirmAboveFeet,
+  roomMaxFeet,
+  suggestReading,
 } from './units';
 import type { UnitSystem } from '../types';
 
@@ -49,6 +52,29 @@ describe('parseToFeet', () => {
     ['.5m', 0.5 * FEET_PER_METER],
   ])('parses metric %s', (input, feet) => {
     close(parseToFeet(input, 'ft-in'), feet);
+  });
+
+  it.each([
+    ['11 7', 11 + 7 / 12],
+    ['10 11', 10 + 11 / 12],
+    ['11  7', 11 + 7 / 12],
+    ['11 7.5', 11 + 7.5 / 12],
+    ['0 6', 0.5],
+    ["11' 7", 11 + 7 / 12],
+    ['11 7"', 11 + 7 / 12],
+    ['11 ft 7', 11 + 7 / 12],
+  ])('in feet & inches, a second bare number is inches: %s', (input, feet) => {
+    close(parseToFeet(input, 'ft-in'), feet);
+  });
+
+  it('a second bare number is still in the active unit outside feet & inches', () => {
+    close(parseToFeet('11 7', 'ft'), 18);
+    close(parseToFeet('11 7', 'in'), 18 / 12);
+    close(parseToFeet('1 20', 'm'), 21 * FEET_PER_METER);
+  });
+
+  it('bare digits without a separator stay one number (rejected later if out of range)', () => {
+    close(parseToFeet('117', 'ft-in'), 117);
   });
 
   it('explicit units override the active unit system', () => {
@@ -190,5 +216,54 @@ describe('nudgeStep', () => {
       expect(nudgeStep('fine', u)).toBeLessThan(nudgeStep('normal', u));
       expect(nudgeStep('normal', u)).toBeLessThan(nudgeStep('coarse', u));
     }
+  });
+});
+
+describe('room size limits', () => {
+  it('has a generous ceiling: 500 ft, or 150 m in metric', () => {
+    expect(roomMaxFeet('ft-in')).toBe(500);
+    expect(roomMaxFeet('in')).toBe(500);
+    close(roomMaxFeet('m'), 150 * FEET_PER_METER);
+    close(roomMaxFeet('cm'), 150 * FEET_PER_METER);
+  });
+
+  it('asks above 50 ft, or 15 m in metric', () => {
+    expect(roomConfirmAboveFeet('ft')).toBe(50);
+    close(roomConfirmAboveFeet('m'), 15 * FEET_PER_METER);
+  });
+});
+
+describe('suggestReading', () => {
+  const range = { min: 1, max: 50 };
+  it.each([
+    ['117', 11 + 7 / 12],
+    ['1210', 12 + 10 / 12],
+    ['1011', 10 + 11 / 12],
+    ['120', 12],
+    ['1200', 12],
+    [' 117 ', 11 + 7 / 12],
+  ])('feet & inches: bare %s reads as feet then inches', (input, feet) => {
+    close(suggestReading(input, 'ft-in', range)!, feet);
+  });
+
+  it.each(['1015', "117'", '117 ft', '11 7', '60', '12345', '11.7', '999'])(
+    'feet & inches: no reading for %s',
+    (input) => {
+      // 999 would be 99'9": not a sensible room either.
+      expect(suggestReading(input, 'ft-in', range)).toBeNull();
+    },
+  );
+
+  it('meters: a bare number reads as centimeters; centimeters: as millimeters', () => {
+    const metric = { min: 1, max: 15 * FEET_PER_METER };
+    close(suggestReading('450', 'm', metric)!, 450 * FEET_PER_CM);
+    close(suggestReading('4500', 'cm', metric)!, 450 * FEET_PER_CM);
+    expect(suggestReading('450cm', 'm', metric)).toBeNull();
+    expect(suggestReading('45000', 'm', metric)).toBeNull(); // 450 m: still not sensible
+  });
+
+  it('decimal feet and inches have no reading', () => {
+    expect(suggestReading('117', 'ft', range)).toBeNull();
+    expect(suggestReading('1404', 'in', range)).toBeNull();
   });
 });

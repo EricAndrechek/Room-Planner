@@ -9,10 +9,11 @@ import {
 import { useHistory } from '../../hooks/useHistory';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
+import { useNotice } from '../../hooks/useNotice';
 import { useOpenings } from '../../hooks/useOpenings';
 import { usePanZoom } from '../../hooks/usePanZoom';
 import { usePointerDrag } from '../../hooks/usePointerDrag';
-import { useProjectActions } from '../../hooks/useProjectActions';
+import { useProjectActions, type NewPlanStart } from '../../hooks/useProjectActions';
 import { useProjects } from '../../hooks/useProjects';
 import { useRotationDrag } from '../../hooks/useRotationDrag';
 import { useSelection } from '../../hooks/useSelection';
@@ -21,6 +22,7 @@ import type { BootState } from '../../lib/boot';
 import { migrateColor } from '../../lib/colors';
 import { DESIGN_MODES } from '../../lib/constants';
 import { normalizeDegrees } from '../../lib/geometry';
+import { moveInside, piecesOutside } from '../../lib/placement';
 import { computeLayoutWarnings } from '../../lib/openings';
 import { toShareConfig } from '../../lib/layout';
 import { HELP_PATH } from '../../lib/paths';
@@ -33,7 +35,15 @@ import {
   saveUnitSystem,
   type StorageLike,
 } from '../../lib/storage';
-import type { DesignMode, Layout, UnitSystem } from '../../types';
+import type {
+  DesignMode,
+  FurnitureItem,
+  Id,
+  Layout,
+  RoomDims,
+  UnitSystem,
+  Wall,
+} from '../../types';
 import { ColorPicker } from './ColorPicker';
 import { ExportModal } from './ExportModal';
 import { FileBrowserModal } from './FileBrowserModal';
@@ -49,6 +59,10 @@ import { Sidebar } from './Sidebar';
 import { SnapOverlay } from './SnapOverlay';
 import { SnapToggle } from './SnapToggle';
 import { FloatingZoomControls } from './ZoomControls';
+
+/** A repeat press on a locked piece within this time does not bring the notice back. */
+const LOCKED_PROMPT_THROTTLE_MS = 3000;
+const LOCKED_PROMPT_MS = 6000;
 
 interface PlannerProps {
   storage: StorageLike;
@@ -133,14 +147,55 @@ export function Planner({ storage, initial }: PlannerProps) {
     [layout, projectName, unitSystem],
   );
 
+  // --- Notices (bottom toasts) -----------------------------------------------------
+  const notices = useNotice();
+  const { show: showNotice, dismiss: dismissNotice } = notices;
+
   // --- Modes & units ----------------------------------------------------------
   const changeDesignMode = useCallback(
     (mode: DesignMode) => {
       if (mode === designMode) return;
       setDesignMode(mode);
+      if (mode === DESIGN_MODES.FURNITURE) dismissNotice('locked-piece');
       track('mode_changed', { to: mode });
     },
-    [designMode],
+    [designMode, dismissNotice],
+  );
+
+  /**
+   * A piece was pressed (or Enter/arrows/R used on it) while room setup locks furniture: say why
+   * nothing moves, with a one-tap way into Furniture mode that keeps the piece selected.
+   */
+  const lastLockedPrompt = useRef(0);
+  const promptLockedPiece = useCallback(
+    (item: FurnitureItem, input: 'pointer' | 'keyboard') => {
+      const now = Date.now();
+      if (now - lastLockedPrompt.current < LOCKED_PROMPT_THROTTLE_MS) return;
+      lastLockedPrompt.current = now;
+      track('locked_piece_pressed', { mode: DESIGN_MODES.ROOM_SETUP, input });
+      showNotice({
+        key: 'locked-piece',
+        message: 'Furniture is locked while you edit the room.',
+        action: {
+          label: 'Move furniture',
+          onClick: () => {
+            changeDesignMode(DESIGN_MODES.FURNITURE);
+            setSelection({ id: item.id, type: 'item' });
+            dismissNotice('locked-piece');
+          },
+        },
+        timeoutMs: LOCKED_PROMPT_MS,
+      });
+    },
+    [changeDesignMode, dismissNotice, setSelection, showNotice],
+  );
+  const onLockedPointerPress = useCallback(
+    (item: FurnitureItem) => promptLockedPiece(item, 'pointer'),
+    [promptLockedPiece],
+  );
+  const onLockedKeyPress = useCallback(
+    (item: FurnitureItem) => promptLockedPiece(item, 'keyboard'),
+    [promptLockedPiece],
   );
 
   const changeUnitSystem = useCallback(
@@ -181,6 +236,7 @@ export function Planner({ storage, initial }: PlannerProps) {
     onDragFrame: setDragFrame,
     onRotateFrame: setRotateFrame,
     announce: live.announce,
+    onLockedPress: onLockedPointerPress,
   });
   const openings = useOpenings({
     history,
@@ -201,6 +257,75 @@ export function Planner({ storage, initial }: PlannerProps) {
     setSelection,
     closeFiles: () => setFilesOpen(false),
   });
+
+  // --- Room size: offer to bring pieces back inside a room that shrank -----------------------
+  const layoutRef = useRef(layout);
+  useEffect(() => {
+    layoutRef.current = layout;
+  });
+  const outsideCount = useMemo(
+    () => piecesOutside(layout.items, layout.roomDims).length,
+    [layout.items, layout.roomDims],
+  );
+  const changeRoomDims = (dims: RoomDims) => {
+    const prev = layout.roomDims;
+    const next = openings.updateRoomDims(dims);
+    if (!next || (next.width >= prev.width && next.height >= prev.height)) return;
+    const outside = piecesOutside(layout.items, next).length;
+    if (outside === 0) return;
+    const one = outside === 1;
+    showNotice({
+      key: 'outside-room',
+      message: `${one ? '1 piece is' : `${outside} pieces are`} outside the room.`,
+      action: {
+        label: one ? 'Move it inside' : 'Move them inside',
+        onClick: () => {
+          const cur = layoutRef.current;
+          const count = piecesOutside(cur.items, cur.roomDims).length;
+          history.apply((l) => ({
+            ...l,
+            items: l.items.map((i) => (i.visible === false ? i : moveInside(i, l.roomDims))),
+          }));
+          dismissNotice('outside-room');
+          live.announce(`${count === 1 ? '1 piece' : `${count} pieces`} moved inside the room`);
+          track('pieces_moved_inside', { count });
+        },
+      },
+    });
+  };
+  // The offer goes away once nothing is outside any more (moved by hand, resize undone...).
+  useEffect(() => {
+    if (outsideCount === 0) dismissNotice('outside-room');
+  }, [outsideCount, dismissNotice]);
+
+  // --- Doors & windows: moving one to another wall ----------------------------------------
+  const changeOpeningWall = (type: 'door' | 'window', id: Id, wall: Wall) => {
+    if (openings.moveOpeningToWall(type, id, wall)) {
+      dismissNotice('wall-full');
+      return;
+    }
+    const list: { id: Id; wall: Wall }[] = type === 'door' ? layout.doors : layout.windows;
+    const index = list.findIndex((o) => o.id === id);
+    const name = `${type === 'door' ? 'Door' : 'Window'} ${index + 1}`;
+    showNotice({
+      key: 'wall-full',
+      message: `${name} doesn't fit on the ${wall} wall, so it stays on the ${list[index]?.wall} wall.`,
+      timeoutMs: 6000,
+    });
+  };
+
+  // --- New plan (the current one is kept) -------------------------------------------------
+  const startNewPlan = (start: NewPlanStart) => {
+    const previous = projects.currentProject?.name;
+    projectActions.newProject(start);
+    const kept = previous ? `"${previous}" is` : 'Your previous plan is';
+    // The notice is in the polite toast region, so it is announced too.
+    showNotice({
+      key: 'new-plan',
+      message: `New plan started. ${kept} still in My Floor Plans.`,
+      timeoutMs: 5000,
+    });
+  };
 
   // --- Keyboard ----------------------------------------------------------------------
   const selectedItem =
@@ -237,6 +362,10 @@ export function Planner({ storage, initial }: PlannerProps) {
         focusCanvas();
       },
       nudge: (dirX, dirY, size) => {
+        if (isRoomSetup && selectedItem) {
+          promptLockedPiece(selectedItem, 'keyboard');
+          return true;
+        }
         const step = nudgeStep(size, unitSystem);
         if (!canEditSelected) return openings.nudgeOpening(dirX * step, dirY * step);
         // Fine steps place exactly, without snapping (like Alt-dragging).
@@ -245,6 +374,10 @@ export function Planner({ storage, initial }: PlannerProps) {
       },
       showShortcuts: () => setShortcutsOpen(true),
       rotateSelected: (degrees) => {
+        if (isRoomSetup && selectedItem) {
+          promptLockedPiece(selectedItem, 'keyboard');
+          return true;
+        }
         if (!canEditSelected) return false;
         furniture.changeItem(selectedItem.id, {
           rotation: normalizeDegrees(selectedItem.rotation + degrees),
@@ -294,6 +427,7 @@ export function Planner({ storage, initial }: PlannerProps) {
           onToggleSnap={toggleSnap}
           helpHref={HELP_PATH}
           onOpenFiles={() => setFilesOpen(true)}
+          onNewPlan={startNewPlan}
           onRename={projectActions.renameCurrent}
           onUndo={undo}
           onRedo={redo}
@@ -333,13 +467,14 @@ export function Planner({ storage, initial }: PlannerProps) {
               doors={layout.doors}
               windows={layout.windows}
               unitSystem={unitSystem}
-              onRoomDimsChange={openings.updateRoomDims}
+              onRoomDimsChange={changeRoomDims}
               onAddDoor={openings.addDoor}
               onUpdateDoor={openings.updateDoor}
               onDeleteDoor={openings.deleteDoor}
               onAddWindow={openings.addWindow}
               onUpdateWindow={openings.updateWindow}
               onDeleteWindow={openings.deleteWindow}
+              onChangeWall={changeOpeningWall}
               highlight={openings.lastAdded}
             />
             <FurniturePanel
@@ -364,6 +499,7 @@ export function Planner({ storage, initial }: PlannerProps) {
               onDeleteItem={furniture.deleteItem}
               onToggleColorPicker={sel.toggleColorPicker}
               onCloseColorPicker={sel.closeColorPicker}
+              highlight={furniture.lastAdded}
             />
           </Sidebar>
           <div ref={setPopoverRoot} className="contents" data-popover-root />
@@ -424,6 +560,7 @@ export function Planner({ storage, initial }: PlannerProps) {
             onItemPointerDown={furniture.onItemPointerDown}
             onRotatePointerDown={furniture.onRotatePointerDown}
             onSelectItem={(item) => selectItem(item.id)}
+            onLockedItemPress={onLockedKeyPress}
             onDoorPointerDown={(e, door) => openings.startOpeningDrag(e, door.id, 'doors')}
             onWindowPointerDown={(e, win) => openings.startOpeningDrag(e, win.id, 'windows')}
             highlightDoorIds={highlightDoorIds}
@@ -453,6 +590,7 @@ export function Planner({ storage, initial }: PlannerProps) {
           onClose={() => setShareOpen(false)}
           config={shareConfig}
           onImport={projectActions.importConfig}
+          showQr={!isMobile}
         />
 
         <ExportModal
@@ -469,7 +607,7 @@ export function Planner({ storage, initial }: PlannerProps) {
           projects={projects.projects}
           currentProjectId={projects.currentProjectId}
           unitSystem={unitSystem}
-          onNew={projectActions.newProject}
+          onNew={startNewPlan}
           onOpen={projectActions.openProject}
           onRename={projects.rename}
           onDuplicate={projects.duplicate}
@@ -488,7 +626,11 @@ export function Planner({ storage, initial }: PlannerProps) {
           {live.message}
         </div>
 
-        <PwaNotices />
+        <PwaNotices
+          notice={notices.notice}
+          onDismissNotice={() => dismissNotice()}
+          firstVisit={initial.firstVisit}
+        />
 
         {colorPickerItem && (
           <ColorPicker

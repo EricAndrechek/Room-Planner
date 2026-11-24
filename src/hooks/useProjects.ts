@@ -124,8 +124,8 @@ export function useProjects({
   }, []);
 
   /** Detach from the current project; the next autosave creates a new one. */
-  const startNew = useCallback(() => {
-    newProjectSource.current = 'new';
+  const startNew = useCallback((source = 'new') => {
+    newProjectSource.current = source;
     currentIdRef.current = null;
     setCurrentProjectId(null);
     setSaved(null);

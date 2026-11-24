@@ -50,6 +50,55 @@ for (const [name, viewport] of [
       await ready(page);
       await page.getByRole('button', { name: 'Share / Save' }).click();
       await expect(page.getByRole('dialog')).toBeVisible();
+      // "Open on another device": the QR code on wide screens, Share… / email on phones.
+      await expect(page.locator('#share-url')).toHaveValue(/#s=/);
+      if (viewport.width >= 768) await expect(page.getByTestId('handoff-qr')).toBeVisible();
+      await expectNoSeriousViolations(page);
+    });
+
+    test('room setup: locked-piece notice, wall controls and a size error have no serious violations', async ({
+      page,
+    }) => {
+      await page.addInitScript(() => {
+        if (sessionStorage.getItem('seeded')) return;
+        sessionStorage.setItem('seeded', '1');
+        localStorage.setItem('room-sim-v3-mode', 'room-setup');
+        localStorage.setItem('room-sim-v3-dims', JSON.stringify({ width: 12, height: 12 }));
+      });
+      await page.goto('/');
+      await ready(page);
+      await page.getByRole('button', { name: /^Desk,/ }).click();
+      await expect(page.getByTestId('app-notice')).toBeVisible();
+      await expectNoSeriousViolations(page);
+
+      await openStep(page, 'room');
+      await expect(page.getByRole('radiogroup', { name: 'Door 1 wall' })).toBeVisible();
+      const width = page.getByLabel('Room width');
+      await width.fill('600');
+      await width.press('Enter');
+      await expect(width).toHaveAttribute('aria-invalid', 'true');
+      await expectNoSeriousViolations(page);
+
+      // An unusually large size: the "did you mean?" prompt.
+      await width.fill('117');
+      await width.press('Enter');
+      await expect(page.getByTestId('dimension-confirm')).toBeVisible();
+      await expectNoSeriousViolations(page);
+      await page.keyboard.press('Escape');
+
+      // Shrinking strands pieces: the "Move them inside" notice.
+      await width.fill('6');
+      await width.press('Enter');
+      await expect(page.getByTestId('app-notice')).toContainText('outside the room');
+      await expectNoSeriousViolations(page);
+    });
+
+    test('the New plan menu has no serious violations', async ({ page }) => {
+      test.skip(viewport.width < 640, 'phones start new plans from My Floor Plans');
+      await page.goto('/');
+      await ready(page);
+      await page.getByRole('button', { name: 'New plan', exact: true }).click();
+      await expect(page.getByTestId('new-plan-menu')).toBeVisible();
       await expectNoSeriousViolations(page);
     });
 
@@ -284,11 +333,22 @@ test('door handles are keyboard operable in room setup', async ({ page }) => {
   // Delete removes the focused door, announced, and undo brings it back.
   const doors = page.getByRole('button', { name: /^Door handle/ });
   const count = await doors.count();
+  // Record everything the live region says: an autosave's "Project saved" can follow quickly.
+  await page.evaluate(() => {
+    const region = document.querySelector('[role="status"][aria-atomic="true"]')!;
+    const said: string[] = [];
+    (window as unknown as { __said: string[] }).__said = said;
+    new MutationObserver(() => said.push(region.textContent ?? '')).observe(region, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+  });
   await page.keyboard.press('Delete');
   await expect(doors).toHaveCount(count - 1);
-  await expect(page.locator('[role="status"][aria-atomic="true"]')).toContainText(
-    /Door \d+ removed/,
-  );
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __said: string[] }).__said.join(' | ')))
+    .toMatch(/Door \d+ removed/);
   await page.keyboard.press('ControlOrMeta+z');
   await expect(doors).toHaveCount(count);
 });

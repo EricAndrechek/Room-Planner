@@ -13,7 +13,9 @@ import {
 } from 'lucide-react';
 import { feetToDisplay } from '../../lib/units';
 import type { Project, UnitSystem } from '../../types';
+import type { NewPlanStart } from '../../hooks/useProjectActions';
 import { Modal } from './Modal';
+import { newPlanChoices } from './NewPlanMenu';
 import { Tooltip } from './Tooltip';
 
 interface FileBrowserModalProps {
@@ -22,7 +24,8 @@ interface FileBrowserModalProps {
   projects: Project[];
   currentProjectId: string | null;
   unitSystem: UnitSystem;
-  onNew: () => void;
+  /** Start a new plan (from the sample, or blank); the current one stays in the list. */
+  onNew: (start: NewPlanStart) => void;
   onOpen: (project: Project) => void;
   onRename: (id: string, name: string) => void;
   onDuplicate: (ids: string[]) => void;
@@ -76,13 +79,21 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
       <div className="space-y-4">
         {/* Action Bar */}
         <div className="flex flex-wrap gap-2 pb-3 border-b border-slate-200">
-          <button
-            type="button"
-            onClick={props.onNew}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" /> New
-          </button>
+          {newPlanChoices(unitSystem).map(({ start, label, hint }) => (
+            <button
+              key={start}
+              type="button"
+              onClick={() => props.onNew(start)}
+              title={`${hint}. Your current plan stays in this list.`}
+              className={
+                start === 'sample'
+                  ? 'flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium transition-colors'
+                  : 'flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-medium transition-colors'
+              }
+            >
+              {start === 'sample' && <Plus className="w-3.5 h-3.5" />} {label}
+            </button>
+          ))}
           <button
             type="button"
             onClick={() => {
@@ -158,7 +169,8 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
               return (
                 <div
                   key={project.id}
-                  className={`flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer ${
+                  // Phones: the actions wrap under the name rather than squeezing it to nothing.
+                  className={`flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-1 p-3 rounded-lg border transition-all cursor-pointer ${
                     project.id === currentProjectId
                       ? 'border-indigo-300 bg-indigo-50'
                       : isSelected
@@ -176,7 +188,7 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
                     )}
                   </div>
 
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-[9rem]">
                     {isEditing ? (
                       <input
                         type="text"
@@ -195,11 +207,11 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
                     ) : (
                       <>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-slate-800 truncate">
+                          <span className="text-sm font-medium text-slate-800 truncate min-w-0">
                             {project.name}
                           </span>
                           {project.id === currentProjectId && (
-                            <span className="text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-sm font-medium">
+                            <span className="shrink-0 text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-sm font-medium">
                               Active
                             </span>
                           )}
@@ -218,7 +230,7 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0 ml-auto">
                     <Tooltip text="Open">
                       <button
                         type="button"

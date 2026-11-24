@@ -17,6 +17,8 @@ interface FurniturePieceProps {
   onPointerDown: (e: ReactPointerEvent<HTMLDivElement>, item: FurnitureItem) => void;
   onRotatePointerDown: (e: ReactPointerEvent<HTMLDivElement>, item: FurnitureItem) => void;
   onSelect: (item: FurnitureItem) => void;
+  /** Enter/Space on a piece that room setup locks (to explain why it does not move). */
+  onLockedPress?: (item: FurnitureItem) => void;
   /** Canvas zoom: the rotate handle keeps a constant on-screen size. */
   zoom: number;
 }
@@ -34,6 +36,7 @@ export const FurniturePiece = memo(function FurniturePiece({
   onPointerDown,
   onRotatePointerDown,
   onSelect,
+  onLockedPress,
   zoom,
 }: FurniturePieceProps) {
   const descId = useId();
@@ -109,6 +112,7 @@ export const FurniturePiece = memo(function FurniturePiece({
           if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
             e.preventDefault();
             onSelect(item);
+            if (modeLocked) onLockedPress?.(item);
           }
         }}
         role="button"

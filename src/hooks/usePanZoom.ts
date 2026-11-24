@@ -9,7 +9,7 @@ const DRAGGABLE_SELECTOR = '[data-draggable], [role="button"], .cursor-grab, .cu
 /**
  * Canvas zoom & pan: trackpad pinch (ctrl+wheel) zooms, two-finger scroll
  * pans, touch pinch zooms + pans, one-finger touch on the background pans.
- * The room is fitted to the view shortly after mount and on window resize.
+ * The room is fitted to the view shortly after mount, on window resize and when its size changes.
  */
 export function usePanZoom(
   containerRef: RefObject<HTMLElement | null>,
@@ -19,9 +19,14 @@ export function usePanZoom(
   const [zoom, setZoomState] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const zoomRef = useRef(zoom);
+  // How far out zooming may go: MIN_ZOOM, or further if the last fit needed it (a very big room).
+  const minZoomRef = useRef(MIN_ZOOM);
 
   const setZoom = useCallback((value: number | ((z: number) => number)) => {
-    const next = clampZoom(typeof value === 'function' ? value(zoomRef.current) : value);
+    const next = clampZoom(
+      typeof value === 'function' ? value(zoomRef.current) : value,
+      minZoomRef.current,
+    );
     zoomRef.current = next;
     setZoomState(next);
   }, []);
@@ -31,13 +36,13 @@ export function usePanZoom(
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const padding = isMobile ? 32 : 64;
-    setZoom(
-      computeFitZoom(
-        { width: rect.width - padding, height: rect.height - padding },
-        room,
-        PIXELS_PER_UNIT,
-      ),
+    const fit = computeFitZoom(
+      { width: rect.width - padding, height: rect.height - padding },
+      room,
+      PIXELS_PER_UNIT,
     );
+    minZoomRef.current = Math.min(MIN_ZOOM, fit);
+    setZoom(fit);
     setPan({ x: 0, y: 0 });
   }, [containerRef, isMobile, room, setZoom]);
 
@@ -51,6 +56,16 @@ export function usePanZoom(
     const timer = setTimeout(() => fitRef.current(), 500);
     return () => clearTimeout(timer);
   }, []);
+
+  // Re-fit when the room's size changes (typed, undone, another plan opened), so the whole room
+  // stays in view: a room made much bigger or smaller would otherwise be off-screen or tiny.
+  const lastRoom = useRef({ width: room.width, height: room.height });
+  useEffect(() => {
+    const last = lastRoom.current;
+    if (last.width === room.width && last.height === room.height) return;
+    lastRoom.current = { width: room.width, height: room.height };
+    fitRef.current();
+  }, [room.width, room.height]);
 
   // Re-fit on window resize (debounced).
   useEffect(() => {
@@ -156,7 +171,10 @@ export function usePanZoom(
   }, [containerRef, setZoom]);
 
   const zoomIn = useCallback(() => setZoom((z) => Math.min(MAX_ZOOM, z + ZOOM_STEP)), [setZoom]);
-  const zoomOut = useCallback(() => setZoom((z) => Math.max(MIN_ZOOM, z - ZOOM_STEP)), [setZoom]);
+  const zoomOut = useCallback(
+    () => setZoom((z) => Math.max(minZoomRef.current, z - ZOOM_STEP)),
+    [setZoom],
+  );
 
   return { zoom, zoomRef, pan, zoomIn, zoomOut, fitToView };
 }

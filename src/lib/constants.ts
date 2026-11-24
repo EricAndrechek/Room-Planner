@@ -14,7 +14,10 @@ export const PIXELS_PER_UNIT = 40;
 
 export const MAX_HISTORY = 50;
 
-export const MIN_ZOOM = 0.25;
+/** Furthest the zoom buttons and pinch go out; "fit" may go further for a very large room. */
+export const MIN_ZOOM = 0.1;
+/** Floor for fitting the whole room in view (a 500 ft room on a phone needs about 0.017). */
+export const FIT_MIN_ZOOM = 0.01;
 export const MAX_ZOOM = 3;
 export const ZOOM_STEP = 0.25;
 

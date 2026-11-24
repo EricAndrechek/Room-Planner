@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react';
@@ -9,6 +10,7 @@ import { track } from '../lib/analytics';
 import { randomPresetColor } from '../lib/colors';
 import { PIXELS_PER_UNIT } from '../lib/constants';
 import type { AngleSnap } from '../lib/geometry';
+import { findFurnitureSpot } from '../lib/placement';
 import {
   SNAP_THRESHOLD_PX,
   SNAP_THRESHOLD_TOUCH_PX,
@@ -20,6 +22,7 @@ import {
   type SnapResult,
 } from '../lib/snapping';
 import type { FurnitureItem, Id, Layout } from '../types';
+import type { CardRef } from './useCardHighlight';
 import type { History } from './useHistory';
 import type { usePointerDrag } from './usePointerDrag';
 import type { useRotationDrag } from './useRotationDrag';
@@ -49,6 +52,8 @@ interface Options {
   onRotateFrame: (frame: RotateFrame | null) => void;
   /** Speak a message in the live region. */
   announce: (text: string) => void;
+  /** A piece was pressed while room setup locks all furniture (to explain why it does not move). */
+  onLockedPress?: (item: FurnitureItem) => void;
 }
 
 /** What the canvas draws while a piece is being rotated with its handle. */
@@ -77,6 +82,7 @@ export function useFurnitureEditing({
   onDragFrame,
   onRotateFrame,
   announce,
+  onLockedPress,
 }: Options) {
   const { present: layout, set: setLayout, apply: applyLayout, commit } = history;
   const { setSelection, forgetItem, clearSelection } = selection;
@@ -88,20 +94,25 @@ export function useFurnitureEditing({
     snapRef.current = snapEnabled;
   });
 
+  /** The piece added last, for the sidebar to scroll to and highlight. */
+  const [lastAdded, setLastAdded] = useState<CardRef | null>(null);
+
+  /** A new piece goes to the free spot nearest the middle of the room, and is selected. */
   const addItem = () => {
-    const { width, height } = layout.roomDims;
+    const size = { width: 3, height: 2 };
+    const spot = findFurnitureSpot(layout, size);
     const newItem: FurnitureItem = {
       id: Date.now(),
       label: 'New Item',
-      width: 3,
-      height: 2,
-      x: width / 2 - 1.5,
-      y: height / 2 - 1,
+      ...size,
+      ...spot,
       rotation: 0,
       color: randomPresetColor(),
       visible: true,
     };
     applyLayout((l) => ({ ...l, items: [...l.items, newItem] }));
+    setSelection({ id: newItem.id, type: 'item' });
+    setLastAdded({ type: 'item', id: newItem.id });
     track('furniture_added', { count: layout.items.length + 1 });
     if (isMobile) closeMobileSidebar();
   };
@@ -179,8 +190,12 @@ export function useFurnitureEditing({
       // Delete act on this piece next (canvas shortcuts only act with focus on the canvas).
       const canvas = e.currentTarget.closest<HTMLElement>('#floor-plan');
       if (canvas && !canvas.contains(document.activeElement)) canvas.focus({ preventScroll: true });
-      // Locked (by mode or individually): selectable, but not movable.
-      if (isRoomSetup || item.locked) return;
+      // Locked (by mode or individually): selectable, but not movable. The mode lock says why.
+      if (isRoomSetup) {
+        onLockedPress?.(item);
+        return;
+      }
+      if (item.locked) return;
       e.stopPropagation();
       e.preventDefault();
       const { items, roomDims } = layoutRef.current;
@@ -216,10 +231,27 @@ export function useFurnitureEditing({
           onDragFrame(null);
           const said = snap ? describeSnap(snap) : '';
           if (said) announce(said);
+          // A press without a move is a selection, not a move.
+          if (raw.x !== item.x || raw.y !== item.y) {
+            track('item_moved', {
+              snapped: !!(snap && (snap.snapX || snap.snapY)),
+              input: e.pointerType,
+            });
+          }
         },
       });
     },
-    [isRoomSetup, startDrag, zoomRef, setLayout, commit, setSelection, onDragFrame, announce],
+    [
+      isRoomSetup,
+      startDrag,
+      zoomRef,
+      setLayout,
+      commit,
+      setSelection,
+      onDragFrame,
+      announce,
+      onLockedPress,
+    ],
   );
 
   const onRotatePointerDown = useCallback(
@@ -231,17 +263,22 @@ export function useFurnitureEditing({
       if (!piece) return;
       // The rotated element's bounding box shares its center with the item.
       const rect = piece.getBoundingClientRect();
+      let lastAngle: AngleSnap | null = null;
       startRotation(e, {
         center: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
         startRotation: item.rotation,
         snapEnabled: () => snapRef.current,
         onRotate: (angle) => {
+          lastAngle = angle;
           setLayout((l) => patchItem(l, item.id, { rotation: angle.deg }));
           onRotateFrame({ id: item.id, angle });
         },
         onEnd: (deg) => {
           applyLayout((l) => patchItem(l, item.id, { rotation: deg }));
           onRotateFrame(null);
+          if (deg !== item.rotation) {
+            track('item_rotated', { snapped: lastAngle?.snapped != null, input: e.pointerType });
+          }
         },
       });
     },
@@ -249,6 +286,7 @@ export function useFurnitureEditing({
   );
 
   return {
+    lastAdded,
     addItem,
     deleteItem,
     changeItem,

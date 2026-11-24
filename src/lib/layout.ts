@@ -36,6 +36,14 @@ export const defaultLayout = (): Layout =>
     items: INITIAL_ITEMS,
   });
 
+/** An empty room of the starter size: no doors, windows or furniture ("Start blank"). */
+export const blankLayout = (): Layout => ({
+  roomDims: { ...INITIAL_ROOM },
+  doors: [],
+  windows: [],
+  items: [],
+});
+
 // --- Normalization ------------------------------------------------------------
 // Stored and imported data is untrusted. These keep every field that is
 // already valid (including unknown extra fields) and only fill in what the
