@@ -3,6 +3,7 @@ import { AlertTriangle, DoorOpen, Lock, RotateCw } from 'lucide-react';
 import { blendOnWhite, getBorderColor, migrateColor, readableTextOn } from '../../core/colors';
 import { PIXELS_PER_UNIT } from '../../lib/constants';
 import { warningText, type ItemWarning } from '../../core/geometry';
+import { isL, labelArea, lOutline } from '../../core/geometry/shapes';
 import { feetToDisplay } from '../../core/units';
 import { boxOf, doorBlockText } from '../../lib/plans';
 import type { Item, UnitSystem } from '../../types';
@@ -25,6 +26,75 @@ interface FurniturePieceProps {
 
 /** Furniture is drawn at this opacity while the room is being edited (and furniture is locked). */
 const MODE_LOCKED_ALPHA = 0.5;
+
+const SHADOW_ACTIVE = '0 8px 20px -4px rgba(0, 0, 0, 0.15)';
+const SHADOW = '0 1px 3px rgba(0, 0, 0, 0.08)';
+
+/** The shape in the piece's accessible name ("Sofa, L-shaped, 9' by 7', …"); nothing for a rectangle. */
+const shapeWords = (item: Item) =>
+  item.shape === 'l' ? 'L-shaped, ' : item.shape === 'ellipse' ? 'round, ' : '';
+
+/**
+ * An L drawn in its box: the outline filled, its border drawn inside it (as a CSS border is), and
+ * a focus ring outside it shown on keyboard focus (global.css). Only the painted shape takes the
+ * pointer, so a press in the notch goes to whatever is under it.
+ */
+function LShape({
+  item,
+  width,
+  height,
+  fill,
+  border,
+  active,
+}: {
+  item: Item & { cut: NonNullable<Item['cut']> };
+  width: number;
+  height: number;
+  fill: string;
+  border: { color: string; width: number; dashed: boolean };
+  active: boolean;
+}) {
+  const clip = `piece-clip-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const s = width / item.width;
+  const d =
+    lOutline(item.width, item.depth, item.cut)
+      .map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x * s} ${p.y * s}`)
+      .join('') + 'Z';
+  const bw = border.width;
+  return (
+    <svg
+      className="absolute inset-0 overflow-visible"
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      style={{
+        pointerEvents: 'none',
+        filter: `drop-shadow(${active ? '0 8px 10px rgba(0, 0, 0, 0.15)' : '0 1px 2px rgba(0, 0, 0, 0.1)'})`,
+      }}
+      aria-hidden="true"
+    >
+      <defs>
+        <clipPath id={clip}>
+          <path d={d} />
+        </clipPath>
+      </defs>
+      <g className="piece-focus-ring" fill="none" strokeLinejoin="round">
+        <path d={d} stroke="#4f46e5" strokeWidth={10} />
+        <path d={d} stroke="#fff" strokeWidth={4} />
+      </g>
+      <path
+        d={d}
+        fill={fill}
+        stroke={border.color}
+        strokeWidth={bw * 2}
+        strokeDasharray={border.dashed ? `${bw * 3} ${bw * 2}` : undefined}
+        clipPath={`url(#${clip})`}
+        style={{ pointerEvents: 'visiblePainted' }}
+        data-testid="piece-shape"
+      />
+    </svg>
+  );
+}
 
 /** One piece of furniture on the canvas, with its rotation handle when selected. */
 export const FurniturePiece = memo(function FurniturePiece({
@@ -77,12 +147,27 @@ export const FurniturePiece = memo(function FurniturePiece({
     height: box.height * PIXELS_PER_UNIT,
     transform: `translate(${box.x * PIXELS_PER_UNIT}px, ${box.y * PIXELS_PER_UNIT}px) rotate(${box.rotation}deg)`,
   };
+  // An ellipse is the box with round corners (borders, shadow, focus ring and hit area follow
+  // them); an L draws its outline in an SVG and the box itself paints nothing.
+  const lShape = isL(item) ? item : null;
+  const round = item.shape === 'ellipse';
+  const area = labelArea(item);
+  const shapeStyle = lShape
+    ? { pointerEvents: 'none' as const, boxShadow: 'none' }
+    : {
+        backgroundColor: fill,
+        borderColor,
+        borderWidth,
+        borderStyle,
+        borderRadius: round ? '50%' : undefined,
+        boxShadow: isActive && !isLocked ? SHADOW_ACTIVE : SHADOW,
+      };
   return (
     <>
       <div
         onPointerDown={(e) => onPointerDown(e, item)}
         onClick={() => onSelect(item)}
-        className={`absolute flex items-center justify-center text-xs font-bold select-none transition-shadow rounded-md ${
+        className={`absolute flex items-center justify-center text-xs font-bold select-none transition-shadow ${round || lShape ? '' : 'rounded-md'} ${
           modeLocked
             ? 'cursor-not-allowed'
             : isItemLocked
@@ -91,16 +176,9 @@ export const FurniturePiece = memo(function FurniturePiece({
         }`}
         style={{
           ...frame,
-          backgroundColor: fill,
+          ...shapeStyle,
           color: readableTextOn(fill),
-          borderColor,
-          borderWidth,
-          borderStyle,
           zIndex: isActive ? 50 : 10,
-          boxShadow:
-            isActive && !isLocked
-              ? '0 8px 20px -4px rgba(0, 0, 0, 0.15)'
-              : '0 1px 3px rgba(0, 0, 0, 0.08)',
           touchAction: 'none',
         }}
         onFocus={() => {
@@ -119,7 +197,8 @@ export const FurniturePiece = memo(function FurniturePiece({
         aria-pressed={isActive}
         data-draggable
         data-item-id={item.id}
-        aria-label={`${item.label}, ${feetToDisplay(box.width, unitSystem)} by ${feetToDisplay(box.height, unitSystem)}, at ${feetToDisplay(box.x, unitSystem)}, ${feetToDisplay(box.y, unitSystem)}, rotated ${Math.round(box.rotation)}°`}
+        data-shape={item.shape}
+        aria-label={`${item.label}, ${shapeWords(item)}${feetToDisplay(box.width, unitSystem)} by ${feetToDisplay(box.height, unitSystem)}, at ${feetToDisplay(box.x, unitSystem)}, ${feetToDisplay(box.y, unitSystem)}, rotated ${Math.round(box.rotation)}°`}
         aria-describedby={descId}
       >
         <span id={descId} className="sr-only">
@@ -140,9 +219,39 @@ export const FurniturePiece = memo(function FurniturePiece({
             .filter(Boolean)
             .join(' ')}
         </span>
-        <span className="truncate px-1" aria-hidden="true">
-          {item.label}
-        </span>
+        {lShape && (
+          <LShape
+            item={lShape}
+            width={frame.width}
+            height={frame.height}
+            fill={fill}
+            border={{
+              color: borderColor,
+              width: parseFloat(borderWidth),
+              dashed: borderStyle === 'dashed',
+            }}
+            active={isActive && !isLocked}
+          />
+        )}
+        {lShape || round ? (
+          // The name sits in the label area: an L's larger part, the rectangle inside an ellipse.
+          <span
+            className="absolute flex items-center justify-center pointer-events-none"
+            style={{
+              left: area.x * PIXELS_PER_UNIT,
+              top: area.y * PIXELS_PER_UNIT,
+              width: area.width * PIXELS_PER_UNIT,
+              height: area.height * PIXELS_PER_UNIT,
+            }}
+            aria-hidden="true"
+          >
+            <span className="truncate px-1">{item.label}</span>
+          </span>
+        ) : (
+          <span className="truncate px-1" aria-hidden="true">
+            {item.label}
+          </span>
+        )}
 
         {hasWarning && (
           <div

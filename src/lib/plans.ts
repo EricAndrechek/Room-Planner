@@ -7,7 +7,7 @@
  */
 import { checkLayout, type IssueCode } from '../core/check';
 import { normalizeDegrees, type ItemWarning } from '../core/geometry';
-import { itemBox } from '../core/geometry/shapes';
+import { clampCut, defaultCut, itemBox } from '../core/geometry/shapes';
 import {
   drawingFrame,
   isRectangle,
@@ -188,16 +188,25 @@ export interface PiecePatch {
   rotation?: number;
   locked?: boolean;
   hidden?: boolean;
+  /** Another shape in the same box; an L gets `defaultCut` unless `cut` is given. */
+  shape?: Item['shape'];
+  /** An L's cut, merged into the current one. */
+  cut?: Partial<NonNullable<Item['cut']>>;
 }
 
 /**
  * `item` with `patch` applied. Changing the size keeps the box's top-left corner where it was (as
  * the size fields always have); the centre is recomputed only when the box changes, so other edits
- * never move a piece by a rounding error.
+ * never move a piece by a rounding error. An L's cut is kept inside its box.
  */
 export function patchPiece(item: Item, patch: PiecePatch): Item {
-  const { x, y, rotation, locked, hidden, ...fields } = patch;
+  const { x, y, rotation, locked, hidden, shape, cut, ...fields } = patch;
   const next: Item = { ...item, ...fields };
+  if (shape !== undefined) next.shape = shape;
+  if (next.shape === 'l') {
+    const base = item.cut ?? defaultCut(next.width, next.depth);
+    next.cut = clampCut(cut ? { ...base, ...cut } : base, next.width, next.depth);
+  } else delete next.cut;
   if (
     x !== undefined ||
     y !== undefined ||
@@ -232,11 +241,18 @@ export function patchPiece(item: Item, patch: PiecePatch): Item {
 
 export type { SnapPiece };
 
+/** A piece as snapping sees it: its box and shape. */
+export const snapBox = (item: Item): PieceBox & Pick<SnapPiece, 'shape' | 'cut'> => ({
+  ...boxOf(item),
+  shape: item.shape,
+  ...(item.cut && { cut: item.cut }),
+});
+
 /** Placed pieces as the boxes snapping works on. */
 export const snapPieces = (plan: Pick<Plan, 'items'>): SnapPiece[] =>
   plan.items
     .filter((i) => i.placement)
-    .map((i) => ({ ...boxOf(i), id: i.id, label: i.label, visible: !i.hidden }));
+    .map((i) => ({ ...snapBox(i), id: i.id, label: i.label, visible: !i.hidden }));
 
 /** Placed, visible pieces: the ones the canvas draws and the checks consider. */
 export const shownPieces = (plan: Pick<Plan, 'items'>): Item[] =>
@@ -311,16 +327,14 @@ export const samePlan = (a: Plan, b: Plan): boolean => planContent(a) === planCo
 /**
  * `plan` in the form the editor works on, or what keeps it from showing the plan. A single
  * rectangular room listed from any corner, anywhere, is turned to start at its top-left corner
- * and moved to the origin (with everything in it), which changes no drawing. Several rooms,
- * another outline, L-shaped or round pieces, and pieces in the inventory are in the format
- * (section 3) but not yet in the editor (PRs 7a, 7b, 8, 9): such a plan is not opened, so that no
- * edit made here can damage it.
+ * and moved to the origin (with everything in it), which changes no drawing. Pieces of every
+ * shape (rectangles, Ls and ellipses) are editable. Several rooms, another outline and pieces in
+ * the inventory are in the format (section 3) but not yet in the editor (PRs 7b, 8, 9): such a
+ * plan is not opened, so that no edit made here can damage it.
  */
 export function editablePlan(plan: Plan): { ok: true; plan: Plan } | { ok: false; why: string[] } {
   const why: string[] = [];
   if (plan.rooms.length !== 1) why.push('several rooms');
-  const shaped = plan.items.filter((i) => i.shape !== 'rect');
-  if (shaped.length) why.push('pieces that are not rectangles');
   if (plan.items.some((i) => !i.placement)) why.push('pieces that are not placed in the room');
   const room = plan.rooms[0];
   if (!room) return { ok: false, why };

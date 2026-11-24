@@ -27,8 +27,9 @@ import {
   deletePiece,
   toggleHidden,
   toggleLock as toggleLockEdit,
+  type PiecePreset,
 } from '../lib/edits';
-import { boxOf, mainRoom, roomSize, snapPieces, type PiecePatch } from '../lib/plans';
+import { mainRoom, roomSize, snapBox, snapPieces, type PiecePatch } from '../lib/plans';
 import { addItem as addItemOp } from '../core/ops';
 import type { Id, Item, Plan } from '../types';
 import { nextCardSeq, type CardRef } from './useCardHighlight';
@@ -103,12 +104,12 @@ export function useFurnitureEditing({
   const [lastAdded, setLastAdded] = useState<CardRef | null>(null);
 
   /** A new piece goes to the free spot nearest the middle of the room, and is selected. */
-  const addItem = () => {
-    const { item: newItem } = addPiece(plan, randomPresetColor());
+  const addItem = (preset: PiecePreset = 'new') => {
+    const { item: newItem } = addPiece(plan, randomPresetColor(), preset);
     applyPlan((p) => addItemOp(p, newItem));
     setSelection({ id: newItem.id, type: 'item' });
     setLastAdded({ type: 'item', id: newItem.id, seq: nextCardSeq() });
-    track('furniture_added', { count: plan.items.length + 1 });
+    track('furniture_added', { count: plan.items.length + 1, preset });
   };
 
   const deleteItem = useCallback(
@@ -121,8 +122,10 @@ export function useFurnitureEditing({
   );
 
   const changeItem = useCallback(
-    (id: Id, patch: PiecePatch, shouldCommit = true) =>
-      (shouldCommit ? applyPlan : setPlan)((p) => changePiece(p, id, patch)),
+    (id: Id, patch: PiecePatch, shouldCommit = true) => {
+      (shouldCommit ? applyPlan : setPlan)((p) => changePiece(p, id, patch));
+      if (patch.shape) track('item_shape_changed', { shape: patch.shape });
+    },
     [applyPlan, setPlan],
   );
 
@@ -149,7 +152,7 @@ export function useFurnitureEditing({
       const p = planRef.current;
       const item = p.items.find((i) => i.id === id);
       if (!item?.placement) return;
-      const box = boxOf(item);
+      const box = snapBox(item);
       let x = box.x + dx;
       let y = box.y + dy;
       let said = '';
@@ -194,7 +197,7 @@ export function useFurnitureEditing({
         item.id,
       );
       const thresholdPx = e.pointerType === 'touch' ? SNAP_THRESHOLD_TOUCH_PX : SNAP_THRESHOLD_PX;
-      const box = boxOf(item);
+      const box = snapBox(item);
       // Where the pointer alone would put the piece; snapping is applied on top each frame.
       const raw = { x: box.x, y: box.y };
       let last = { x: e.clientX, y: e.clientY };

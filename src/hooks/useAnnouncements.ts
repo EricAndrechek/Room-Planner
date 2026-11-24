@@ -15,6 +15,23 @@ const describeItem = (item: Item, unitSystem: UnitSystem) => {
 
 const rotationOf = (item: Item) => item.placement?.rotation ?? 0;
 
+/** A piece's shape as spoken: "a rectangle", "L-shaped", "round" (or "oval"). */
+const shapeName = (item: Item) =>
+  item.shape === 'l'
+    ? 'L-shaped'
+    : item.shape === 'ellipse'
+      ? item.width === item.depth
+        ? 'round'
+        : 'oval'
+      : 'a rectangle';
+
+const CORNER_NAMES = {
+  tl: 'top left',
+  tr: 'top right',
+  br: 'bottom right',
+  bl: 'bottom left',
+} as const;
+
 /** Spoken summary of what changed between two plans (pieces only), or ''. */
 export function describeLayoutChange(prev: Plan, next: Plan, unitSystem: UnitSystem): string {
   const before = new Map(prev.items.map((i) => [i.id, i]));
@@ -40,6 +57,11 @@ export function describeLayoutChange(prev: Plan, next: Plan, unitSystem: UnitSys
     }
     if (rotationOf(old) !== rotationOf(item)) {
       parts.push(`${item.label} rotated ${rotationOf(item)}°`);
+    }
+    if (old.shape !== item.shape) {
+      parts.push(`${item.label} is now ${shapeName(item)}`);
+    } else if (old.cut && item.cut && old.cut.corner !== item.cut.corner) {
+      parts.push(`${item.label}: cut at the ${CORNER_NAMES[item.cut.corner]} corner`);
     }
     if (!!old.locked !== !!item.locked) {
       parts.push(`${item.label} ${item.locked ? 'locked' : 'unlocked'}`);

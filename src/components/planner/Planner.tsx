@@ -30,7 +30,7 @@ import { migrateColor } from '../../core/colors';
 import { DESIGN_MODES } from '../../lib/constants';
 import { normalizeDegrees } from '../../core/geometry';
 import { piecesOutside } from '../../core/placement';
-import { movePiecesInside, resizeRoom } from '../../lib/edits';
+import { movePiecesInside, resizeRoom, type PiecePreset } from '../../lib/edits';
 import {
   doorsOf,
   itemWarnings,
@@ -481,8 +481,8 @@ export function Planner({ store, initial }: PlannerProps) {
       : undefined;
 
   // Adding something while the sheet covers the plan lowers it to half, so the new thing shows.
-  const addItem = () => {
-    furniture.addItem();
+  const addItem = (preset?: PiecePreset) => {
+    furniture.addItem(preset);
     lowerSheet();
   };
   const addDoor = () => {
@@ -515,7 +515,7 @@ export function Planner({ store, initial }: PlannerProps) {
           label: 'Add item',
           icon: <Plus className="w-4 h-4" aria-hidden="true" />,
           tone: 'furniture' as const,
-          onClick: addItem,
+          onClick: () => addItem(),
         };
   // Toasts stack above the sheet and the controls riding on it (over the sheet when it is full).
   const toastBottom = isMobile

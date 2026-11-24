@@ -118,6 +118,17 @@ summary:focus-visible {
   box-shadow: 0 0 0 2px #fff;
 }
 
+/* An L-shaped piece draws its own ring around its outline (FurniturePiece), not around its box. */
+.piece-focus-ring {
+  visibility: hidden;
+}
+[data-draggable][data-shape='l']:focus-visible {
+  outline: none;
+}
+[data-draggable][data-shape='l']:focus-visible .piece-focus-ring {
+  visibility: visible;
+}
+
 #app {
   width: 100%;
   height: 100vh;
