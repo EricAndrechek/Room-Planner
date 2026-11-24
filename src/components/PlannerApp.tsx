@@ -1,12 +1,18 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { captureError, track } from '../lib/analytics';
-import { boot, bootFromStorage, type BootResult, type LinkProblem } from '../lib/boot';
+import {
+  boot,
+  bootFromStorage,
+  storageProblem,
+  type BootResult,
+  type LinkProblem,
+} from '../lib/boot';
 import { hasShareLink } from '../core/share/link';
-import { getBrowserStorage } from '../lib/storage';
+import { createPlanStore, getBrowserStorage } from '../lib/storage';
 import { ErrorBoundary } from './ErrorBoundary';
 import { Planner } from './planner/Planner';
 
-const storage = typeof window === 'undefined' ? null : getBrowserStorage();
+const store = typeof window === 'undefined' ? null : createPlanStore(getBrowserStorage());
 
 // Only fetched when a link could not be opened.
 const LinkProblemDialog = lazy(() => import('./LinkProblemDialog'));
@@ -18,18 +24,20 @@ const LinkProblemDialog = lazy(() => import('./LinkProblemDialog'));
  * (too new for this build, or damaged) leaves the URL as it is and shows why.
  */
 function PlannerBoot() {
-  const [result, setResult] = useState<BootResult | null>(() =>
-    storage && !hasShareLink(window.location.href)
-      ? { state: bootFromStorage(storage), shared: null }
-      : null,
+  const [result, setResult] = useState<BootResult | null>(() => {
+    if (!store || hasShareLink(window.location.href)) return null;
+    const state = bootFromStorage(store);
+    return { state, shared: null, linkProblem: storageProblem(state) };
+  });
+
+  const [linkProblem, setLinkProblem] = useState<LinkProblem | null>(
+    () => result?.linkProblem ?? null,
   );
 
-  const [linkProblem, setLinkProblem] = useState<LinkProblem | null>(null);
-
   useEffect(() => {
-    if (result || !storage) return;
+    if (result || !store) return;
     let cancelled = false;
-    boot(window.location.href, storage)
+    boot(window.location.href, store)
       .then((r) => {
         if (cancelled) return;
         if (r.linkProblem) setLinkProblem(r.linkProblem);
@@ -42,7 +50,7 @@ function PlannerBoot() {
       })
       .catch((err: unknown) => {
         captureError(err, { source: 'boot' });
-        if (!cancelled) setResult({ state: bootFromStorage(storage), shared: null });
+        if (!cancelled) setResult({ state: bootFromStorage(store), shared: null });
       });
     return () => {
       cancelled = true;
@@ -53,10 +61,10 @@ function PlannerBoot() {
     if (result) document.documentElement.dataset.plannerReady = 'true';
   }, [result]);
 
-  if (!result || !storage) return null;
+  if (!result || !store) return null;
   return (
     <>
-      <Planner storage={storage} initial={result.state} />
+      <Planner store={store} initial={result.state} />
       {linkProblem && (
         <Suspense fallback={null}>
           <LinkProblemDialog problem={linkProblem} onClose={() => setLinkProblem(null)} />

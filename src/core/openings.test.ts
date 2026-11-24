@@ -1,24 +1,71 @@
 import { describe, expect, it } from 'vitest';
-import type { Door, DoorType, FurnitureItem, Hinge, RoomDims, RoomWindow, Wall } from './types';
+import type {
+  Door,
+  DoorType,
+  FurnitureItem,
+  Hinge,
+  Layout,
+  RoomDims,
+  Wall,
+} from './testing/v3/types';
 import { PIXELS_PER_UNIT as P } from '../lib/constants';
-import { checkItemsCollision, type Point } from './geometry';
-import { defaultLayout } from './layout';
+import type { Point } from './geometry';
 import {
   DOORWAY_DEPTH,
-  OPENING_GAP,
   SLIDING_DEPTH,
-  computeDoorBlocks,
-  computeLayoutWarnings,
-  doorBlockText,
-  doorGeometry,
   doorSwingAngle,
-  doorSwingGeometry,
-  findOpeningSpot,
-  findOpeningSpotOnWall,
   hasHingeSide,
   isSwingDoor,
-} from './openings';
+  openingDoorGeometry,
+  sweptArea,
+} from './geometry/doors';
+import { loadPlan } from './load';
+import { defaultLayout } from './testing/v3/layout';
 import { doorSvg } from '../components/planner/openingStyles';
+import { doorBlockText, itemWarnings, mainRoom, openingPlace } from '../lib/plans';
+import { resizeRoom } from '../lib/edits';
+
+/** The plan the app holds for a v3 layout (what the storage migration makes of it). */
+const toPlan = (layout: Layout) => {
+  const r = loadPlan(layout, 'strict', { lengthsInFeet: true });
+  if (!r.ok) throw new Error(JSON.stringify(r));
+  return r.plan;
+};
+
+/** A room holding just `door`, and the door as the plan holds it. */
+const withDoor = (door: Door, dims: RoomDims, items: FurnitureItem[] = []) => {
+  const plan = toPlan({ roomDims: dims, doors: [door], windows: [], items });
+  const room = mainRoom(plan);
+  return { plan, room, opening: room.openings[0]! };
+};
+
+/** What the door looks like in the room: its shapes (leaves, panels, doorway) in room feet. */
+const doorGeometry = (door: Door, dims: RoomDims, faceOffset = 0) => {
+  const { room, opening } = withDoor(door, dims);
+  return openingDoorGeometry(room, opening, faceOffset);
+};
+
+/** A single-leaf swing door's leaf and arc, as the v3 swing geometry named them; null if none. */
+const doorSwingGeometry = (door: Door, dims: RoomDims, faceOffset = 0) => {
+  const g = doorGeometry(door, dims, faceOffset);
+  if (door.type !== 'swing-in' && door.type !== 'swing-out') return null;
+  const l = g.leaves[0]!;
+  const pts = sweptArea(l, 15);
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => p.y);
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  return {
+    side: g.side,
+    radius: l.radius,
+    hinge: l.hinge,
+    closedEnd: l.closedEnd,
+    openEnd: l.openEnd,
+    sweep: l.sweep,
+    normal: l.v,
+    box: { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y },
+  };
+};
 
 const room: RoomDims = { width: 14, height: 10 };
 const WIDTH = 3;
@@ -63,7 +110,8 @@ describe('doorSwingGeometry', () => {
     const e = expected[wall];
     const swingIn = type === 'swing-in';
 
-    expect(g.wall).toBe(wall);
+    const placed = withDoor(door, room);
+    expect(openingPlace(placed.room, placed.opening).wall).toBe(wall);
     expect(g.side).toBe(swingIn ? 'inside' : 'outside');
     expect(g.radius).toBe(WIDTH);
 
@@ -114,6 +162,7 @@ describe('doorSwingGeometry', () => {
   });
 
   it('keeps the door on its wall when the room shrank, and has no swing for sliding doors', () => {
+    // The plan cannot hold a door that overhangs its wall: shrinking the room clamps it.
     const door: Door = {
       id: 1,
       width: 3,
@@ -122,9 +171,11 @@ describe('doorSwingGeometry', () => {
       hinge: 'right',
       type: 'swing-in',
     };
-    const g = doorSwingGeometry(door, room)!;
-    expect(g.hinge).toEqual({ x: 0, y: 10 }); // position clamped to 7, hinge at 7 + 3
-    expect(doorSwingGeometry({ ...door, type: 'sliding' }, room)).toBeNull();
+    const tall = withDoor(door, { width: 14, height: 16 });
+    const shrunk = mainRoom(resizeRoom(tall.plan, room));
+    const g = openingDoorGeometry(shrunk, shrunk.openings[0]!);
+    expect(g.leaves[0]!.hinge).toEqual({ x: 0, y: 10 }); // position clamped to 7, hinge at 7 + 3
+    expect(doorSwingGeometry({ ...door, type: 'sliding', position: 7 }, room)).toBeNull();
   });
 });
 
@@ -132,7 +183,8 @@ describe('doorSvg (canvas) draws from the shared geometry', () => {
   it.each(cases)('%s wall, %s, hinge %s', (wall, type, hinge) => {
     const door: Door = { id: 1, width: WIDTH, position: POSITION, wall, hinge, type };
     const g = doorSwingGeometry(door, room)!;
-    const d = doorSvg(door, room);
+    const { room: planRoom, opening } = withDoor(door, room);
+    const d = doorSvg(opening, planRoom);
     expect(d.arcs).toHaveLength(1);
     const nums = d.arcs[0]!.match(/-?\d+(\.\d+)?/g)!.map(Number);
     // "M x0 y0 A r r 0 0 sweep x1 y1", in canvas pixels.
@@ -164,14 +216,18 @@ describe('doorSvg (canvas) draws from the shared geometry', () => {
       hinge: 'left',
       type: 'sliding',
     };
-    const sliding = doorSvg(base, room);
+    const svg = (door: Door) => {
+      const { room: planRoom, opening } = withDoor(door, room);
+      return doorSvg(opening, planRoom);
+    };
+    const sliding = svg(base);
     expect(sliding.arcs).toEqual([]);
     expect(sliding.panels).toHaveLength(2);
-    const pocket = doorSvg({ ...base, type: 'pocket' }, room);
+    const pocket = svg({ ...base, type: 'pocket' });
     expect(pocket.arcs).toEqual([]);
     expect(pocket.panels).toEqual([]);
     expect(pocket.pocket).toMatch(/^M /);
-    const opening = doorSvg({ ...base, type: 'opening' }, room);
+    const opening = svg({ ...base, type: 'opening' });
     expect([opening.arcs, opening.panels, opening.pocket]).toEqual([[], [], null]);
   });
 });
@@ -273,7 +329,7 @@ describe('doorGeometry: every door type', () => {
   });
 });
 
-describe('computeDoorBlocks', () => {
+describe('door blocks (itemWarnings)', () => {
   const room12 = { width: 12, height: 12 };
   const piece = (patch: Partial<FurnitureItem>): FurnitureItem => ({
     id: 'p',
@@ -296,8 +352,20 @@ describe('computeDoorBlocks', () => {
     type: 'swing-in',
     ...patch,
   });
+  /** The pieces that block a door or doorway, keyed by their v3 ids, as v3 `computeDoorBlocks`. */
   const blocks = (items: FurnitureItem[], doors: Door[]) =>
-    Object.fromEntries(computeDoorBlocks(items, doors, room12));
+    Object.fromEntries(
+      [...itemWarnings(toPlan({ roomDims: room12, doors, windows: [], items }))]
+        .filter(([, w]) => w.blocksDoor || w.blocksDoorway)
+        .map(([id, w]) => [
+          id.replace(/^item-/, ''),
+          {
+            door: w.blocksDoor,
+            doorway: w.blocksDoorway,
+            doorIds: w.doorIds!.map((d) => d.replace(/^door-/, '')),
+          },
+        ]),
+    );
 
   // In a 3ft swing-in door's swing (2.4 ft from the wall), but outside its 1.5 ft doorway.
   const inSwing = piece({ id: 'swing', x: 2.2, y: 9.3, width: 1, height: 1 });
@@ -358,231 +426,20 @@ describe('computeDoorBlocks', () => {
   });
 
   it('merges into the layout warnings; the starter room has none', () => {
-    const w = computeLayoutWarnings({ roomDims: room12, doors: [door()], items: [inSwing] });
-    expect(w.get('swing')).toMatchObject({
+    const w = itemWarnings(
+      toPlan({ roomDims: room12, doors: [door()], windows: [], items: [inSwing] }),
+    );
+    expect(w.get('item-swing')).toMatchObject({
       outOfBounds: false,
       collision: false,
       blocksDoor: true,
       blocksDoorway: false,
     });
     const starter = defaultLayout();
-    for (const warning of computeLayoutWarnings(starter).values()) {
+    for (const warning of itemWarnings(toPlan(starter)).values()) {
       expect(warning).toEqual({ outOfBounds: false, collision: false });
     }
     expect(doorBlockText({ door: true, doorway: true })).toBe('Blocks door');
     expect(doorBlockText({ door: false, doorway: true })).toBe('Blocks doorway');
-  });
-});
-
-describe('findOpeningSpot', () => {
-  const door = (wall: Wall, position: number, width = 3): Door => ({
-    id: `${wall}${position}`,
-    width,
-    position,
-    wall,
-    hinge: 'left',
-    type: 'swing-in',
-  });
-  const win = (wall: Wall, position: number, width = 3): RoomWindow => ({
-    id: `w${wall}${position}`,
-    width,
-    position,
-    wall,
-  });
-  const room12 = { width: 12, height: 12 };
-  const DOOR = { wall: 'bottom', position: 2 } as const;
-  const at = (doors: Door[], windows: RoomWindow[] = [], roomDims = room12, width = 3) =>
-    findOpeningSpot({ roomDims, doors, windows }, width, DOOR);
-
-  it('uses the default spot on an empty wall', () => {
-    expect(at([])).toEqual({ wall: 'bottom', position: 2 });
-  });
-
-  it('goes to the first free spot after the openings already on the wall', () => {
-    expect(at([door('bottom', 2)])).toEqual({ wall: 'bottom', position: 5 + OPENING_GAP });
-    // 9..12 is free but flush with the corner, so the next wall's default spot wins.
-    expect(at([door('bottom', 2), door('bottom', 5.5)])).toEqual({ wall: 'top', position: 2 });
-    // A free stretch before the first opening counts too.
-    expect(at([door('bottom', 1), door('bottom', 8)])).toEqual({
-      wall: 'bottom',
-      position: 4 + OPENING_GAP,
-    });
-    // The default spot is kept when it is clear (the starter door sits at 6..9).
-    expect(at([door('bottom', 6)])).toEqual({ wall: 'bottom', position: 2 });
-  });
-
-  it('keeps at least the gap between neighbours', () => {
-    // 2..5 and 9..12 taken: 5.5..8.5 leaves exactly the gap on both sides.
-    expect(at([door('bottom', 2), door('bottom', 9)])).toEqual({ wall: 'bottom', position: 5.5 });
-    // With 8.9..11.9 taken, 5.5..8.5 would come within 0.4ft: no room on the bottom wall.
-    expect(at([door('bottom', 2), door('bottom', 8.9)]).wall).toBe('top');
-  });
-
-  it('moves on to the next wall (top, right, bottom, left order) when the wall is full', () => {
-    const fullBottom = [
-      door('bottom', 0),
-      door('bottom', 3.5),
-      door('bottom', 7),
-      door('bottom', 10.5, 1.5),
-    ];
-    expect(at(fullBottom)).toEqual({ wall: 'top', position: 2 });
-    expect(at([...fullBottom], [win('top', 0, 12)])).toEqual({ wall: 'right', position: 2 });
-  });
-
-  it('treats doors and windows alike as obstacles', () => {
-    expect(at([], [win('bottom', 1, 4)])).toEqual({ wall: 'bottom', position: 5 + OPENING_GAP });
-    expect(
-      findOpeningSpot({ roomDims: room12, doors: [door('top', 2)], windows: [] }, 3, {
-        wall: 'top',
-        position: 2,
-      }),
-    ).toEqual({ wall: 'top', position: 5.5 });
-  });
-
-  it('falls back to the default when every wall is full', () => {
-    const full = (['top', 'right', 'bottom', 'left'] as Wall[]).map((w) => win(w, 0, 12));
-    expect(at([], full)).toEqual({ wall: 'bottom', position: 2 });
-  });
-
-  it('skips walls shorter than the opening, and falls back when the room is too small', () => {
-    // 2ft wide room: top/bottom are too short for a 3ft door, left/right are 10ft long.
-    expect(at([], [], { width: 2, height: 10 })).toEqual({ wall: 'right', position: 2 });
-    expect(at([], [], { width: 2, height: 2 })).toEqual({ wall: 'bottom', position: 2 });
-  });
-
-  it('keeps a corner margin, unless the corner is the only place left', () => {
-    // On a 4ft wall the default (2) is clamped to 1, flush with the far corner: 0.5 keeps both margins.
-    expect(at([], [], { width: 4, height: 4 })).toEqual({ wall: 'bottom', position: 0.5 });
-    expect(at([door('bottom', 0.5)]).position).not.toBe(0);
-    // A 3ft wall only fits a 3ft door corner to corner: that is still better than nothing.
-    expect(at([], [], { width: 3, height: 3 })).toEqual({ wall: 'bottom', position: 0 });
-    // Every wall has only a flush-with-the-corner gap left: use the first one.
-    const tight = (['top', 'right', 'bottom', 'left'] as Wall[]).map((w) => win(w, 0, 8.5));
-    expect(at([], tight)).toEqual({ wall: 'bottom', position: 9 });
-  });
-
-  describe('keeps a new door swing clear of furniture', () => {
-    const furniture = (patch: Partial<FurnitureItem>): FurnitureItem => ({
-      id: 'f',
-      label: 'Piece',
-      width: 2,
-      height: 2,
-      x: 0,
-      y: 0,
-      rotation: 0,
-      color: '#93c5fd',
-      ...patch,
-    });
-    const swing = { type: 'swing-in', hinge: 'left' } as const;
-    const place = (items: FurnitureItem[], doors: Door[] = []) =>
-      findOpeningSpot({ roomDims: room12, doors, windows: [], items }, 3, DOOR, { swing });
-
-    it('skips spots whose swing hits a piece, on the same wall first', () => {
-      // A chest in front of the default spot (2..5 along the bottom, 9..12 deep).
-      const chest = furniture({ x: 2, y: 10, width: 2, height: 1.5 });
-      expect(place([chest])).toEqual({ wall: 'bottom', position: 4 }); // flush is fine
-      // Rotated pieces use their rotated outline: a 4x0.5 bar turned 45deg, centered at
-      // (7.5, 10.5), reaches from x 5.9 to 9.1, so it blocks 4..7 but not the default 2..5...
-      const bar = furniture({ x: 5.5, y: 10.25, width: 4, height: 0.5, rotation: 45 });
-      expect(place([bar])).toEqual({ wall: 'bottom', position: 2 });
-      // ...and with the chest too, 4..7 is the first clear spot: the bar crosses the swing's
-      // bounding square there, but neither the quarter circle the leaf really sweeps nor the
-      // doorway in front of it.
-      expect(place([bar, chest])).toEqual({ wall: 'bottom', position: 4 });
-    });
-
-    it('keeps the doorway clear too, for every door type', () => {
-      const chair = furniture({ x: 2.5, y: 11, width: 1, height: 1 });
-      for (const type of ['swing-out', 'pocket', 'opening', 'sliding'] as const) {
-        expect(
-          findOpeningSpot({ roomDims: room12, doors: [], windows: [], items: [chair] }, 3, DOOR, {
-            swing: { type, hinge: 'left' },
-          }),
-        ).not.toEqual({ wall: 'bottom', position: 2 });
-      }
-    });
-
-    it('moves to another wall when the whole wall is blocked, and ignores hidden pieces', () => {
-      const bench = furniture({ x: 0, y: 10, width: 12, height: 2 });
-      expect(place([bench])).toEqual({ wall: 'top', position: 2 });
-      expect(place([{ ...bench, visible: false }])).toEqual({ wall: 'bottom', position: 2 });
-    });
-
-    it('falls back to the free-spot rule when every swing would hit furniture', () => {
-      const rug = furniture({ x: 0, y: 0, width: 12, height: 12 });
-      expect(place([rug])).toEqual({ wall: 'bottom', position: 2 });
-      expect(place([rug], [door('bottom', 2)])).toEqual({ wall: 'bottom', position: 5.5 });
-    });
-
-    it('ignores furniture for windows, and for the swing of doors that open outside', () => {
-      const rug = furniture({ x: 0, y: 0, width: 12, height: 12 });
-      const open = { roomDims: room12, doors: [], windows: [], items: [rug] };
-      expect(findOpeningSpot(open, 3, { wall: 'top', position: 2 })).toEqual({
-        wall: 'top',
-        position: 2,
-      });
-      // A desk 2.5-3.5 ft into the room: in a swing-in door's swing at 2..5, but not in its
-      // doorway (1.5 ft deep). A swing-out door there only needs its doorway clear.
-      const desk = furniture({ x: 2, y: 8.5, width: 3, height: 1 });
-      expect(place([desk])).not.toEqual({ wall: 'bottom', position: 2 });
-      expect(
-        findOpeningSpot({ ...open, items: [desk] }, 3, DOOR, {
-          swing: { type: 'swing-out', hinge: 'left' },
-        }),
-      ).toEqual({ wall: 'bottom', position: 2 });
-    });
-  });
-});
-
-describe('adding doors to the starter room', () => {
-  it('puts each new door away from the corners with its swing clear of the furniture', () => {
-    let layout = defaultLayout();
-    // The defaults object doubles as `swing` (as in useOpenings): only its type/hinge may count.
-    const NEW = { width: 3, wall: 'bottom', position: 2, type: 'swing-in', hinge: 'left' } as const;
-    const swing = { type: NEW.type, hinge: NEW.hinge };
-    for (let n = 0; n < 3; n++) {
-      const spot = findOpeningSpot(layout, 3, NEW, { swing: NEW });
-      const door: Door = { id: n + 100, width: 3, ...spot, ...swing };
-      const len = 12; // the starter room is 12' x 12'
-      expect(spot.position).toBeGreaterThanOrEqual(0.5);
-      expect(spot.position + 3).toBeLessThanOrEqual(len - 0.5);
-      const box = doorSwingGeometry(door, layout.roomDims)!.box;
-      for (const item of layout.items) {
-        expect(checkItemsCollision(item, { ...box, rotation: 0 }), item.label).toBe(false);
-      }
-      layout = { ...layout, doors: [...layout.doors, door] };
-    }
-  });
-});
-
-describe('findOpeningSpotOnWall', () => {
-  const room = { width: 12, height: 10 };
-  const win = (wall: Wall, position: number, width = 3): RoomWindow => ({
-    id: `w${wall}${position}`,
-    width,
-    position,
-    wall,
-  });
-
-  it('keeps the position when it is free on the new wall', () => {
-    expect(findOpeningSpotOnWall({ roomDims: room, doors: [], windows: [] }, 3, 'left', 4)).toBe(4);
-  });
-
-  it('never lands on another opening: moves along the wall instead', () => {
-    const windows = [win('left', 3, 3)];
-    const pos = findOpeningSpotOnWall({ roomDims: room, doors: [], windows }, 3, 'left', 3)!;
-    expect(pos).not.toBeNull();
-    // At least OPENING_GAP clear of the window at 3..6.
-    expect(pos + 3 <= 3 - 0.5 || pos >= 6 + 0.5).toBe(true);
-  });
-
-  it('is null when the wall is full or shorter than the opening', () => {
-    const full = [win('left', 0, 4.5), win('left', 5.5, 4.5)];
-    expect(
-      findOpeningSpotOnWall({ roomDims: room, doors: [], windows: full }, 3, 'left', 2),
-    ).toBeNull();
-    expect(findOpeningSpotOnWall({ roomDims: room, doors: [], windows: [] }, 11, 'left', 0)).toBe(
-      null,
-    );
   });
 });

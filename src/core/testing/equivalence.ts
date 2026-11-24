@@ -4,11 +4,11 @@
  * starts and ends on the wall (after the app's clamping), which end a door hinges on, its type and
  * angle, and every piece's centre, size, rotation, colour, label and flags.
  */
-import { WALL_FRAMES, doorGeometry, hasHingeSide, onWall } from '../openings';
+import { WALL_FRAMES, doorGeometry, hasHingeSide, onWall } from './v3/openings';
 import { normalizeDegrees, wallLength } from '../geometry';
 import { migrateColor } from '../colors';
 import type { Plan } from '../schema';
-import type { Layout, RoomDims, Wall } from '../types';
+import type { Layout, RoomDims, Wall } from './v3/types';
 
 type P = { x: number; y: number };
 const close = (a: number, b: number) =>

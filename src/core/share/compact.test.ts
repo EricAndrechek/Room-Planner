@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultLayout, toShareConfig } from '../layout';
+import { defaultLayout, toShareConfig } from '../testing/v3/layout';
 import { loadPlan } from '../load';
 import { CORNERS, DOOR_TYPES, HINGES, OPENING_KINDS, SHAPES, type Plan } from '../schema';
 import { CORNER_ORDER, HINGE_ORDER, KINDS, SHAPE_ORDER, TYPES, compact, expand } from './compact';

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { defaultLayout, toShareConfig } from '../core/layout';
-import { buildShareUrl } from '../core/share/link';
+import { buildPlanUrl } from '../core/share/plan';
+import { starterPlan, withDoc } from './plans';
 import { QR_MAX_VERSION, makeQr, qrPath, qrVersion, type QrMatrix } from './qr';
 
 const matrix = (rows: string[]): QrMatrix => ({
@@ -20,13 +20,14 @@ describe('qrPath', () => {
 
 describe('makeQr', () => {
   it('encodes a typical plan link in a code small enough to scan off a screen', async () => {
-    const url = await buildShareUrl(
+    const url = await buildPlanUrl(
       'https://room-planner.andrechek.com/',
-      toShareConfig(defaultLayout(), 'My bedroom', 'ft-in'),
+      withDoc(starterPlan(), 'My bedroom', 'ft-in'),
     );
     const code = (await makeQr(url))!;
     expect(code).not.toBeNull();
-    expect(qrVersion(code)).toBeLessThanOrEqual(18);
+    // The compact plan form: version 15 for the v3 link of the same plan (section 5).
+    expect(qrVersion(code)).toBeLessThanOrEqual(11);
   });
 
   it('handles a ~600-character link', async () => {

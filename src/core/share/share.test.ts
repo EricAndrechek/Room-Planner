@@ -1,22 +1,50 @@
 import { describe, expect, it } from 'vitest';
 import originalLinks from '../__fixtures__/original-share-links.json';
 import originalStorage from '../__fixtures__/original-storage.json';
-import { INITIAL_DOORS, INITIAL_WINDOWS } from '../constants';
 import { migrateColor } from '../colors';
-import { fromShareConfig, normalizeLayout, toShareConfig, type ShareConfig } from '../layout';
+import { loadPlan } from '../load';
 import {
-  buildShareUrl,
+  fromShareConfig,
+  normalizeLayout,
+  toShareConfig,
+  type ShareConfig,
+} from '../testing/v3/layout';
+import {
   decodeLegacyConfig,
   decodeShareFragment,
   encodeLegacyConfig,
+  readShareLink,
+} from '../testing/v3/share';
+import { INITIAL_DOORS, INITIAL_WINDOWS } from '../testing/v3/constants';
+import type { Layout } from '../testing/v3/types';
+import {
+  buildShareUrl,
+  decodeFragmentPayload,
   encodeShareFragment,
   hasShareLink,
-  readShareLink,
+  readSharePayload,
   stripShareLink,
 } from './link';
+import { buildPlanUrl, encodePlanFragment } from './plan';
 import { base64UrlToBytes, bytesToBase64Url } from './codec';
 import { unitValueToFeet } from '../units';
-import type { Layout } from '../types';
+import { readSharedPlan } from '../../lib/boot';
+import { mainRoom, openingPlace, samePlan, withDoc } from '../../lib/plans';
+import type { Plan } from '../schema';
+
+/** The plan the app holds for a v3 layout (what the storage migration makes of it). */
+const toPlan = (layout: Layout): Plan => {
+  const r = loadPlan(layout, 'strict', { lengthsInFeet: true });
+  if (!r.ok) throw new Error(JSON.stringify(r));
+  return r.plan;
+};
+
+/** What the app opens for a link's payload (the data a v3 reader would take as a config). */
+const opened = (data: unknown) => {
+  const r = readSharedPlan(data);
+  if (!r.ok) throw new Error(JSON.stringify(r));
+  return r;
+};
 
 /**
  * Reference: what the ORIGINAL app (src/App.jsx, "1. Load from URL on mount")
@@ -92,6 +120,11 @@ describe('legacy ?config= links (captured from the original app)', () => {
     expect(link?.legacy).toBe(true);
     const layout = fromShareConfig(link!.config);
     expect(layout).toEqual(originalImport(new URL(href).search));
+    // The app opens the same plan.
+    const payload = await readSharePayload(href);
+    if (payload.status !== 'ok') throw new Error(payload.status);
+    expect(payload.legacy).toBe(true);
+    expect(samePlan(opened(payload.data).plan, toPlan(layout))).toBe(true);
   });
 
   it('reproduces the layout the sharer had (Latin-1 name preserved)', async () => {
@@ -101,11 +134,19 @@ describe('legacy ?config= links (captured from the original app)', () => {
     sameLayout(fromShareConfig(ftIn!.config), storedLayout(), 5);
     const meters = await readShareLink(originalLinks.meters.url);
     sameLayout(fromShareConfig(meters!.config), storedLayout(), 4);
+    // And the app opens them as the plan it holds for the sharer's layout, with the name.
+    const stored = toPlan(storedLayout());
+    expect(opened(ftIn!.config).name).toBe('Café Plan');
+    expect(samePlan(opened(ftIn!.config).plan, stored)).toBe(true);
+    expect(samePlan(opened(meters!.config).plan, stored)).toBe(true);
   });
 
-  it('matches the original JSON export box', () => {
-    expect(toShareConfig(storedLayout(), 'Café Plan', 'ft-in')).toEqual(originalLinks.ftIn.json);
-    expect(toShareConfig(storedLayout(), 'Café Plan', 'm')).toEqual(originalLinks.meters.json);
+  it('the original JSON export box still opens, as the same plan', () => {
+    // The old export box had no replacement format of its own; its text must still be accepted.
+    const stored = toPlan(storedLayout());
+    expect(opened(originalLinks.ftIn.json)).toMatchObject({ name: 'Café Plan', named: true });
+    expect(samePlan(opened(originalLinks.ftIn.json).plan, stored)).toBe(true);
+    expect(samePlan(opened(originalLinks.meters.json).plan, stored)).toBe(true);
   });
 
   it('decodes a v2 link with the single `door` field and Tailwind colors', async () => {
@@ -158,6 +199,25 @@ describe('legacy ?config= links (captured from the original app)', () => {
 
     const out = fromShareConfig({ ...v2, door: { ...v2.door!, open: 'out' } });
     expect(out.doors[0]!.type).toBe('swing-out');
+
+    // The app opens it the same way.
+    const { plan } = opened(link!.config);
+    expect(samePlan(plan, toPlan(layout))).toBe(true);
+    const room = mainRoom(plan);
+    const doors = room.openings.filter((o) => o.kind === 'door');
+    expect(doors).toHaveLength(1);
+    expect(openingPlace(room, doors[0]!)).toEqual({
+      wall: 'left',
+      position: 3,
+      width: 2.5,
+      hinge: 'right',
+    });
+    expect(doors[0]!.type).toBe('swing-in');
+    expect(plan.items.map((i) => i.color)).toEqual(['#93c5fd', '#f9a8d4']);
+    expect(room.openings.filter((o) => o.kind === 'window')).toHaveLength(INITIAL_WINDOWS.length);
+    expect(
+      mainRoom(opened({ ...v2, door: { ...v2.door!, open: 'out' } }).plan).openings[0]!.type,
+    ).toBe('swing-out');
   });
 
   it('decodes an early v3 link (multi-door, no unitSystem => feet)', () => {
@@ -167,10 +227,20 @@ describe('legacy ?config= links (captured from the original app)', () => {
       windows: [],
       items: [],
     };
-    const layout = fromShareConfig(decodeLegacyConfig(encodeLegacyConfig(cfg))!);
+    const config = decodeLegacyConfig(encodeLegacyConfig(cfg))!;
+    const layout = fromShareConfig(config);
     expect(layout.roomDims).toEqual({ width: 12, height: 10 });
     expect(layout.doors[0]).toMatchObject({ id: 5, width: 3, position: 1, type: 'sliding' });
     expect(layout.windows).toEqual([]);
+
+    const room = mainRoom(opened(config).plan);
+    expect(room.openings).toHaveLength(1);
+    expect(room.openings[0]).toMatchObject({ kind: 'door', width: 3, type: 'sliding' });
+    expect(openingPlace(room, room.openings[0]!)).toMatchObject({
+      wall: 'top',
+      position: 1,
+      width: 3,
+    });
   });
 
   it('tolerates an unescaped + that arrived as a space', () => {
@@ -184,6 +254,9 @@ describe('legacy ?config= links (captured from the original app)', () => {
     expect(decodeLegacyConfig('not base64!')).toBeNull();
     expect(decodeLegacyConfig(btoa('{"foo":1}'))).toBeNull();
     expect(decodeLegacyConfig(btoa('[1,2]'))).toBeNull();
+    // The app does not open a document that is not a layout either.
+    expect(readSharedPlan({ foo: 1 }).ok).toBe(false);
+    expect(readSharedPlan([1, 2]).ok).toBe(false);
   });
 
   it('the original encoder could not handle emoji (bug this replaces)', () => {
@@ -196,28 +269,44 @@ describe('legacy ?config= links (captured from the original app)', () => {
 
 describe('new #s= fragment links', () => {
   const layout = storedLayout();
+  /** The plan with a name and display units: what the app shares. */
+  const shared = (name: string, units: Parameters<typeof withDoc>[2], l: Layout = layout) =>
+    withDoc(toPlan(l), name, units);
 
-  it('round-trips a layout (compressed)', async () => {
+  it('round-trips a plan (compressed)', async () => {
+    const plan = shared('Café Plan', 'ft-in');
+    const fragment = await encodePlanFragment(plan);
+    expect(fragment.startsWith('s=')).toBe(true);
+    expect(fragment).toMatch(/^s=[A-Za-z0-9_-]+$/); // URL-safe, no padding
+    const decoded = await decodeFragmentPayload(`#${fragment}`);
+    if (decoded.status !== 'ok') throw new Error(decoded.status);
+    const back = opened(decoded.data);
+    expect(back.name).toBe('Café Plan');
+    expect(samePlan(back.plan, plan)).toBe(true);
+  });
+
+  it('still reads a v3 layout in a fragment (links made before the plan format)', async () => {
     const config = toShareConfig(layout, 'Café Plan', 'ft-in');
     const fragment = await encodeShareFragment(config);
     expect(fragment.startsWith('s=')).toBe(true);
-    expect(fragment).toMatch(/^s=[A-Za-z0-9_-]+$/); // URL-safe, no padding
     const decoded = await decodeShareFragment(`#${fragment}`);
     expect(decoded).toEqual(config);
     sameLayout(fromShareConfig(decoded!), layout, 5);
+    const back = opened(decoded);
+    expect(back.name).toBe('Café Plan');
+    expect(samePlan(back.plan, toPlan(layout))).toBe(true);
   });
 
   it('is much shorter than the legacy link', async () => {
-    const config = toShareConfig(layout, 'Café Plan', 'ft-in');
-    const url = await buildShareUrl('https://example.com/', config);
+    const url = await buildPlanUrl('https://example.com/', shared('Café Plan', 'ft-in'));
     expect(url.length).toBeLessThan(originalLinks.ftIn.url.length * 0.6);
   });
 
   it('round-trips unicode names and labels', async () => {
-    const config = toShareConfig(
+    const plan = withDoc(
       {
-        ...layout,
-        items: layout.items.map((i, n) => ({
+        ...toPlan(layout),
+        items: toPlan(layout).items.map((i, n) => ({
           ...i,
           label: ['Bett 🛏️', 'Schreibtisch', '衣柜', 'Ковёр'][n]!,
         })),
@@ -226,9 +315,14 @@ describe('new #s= fragment links', () => {
       'm',
     );
     for (const compress of [true, false]) {
-      const url = await buildShareUrl('https://example.com/planner/', config, { compress });
-      const link = await readShareLink(url);
-      expect(link).toEqual({ config, legacy: false });
+      const url = await buildPlanUrl('https://example.com/planner/', plan, { compress });
+      const payload = await readSharePayload(url);
+      if (payload.status !== 'ok') throw new Error(payload.status);
+      expect(payload.legacy).toBe(false);
+      const back = opened(payload.data);
+      expect(back.name).toBe('Bedroom 🛏️ — 2ᵉ étage');
+      expect(back.plan.items.map((i) => i.label)).toEqual(plan.items.map((i) => i.label));
+      expect(samePlan(back.plan, plan)).toBe(true);
     }
   });
 
@@ -254,37 +348,53 @@ describe('new #s= fragment links', () => {
         ? { swingAngle: 180 as const }
         : {}),
     }));
-    const config = toShareConfig({ ...layout, doors }, 'Doors', 'cm');
-    const link = await readShareLink(await buildShareUrl('https://example.com/', config));
-    const back = fromShareConfig(link!.config).doors;
-    expect(back.map((d) => [d.type, d.swingAngle, d.hinge])).toEqual(
+    const plan = shared('Doors', 'cm', { ...layout, doors });
+    const payload = await readSharePayload(await buildPlanUrl('https://example.com/', plan));
+    if (payload.status !== 'ok') throw new Error(payload.status);
+    const room = mainRoom(opened(payload.data).plan);
+    const back = room.openings.filter((o) => o.kind === 'door');
+    expect(back.map((d) => [d.type, d.swingAngle, openingPlace(room, d).hinge])).toEqual(
       doors.map((d) => [d.type, d.swingAngle, d.hinge]),
     );
     // A link from before door types/angles existed: unchanged, with no angle (= 90deg).
-    const old = fromShareConfig({
-      ...config,
-      doors: [
-        { id: 1, width: 91.44, position: 30, wall: 'bottom', hinge: 'left', type: 'swing-out' },
-      ],
-    }).doors[0]!;
+    const config = toShareConfig({ ...layout, doors }, 'Doors', 'cm');
+    const oldRoom = mainRoom(
+      opened({
+        ...config,
+        doors: [
+          { id: 1, width: 91.44, position: 30, wall: 'bottom', hinge: 'left', type: 'swing-out' },
+        ],
+      }).plan,
+    );
+    const old = oldRoom.openings.find((o) => o.kind === 'door')!;
     expect(old.type).toBe('swing-out');
     expect('swingAngle' in old).toBe(false);
     // Unknown types and angles fall back to the defaults.
-    const odd = fromShareConfig({
-      ...config,
-      doors: [
-        { id: 1, width: 91.44, position: 30, wall: 'bottom', type: 'revolving', swingAngle: 135 },
-      ],
-    }).doors[0]!;
+    const oddRoom = mainRoom(
+      opened({
+        ...config,
+        doors: [
+          { id: 1, width: 91.44, position: 30, wall: 'bottom', type: 'revolving', swingAngle: 135 },
+        ],
+      }).plan,
+    );
+    const odd = oddRoom.openings.find((o) => o.kind === 'door')!;
     expect(odd.type).toBe('swing-in');
     expect('swingAngle' in odd).toBe(false);
   });
 
   it('uncompressed fallback uses #j=', async () => {
-    const config = toShareConfig(layout, 'x', 'ft');
-    const fragment = await encodeShareFragment(config, { compress: false });
+    const plan = shared('x', 'ft');
+    const fragment = await encodePlanFragment(plan, { compress: false });
     expect(fragment.startsWith('j=')).toBe(true);
-    expect(await decodeShareFragment(fragment)).toEqual(config);
+    const decoded = await decodeFragmentPayload(fragment);
+    if (decoded.status !== 'ok') throw new Error(decoded.status);
+    expect(samePlan(opened(decoded.data).plan, plan)).toBe(true);
+    // Old links in that form decode too.
+    const config = toShareConfig(layout, 'x', 'ft');
+    expect(
+      await decodeShareFragment(await encodeShareFragment(config, { compress: false })),
+    ).toEqual(config);
   });
 
   it('returns null for unrelated or corrupt fragments', async () => {
@@ -292,14 +402,26 @@ describe('new #s= fragment links', () => {
     expect(await decodeShareFragment('#s=!!!')).toBeNull();
     expect(await decodeShareFragment('#s=AAAA')).toBeNull();
     expect(await readShareLink('https://example.com/#top')).toBeNull();
+    expect((await readSharePayload('https://example.com/#top')).status).toBe('none');
+    expect((await readSharePayload('https://example.com/#s=!!!')).status).toBe('damaged');
   });
 
   it('prefers the fragment over a legacy query', async () => {
-    const a = toShareConfig(layout, 'new', 'ft');
-    const b = toShareConfig(layout, 'old', 'ft');
-    const url = new URL(await buildShareUrl('https://example.com/', a));
-    url.searchParams.set('config', encodeLegacyConfig(b));
-    expect((await readShareLink(url.toString()))!.config.name).toBe('new');
+    const old = encodeLegacyConfig(toShareConfig(layout, 'old', 'ft'));
+    const withLegacy = (href: string) => {
+      const url = new URL(href);
+      url.searchParams.set('config', old);
+      return url.toString();
+    };
+    const url = withLegacy(await buildPlanUrl('https://example.com/', shared('new', 'ft')));
+    const payload = await readSharePayload(url);
+    if (payload.status !== 'ok') throw new Error(payload.status);
+    expect(opened(payload.data).name).toBe('new');
+    // Links in the v3 form, read as before.
+    const v3Url = withLegacy(
+      await buildShareUrl('https://example.com/', toShareConfig(layout, 'new', 'ft')),
+    );
+    expect((await readShareLink(v3Url))!.config.name).toBe('new');
   });
 });
 
@@ -308,7 +430,7 @@ describe('URL helpers', () => {
     const legacy = 'https://example.com/?config=abc&utm=1';
     expect(hasShareLink(legacy)).toBe(true);
     expect(stripShareLink(legacy)).toBe('https://example.com/?utm=1');
-    const fresh = await buildShareUrl(legacy, toShareConfig(storedLayout(), 'n', 'ft'));
+    const fresh = await buildPlanUrl(legacy, withDoc(toPlan(storedLayout()), 'n', 'ft'));
     expect(fresh.startsWith('https://example.com/?utm=1#s=')).toBe(true);
     expect(hasShareLink(fresh)).toBe(true);
     expect(stripShareLink(fresh)).toBe('https://example.com/?utm=1');

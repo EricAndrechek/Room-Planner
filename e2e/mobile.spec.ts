@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { animationsSettled, openStep, viewPlan } from './ui';
+import { storedPieces } from './storage';
 
 // Touch-emulated smoke for the narrow layout. Runs only in the mobile projects.
 test.beforeEach(({ isMobile }) => {
@@ -11,8 +12,7 @@ async function ready(page: Page) {
   await page.waitForTimeout(700);
 }
 
-const storedItems = (page: Page) =>
-  page.evaluate(() => JSON.parse(localStorage.getItem('room-sim-v3-items') ?? '[]'));
+const storedItems = (page: Page) => storedPieces(page);
 
 /** Drag with real-looking touch pointer events (the planner uses window pointer listeners). */
 async function touchDrag(page: Page, el: Locator, dx: number, dy: number) {
@@ -69,13 +69,13 @@ test('tap through the tabs, add furniture, touch-drag it, share link round-trips
   expect((await piece.boundingBox())!.y + (await piece.boundingBox())!.height).toBeLessThan(
     sheetTop,
   );
-  const before = (await storedItems(page)).find((i: { label: string }) => i.label === 'New Item');
+  const before = (await storedItems(page)).find((i: { label: string }) => i.label === 'New Item')!;
 
   await touchDrag(page, piece, 50, -70);
   await expect
     .poll(
       async () =>
-        (await storedItems(page)).find((i: { label: string }) => i.label === 'New Item').x,
+        (await storedItems(page)).find((i: { label: string }) => i.label === 'New Item')!.x,
     )
     .toBeGreaterThan(before.x + 0.3);
 

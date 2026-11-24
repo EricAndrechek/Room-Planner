@@ -9,13 +9,13 @@
  *                                                           browser lacks
  *                                                           CompressionStream)
  *
- * The JSON is the same portable {@link ShareConfig} the JSON export box shows.
- * UTF-8 is used throughout, so emoji / non-Latin names round-trip (the old
+ * The JSON is a plan in the compact form (share/compact.ts; written by share/plan.ts); links
+ * written before the plan format hold the v3 layout object instead, and every version is read by
+ * `loadPlan`. UTF-8 is used throughout, so emoji / non-Latin names round-trip (the old
  * `btoa(JSON)` encoder threw on them and silently produced an empty link).
  *
  * Legacy links `?config=<btoa(JSON)>` are still decoded exactly as before.
  */
-import { isShareConfig, type ShareConfig } from '../layout';
 import { base64UrlToBytes, bytesToBase64Url, deflate, inflate, supportsCompression } from './codec';
 
 export const HASH_KEY_DEFLATE = 's';
@@ -25,11 +25,11 @@ export const LEGACY_QUERY_KEY = 'config';
 // --- new (fragment) format ---------------------------------------------------------
 
 /**
- * Encode a payload into a URL fragment, e.g. `s=...` (no leading `#`): a v3 config, or a plan in
- * the compact form (an array).
+ * Encode a payload into a URL fragment, e.g. `s=...` (no leading `#`): a plan in the compact form
+ * (an array), or any JSON.
  */
 export const encodeShareFragment = async (
-  config: ShareConfig | readonly unknown[],
+  config: unknown,
   { compress = supportsCompression() }: { compress?: boolean } = {},
 ): Promise<string> => {
   const json = new TextEncoder().encode(JSON.stringify(config));
@@ -77,21 +77,7 @@ export const decodeFragmentPayload = async (hash: string): Promise<DecodedPayloa
     : { status: 'none' };
 };
 
-const asConfig = (d: DecodedPayload): ShareConfig | null =>
-  d.status === 'ok' && isShareConfig(d.data) ? d.data : null;
-
-/** Decode a fragment (with or without the leading `#`). Returns null if it isn't a v3 share link. */
-export const decodeShareFragment = async (hash: string): Promise<ShareConfig | null> =>
-  asConfig(await decodeFragmentPayload(hash));
-
 // --- legacy (?config=) format ---------------------------------------------------------
-
-/**
- * The original encoder: `btoa(JSON.stringify(config))`. Kept only for tests and
- * to document the format; it throws on non-Latin-1 text, which is why it was
- * replaced.
- */
-export const encodeLegacyConfig = (config: ShareConfig): string => btoa(JSON.stringify(config));
 
 /**
  * Decode `?config=` exactly like the original (`JSON.parse(atob(str))`, so
@@ -106,15 +92,7 @@ export const decodeLegacyPayload = (value: string): DecodedPayload => {
   }
 };
 
-export const decodeLegacyConfig = (value: string): ShareConfig | null =>
-  asConfig(decodeLegacyPayload(value));
-
 // --- URL helpers ------------------------------------------------------------------
-
-export interface SharedLayoutLink {
-  config: ShareConfig;
-  legacy: boolean;
-}
 
 export const hasShareLink = (href: string): boolean => {
   const url = new URL(href);
@@ -122,21 +100,6 @@ export const hasShareLink = (href: string): boolean => {
   return (
     url.searchParams.has(LEGACY_QUERY_KEY) || hash.has(HASH_KEY_DEFLATE) || hash.has(HASH_KEY_PLAIN)
   );
-};
-
-/** Read a shared layout from a URL: the new fragment format first, then legacy `?config=`. */
-export const readShareLink = async (href: string): Promise<SharedLayoutLink | null> => {
-  const url = new URL(href);
-  if (url.hash) {
-    const config = await decodeShareFragment(url.hash);
-    if (config) return { config, legacy: false };
-  }
-  const legacy = url.searchParams.get(LEGACY_QUERY_KEY);
-  if (legacy) {
-    const config = decodeLegacyConfig(legacy);
-    if (config) return { config, legacy: true };
-  }
-  return null;
 };
 
 export type SharePayload =
@@ -175,7 +138,7 @@ export const stripShareLink = (href: string): string => {
 /** Build a share URL for `config` on top of `baseHref` (query/fragment replaced). */
 export const buildShareUrl = async (
   baseHref: string,
-  config: ShareConfig | readonly unknown[],
+  config: unknown,
   options?: { compress?: boolean },
 ): Promise<string> => {
   const url = new URL(stripShareLink(baseHref));

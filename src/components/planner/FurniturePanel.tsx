@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Plus, Sofa, Trash2, Unlock } from 'lucide-react';
 import { glowClass, useCardHighlight, type CardRef } from '../../hooks/useCardHighlight';
 import type { ItemWarning } from '../../core/geometry';
-import type { FurnitureItem, Id, RoomDims, Selection, UnitSystem } from '../../types';
+import type { PiecePatch } from '../../lib/plans';
+import type { Id, Item, RoomDims, Selection, UnitSystem } from '../../types';
 import { FurnitureCard } from './FurnitureCard';
 import { StepHeader } from './StepHeader';
 
@@ -11,7 +12,7 @@ interface FurniturePanelProps {
   expanded: boolean;
   onToggleExpanded: () => void;
   onActivate: () => void;
-  items: FurnitureItem[];
+  items: Item[];
   warnings: Map<Id, ItemWarning>;
   selection: Selection | null;
   isMobile: boolean;
@@ -22,7 +23,7 @@ interface FurniturePanelProps {
   /** Remove every piece of furniture (undoable). */
   onClearRoom: () => void;
   onSelectItem: (id: Id) => void;
-  onChangeItem: (id: Id, patch: Partial<FurnitureItem>, commit?: boolean) => void;
+  onChangeItem: (id: Id, patch: PiecePatch, commit?: boolean) => void;
   onCommit: () => void;
   onToggleLock: (id: Id) => void;
   onToggleVisibility: (id: Id) => void;

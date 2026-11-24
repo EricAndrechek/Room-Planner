@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { FileDown, ImageDown, LoaderCircle, Printer } from 'lucide-react';
 import { captureError, track } from '../../lib/analytics';
 import { defaultPaper, type Paper } from '../../lib/export/paper';
-import type { PlanInput } from '../../core/adapter/scene';
-import type { Layout, UnitSystem } from '../../types';
+import type { PlanInput } from '../../lib/export/exportPlan';
+import { doorsOf, mainRoom, shownPieces, windowsOf } from '../../lib/plans';
+import type { Plan, UnitSystem } from '../../types';
 import { Modal } from './Modal';
 
 type ExportModule = typeof import('../../lib/export/exportPlan');
@@ -28,7 +29,7 @@ const PAPER_OPTIONS: { value: Paper; label: string }[] = [
 interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  layout: Layout;
+  plan: Plan;
   unitSystem: UnitSystem;
   projectName: string;
 }
@@ -37,20 +38,14 @@ interface ExportModalProps {
  * "Export" dialog: download the plan as PNG or PDF, or print it. Also keeps a
  * clean, printable plan ready for the browser's own Print command.
  */
-export function ExportModal({
-  isOpen,
-  onClose,
-  layout,
-  unitSystem,
-  projectName,
-}: ExportModalProps) {
+export function ExportModal({ isOpen, onClose, plan, unitSystem, projectName }: ExportModalProps) {
   const [paper, setPaper] = useState<Paper>(() => defaultPaper(navigator.language));
   const [busy, setBusy] = useState<Action | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<PlanInput>({ layout, unitSystem, title: projectName });
+  const inputRef = useRef<PlanInput>({ plan, unitSystem, title: projectName });
   useEffect(() => {
-    inputRef.current = { layout, unitSystem, title: projectName };
-  }, [layout, unitSystem, projectName]);
+    inputRef.current = { plan, unitSystem, title: projectName };
+  }, [plan, unitSystem, projectName]);
 
   // Browser Print (Ctrl/Cmd+P, menu): swap the editor for the plan while printing.
   useEffect(() => {
@@ -73,9 +68,9 @@ export function ExportModal({
     const input: PlanInput = { ...inputRef.current, date: new Date() };
     const props = {
       units: unitSystem,
-      items: layout.items.filter((i) => i.visible !== false).length,
-      doors: layout.doors.length,
-      windows: layout.windows.length,
+      items: shownPieces(plan).length,
+      doors: doorsOf(mainRoom(plan)).length,
+      windows: windowsOf(mainRoom(plan)).length,
     };
     try {
       const m = await loadExport();

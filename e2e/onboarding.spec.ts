@@ -35,14 +35,16 @@ test('a fresh visitor sees a clean sample room, and can clear it and undo', asyn
 test('existing users keep their stored furniture', async ({ page }) => {
   await page.goto('/');
   await ready(page);
-  await page.evaluate(() =>
+  // Furniture stored by a v3 build, before this build first ran here.
+  await page.evaluate(() => {
+    localStorage.clear();
     localStorage.setItem(
       'room-sim-v3-items',
       JSON.stringify([
         { id: 9, label: 'Sofa', width: 6, height: 3, x: 1, y: 1, rotation: 0, color: '#93c5fd' },
       ]),
-    ),
-  );
+    );
+  });
   await page.reload();
   await ready(page);
   await expect(page.getByRole('button', { name: /^Sofa,/ })).toBeVisible();

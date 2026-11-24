@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WALL_FRAMES } from '../openings';
+import { WALL_FRAMES } from '../testing/v3/openings';
 import { drawingFrame, isRectangle, openingInFrame, outlineArea, wallFrame } from './walls';
 
 const rect = {

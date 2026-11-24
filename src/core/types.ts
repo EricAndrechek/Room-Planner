@@ -1,83 +1,19 @@
 /**
- * Domain types of the current (v3) document. All lengths are stored internally in FEET; unit
- * systems only affect display, parsing and the share/export format.
+ * Small shared types of core outside the plan document (whose types are inferred from the schema
+ * in schema.ts): display unit systems, and the four walls of a rectangular room with its size,
+ * which the rectangle helpers and the editor use.
  */
 
 export type UnitSystem = 'ft-in' | 'ft' | 'in' | 'm' | 'cm';
 
+/** The walls of a rectangular room, by name (walls 0 to 3 of its outline). */
 export type Wall = 'top' | 'right' | 'bottom' | 'left';
 
-/**
- * Door kinds. `swing-in`/`swing-out`: one hinged leaf; `double-in`/`double-out`: two leaves (French
- * doors); `sliding`: bypass/barn panels along the inside face; `pocket`: slides into the wall;
- * `bifold`: folds into the room towards the hinge side; `opening`: a doorway with no door.
- */
-export type DoorType =
-  | 'swing-in'
-  | 'swing-out'
-  | 'double-in'
-  | 'double-out'
-  | 'sliding'
-  | 'pocket'
-  | 'bifold'
-  | 'opening';
-
-/** How far a swing door opens: 90 (default) or 180 degrees (flat against the wall). */
-export type SwingAngle = 90 | 180;
-
-export type Hinge = 'left' | 'right';
-
-/** Entity ids are numbers (Date.now()) in practice, but imported data may contain strings. */
-export type Id = number | string;
-
+/** A rectangular room's interior size, in feet: `width` along x, `height` (its length) along y. */
 export interface RoomDims {
   width: number;
   height: number;
 }
 
-export interface Door {
-  id: Id;
-  width: number;
-  /** Offset from the start of the wall (left for top/bottom, top for left/right). */
-  position: number;
-  wall: Wall;
-  hinge: Hinge;
-  type: DoorType;
-  /** Swing doors only (single and double); missing means 90. */
-  swingAngle?: SwingAngle;
-  /** Legacy (v2) field kept when importing old single-door configs. */
-  open?: 'in' | 'out';
-}
-
-export interface RoomWindow {
-  id: Id;
-  width: number;
-  position: number;
-  wall: Wall;
-}
-
-export interface FurnitureItem {
-  id: Id;
-  label: string;
-  /** Size along the x axis before rotation. */
-  width: number;
-  /** Size along the y axis before rotation (shown as "Depth"). */
-  height: number;
-  /** Top-left corner of the un-rotated box. */
-  x: number;
-  y: number;
-  /** Degrees, clockwise (CSS convention). */
-  rotation: number;
-  /** Hex color, e.g. `#93c5fd`. */
-  color: string;
-  visible?: boolean;
-  locked?: boolean;
-}
-
-/** The undoable document: everything drawn on the canvas. */
-export interface Layout {
-  roomDims: RoomDims;
-  doors: Door[];
-  windows: RoomWindow[];
-  items: FurnitureItem[];
-}
+/** An entity id: the plan's ids are strings; snapping takes any stable key. */
+export type Id = number | string;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { track } from '../lib/analytics';
 import { requestPersistentStorageOnce } from '../lib/persist';
+import { withDoc } from '../lib/plans';
 import {
   createProject,
   defaultProjectName,
@@ -9,20 +10,22 @@ import {
   findProject,
   parseProjectsImport,
   renameProject,
-  updateProjectData,
+  updateProjectPlan,
 } from '../lib/projects';
-import { saveCurrentProjectId, saveProjects, type StorageLike } from '../lib/storage';
-import type { DesignMode, Layout, Project, ProjectData, SaveStatus, UnitSystem } from '../types';
+import type { PlanStore } from '../lib/storage';
+import type { DesignMode, LockedProject, Plan, Project, SaveStatus, UnitSystem } from '../types';
 
 export interface WorkingDoc {
-  layout: Layout;
+  plan: Plan;
   designMode: DesignMode;
   unitSystem: UnitSystem;
 }
 
 interface Options {
-  storage: StorageLike;
+  store: PlanStore;
   initialProjects: Project[];
+  /** Saved plans this build cannot open (listed only). */
+  initialLocked: LockedProject[];
   initialProjectId: string | null;
   initialSaved: boolean;
   initialSavedAt: Date | null;
@@ -32,12 +35,6 @@ interface Options {
 
 const AUTOSAVE_DELAY_MS = 500;
 
-const toProjectData = (doc: WorkingDoc): ProjectData => ({
-  ...doc.layout,
-  designMode: doc.designMode,
-  unitSystem: doc.unitSystem,
-});
-
 /**
  * Saved floor plans + autosave of the working document into the current one.
  *
@@ -45,21 +42,28 @@ const toProjectData = (doc: WorkingDoc): ProjectData => ({
  * reference) the snapshot last written. Any edit makes it unsaved and the
  * project is written 500ms after the last change; with no current project a
  * new one is created ("Floor Plan - <date>"), as the original app did.
+ *
+ * Every write merges with what is stored (lib/storage.ts), so the list here also picks up plans
+ * another tab saved meanwhile.
  */
 export function useProjects({
-  storage,
+  store,
   initialProjects,
+  initialLocked,
   initialProjectId,
   initialSaved,
   initialSavedAt,
   doc,
 }: Options) {
   const [projects, setProjectsState] = useState(initialProjects);
+  const [locked, setLocked] = useState(initialLocked);
   const projectsRef = useRef(initialProjects);
   const [currentProjectId, setCurrentProjectId] = useState(initialProjectId);
   const [saved, setSaved] = useState<WorkingDoc | null>(initialSaved ? doc : null);
   const [lastSavedAt, setLastSavedAt] = useState(initialSavedAt);
   const newProjectSource = useRef<string | null>(null);
+  /** Plans deleted here this session: a merge must not bring them back from storage. */
+  const deleted = useRef(new Set<string>());
 
   const docRef = useRef(doc);
   const currentIdRef = useRef(currentProjectId);
@@ -70,21 +74,24 @@ export function useProjects({
 
   const commitProjects = useCallback(
     (next: Project[]) => {
-      projectsRef.current = next;
-      saveProjects(storage, next);
+      const result = store.savePlans(next, deleted.current);
+      const current = currentIdRef.current;
+      const moved = current ? result.renamed.get(current) : undefined;
+      if (moved) {
+        currentIdRef.current = moved;
+        setCurrentProjectId(moved);
+      }
+      projectsRef.current = result.projects;
       void requestPersistentStorageOnce();
-      setProjectsState(next);
+      setProjectsState(result.projects);
+      setLocked(result.locked);
     },
-    [storage],
+    [store],
   );
-
-  useEffect(() => {
-    saveCurrentProjectId(storage, currentProjectId);
-  }, [storage, currentProjectId]);
 
   const dirty =
     !saved ||
-    saved.layout !== doc.layout ||
+    saved.plan !== doc.plan ||
     saved.designMode !== doc.designMode ||
     saved.unitSystem !== doc.unitSystem;
   const saveStatus: SaveStatus = dirty ? 'unsaved' : 'saved';
@@ -92,16 +99,25 @@ export function useProjects({
   /** Write the working document into the current project (creating one if needed). */
   const saveNow = useCallback(() => {
     const current = docRef.current;
-    const data = toProjectData(current);
     const now = new Date();
     const id = currentIdRef.current;
-    if (id && findProject(projectsRef.current, id)) {
-      commitProjects(updateProjectData(projectsRef.current, id, data, now));
+    const existing = id ? findProject(projectsRef.current, id) : undefined;
+    if (existing) {
+      const plan = withDoc(current.plan, existing.plan.name, current.unitSystem);
+      commitProjects(
+        updateProjectPlan(projectsRef.current, existing.id, plan, current.designMode, now),
+      );
     } else {
-      const project = createProject(defaultProjectName(now), data, now);
-      commitProjects([...projectsRef.current, project]);
+      const name = defaultProjectName(now);
+      const project = createProject(
+        name,
+        withDoc(current.plan, name, current.unitSystem),
+        now,
+        current.designMode,
+      );
       currentIdRef.current = project.id;
       setCurrentProjectId(project.id);
+      commitProjects([...projectsRef.current, project]);
       track('project_created', { source: newProjectSource.current ?? 'autosave' });
       newProjectSource.current = null;
     }
@@ -113,7 +129,7 @@ export function useProjects({
     if (!dirty) return;
     const timer = setTimeout(saveNow, AUTOSAVE_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [dirty, doc.layout, doc.designMode, doc.unitSystem, saveNow]);
+  }, [dirty, doc.plan, doc.designMode, doc.unitSystem, saveNow]);
 
   /** Make `project` current; `snapshot` is the document the editor now shows for it. */
   const select = useCallback((project: Project, snapshot: WorkingDoc) => {
@@ -133,15 +149,15 @@ export function useProjects({
 
   /** Save the working document as a new named project and make it current. */
   const createNamed = useCallback(
-    (
-      name: string,
-      source: string,
-      snapshot: WorkingDoc = docRef.current,
-      data?: ProjectData,
-    ): Project => {
-      const project = createProject(name, data ?? toProjectData(snapshot));
-      commitProjects([...projectsRef.current, project]);
+    (name: string, source: string, snapshot: WorkingDoc = docRef.current): Project => {
+      const project = createProject(
+        name,
+        withDoc(snapshot.plan, name, snapshot.unitSystem),
+        new Date(),
+        snapshot.designMode,
+      );
       select(project, snapshot);
+      commitProjects([...projectsRef.current, project]);
       track('project_created', { source });
       return project;
     },
@@ -171,6 +187,7 @@ export function useProjects({
 
   const remove = useCallback(
     (ids: string[]) => {
+      for (const id of ids) deleted.current.add(id);
       commitProjects(deleteProjects(projectsRef.current, ids));
       if (currentIdRef.current && ids.includes(currentIdRef.current)) {
         // Like the original: the working layout stays; the next edit autosaves it as a new plan.
@@ -195,6 +212,7 @@ export function useProjects({
 
   return {
     projects,
+    locked,
     currentProjectId,
     currentProject: findProject(projects, currentProjectId),
     saveStatus,

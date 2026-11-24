@@ -12,7 +12,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import { feetToDisplay } from '../../core/units';
-import type { Project, UnitSystem } from '../../types';
+import { mainRoom, roomSize } from '../../lib/plans';
+import type { LockedProject, Project, UnitSystem } from '../../types';
 import type { NewPlanStart } from '../../hooks/useProjectActions';
 import { NewerPlanError } from '../../lib/planVersion';
 import { Modal } from './Modal';
@@ -23,6 +24,8 @@ interface FileBrowserModalProps {
   isOpen: boolean;
   onClose: () => void;
   projects: Project[];
+  /** Saved plans this build cannot open (made by a newer Room Planner): listed only. */
+  locked?: LockedProject[];
   currentProjectId: string | null;
   unitSystem: UnitSystem;
   /** Start a new plan (from the sample, or blank); the current one stays in the list. */
@@ -40,6 +43,7 @@ interface FileBrowserModalProps {
 /** "My Floor Plans": open, rename, duplicate, delete, export and import saved plans. */
 export function FileBrowserModal(props: FileBrowserModalProps) {
   const { isOpen, projects, currentProjectId, unitSystem } = props;
+  const locked = props.locked ?? [];
   const [selected, setSelected] = useState<string[]>([]);
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
   const [importText, setImportText] = useState('');
@@ -161,7 +165,7 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
 
         {/* Project List */}
         <div className="space-y-2 max-h-64 overflow-y-auto">
-          {projects.length === 0 ? (
+          {projects.length === 0 && locked.length === 0 ? (
             <div className="text-center py-8 text-slate-500">
               <FileText className="w-10 h-10 mx-auto mb-2 opacity-50" />
               <p className="text-sm">No saved floor plans yet</p>
@@ -171,6 +175,8 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
             projects.map((project) => {
               const isSelected = selectedIds.includes(project.id);
               const isEditing = editing?.id === project.id;
+              const name = project.plan.name;
+              const size = roomSize(mainRoom(project.plan));
               return (
                 <div
                   key={project.id}
@@ -213,7 +219,7 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
                       <>
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium text-slate-800 truncate min-w-0">
-                            {project.name}
+                            {name}
                           </span>
                           {project.id === currentProjectId && (
                             <span className="shrink-0 text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-sm font-medium">
@@ -222,12 +228,10 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
                           )}
                         </div>
                         <div className="text-[10px] text-slate-600 mt-0.5">
-                          {project.data?.roomDims && (
-                            <span>
-                              {feetToDisplay(project.data.roomDims.width, unitSystem)} ×{' '}
-                              {feetToDisplay(project.data.roomDims.height, unitSystem)}
-                            </span>
-                          )}
+                          <span>
+                            {feetToDisplay(size.width, unitSystem)} ×{' '}
+                            {feetToDisplay(size.height, unitSystem)}
+                          </span>
                           <span className="mx-1">•</span>
                           <span>{new Date(project.updatedAt).toLocaleDateString()}</span>
                         </div>
@@ -245,7 +249,7 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
                           setSelected([]);
                         }}
                         className="p-1.5 hover:bg-slate-100 rounded-sm text-slate-500 hover:text-indigo-600 transition-colors"
-                        aria-label={`Open ${project.name}`}
+                        aria-label={`Open ${name}`}
                       >
                         <FolderOpen className="w-4 h-4" />
                       </button>
@@ -255,10 +259,10 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setEditing({ id: project.id, name: project.name });
+                          setEditing({ id: project.id, name });
                         }}
                         className="p-1.5 hover:bg-slate-100 rounded-sm text-slate-500 hover:text-slate-700 transition-colors"
-                        aria-label={`Rename ${project.name}`}
+                        aria-label={`Rename ${name}`}
                       >
                         <Edit3 className="w-4 h-4" />
                       </button>
@@ -271,7 +275,7 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
                           props.onDuplicate([project.id]);
                         }}
                         className="p-1.5 hover:bg-slate-100 rounded-sm text-slate-500 hover:text-slate-700 transition-colors"
-                        aria-label={`Duplicate ${project.name}`}
+                        aria-label={`Duplicate ${name}`}
                       >
                         <CopyIcon className="w-4 h-4" />
                       </button>
@@ -281,10 +285,10 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (confirm(`Delete "${project.name}"?`)) props.onDelete([project.id]);
+                          if (confirm(`Delete "${name}"?`)) props.onDelete([project.id]);
                         }}
                         className="p-1.5 hover:bg-red-50 rounded-sm text-slate-500 hover:text-red-600 transition-colors"
-                        aria-label={`Delete ${project.name}`}
+                        aria-label={`Delete ${name}`}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -294,6 +298,28 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
               );
             })
           )}
+          {locked.map((plan, i) => (
+            // A plan saved by a newer Room Planner: kept exactly as it is, opened after an update.
+            <div
+              key={plan.id ?? `locked-${i}`}
+              className="flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-1 p-3 rounded-lg border border-dashed border-slate-300 bg-slate-50"
+              data-testid="locked-project-row"
+            >
+              <div className="flex-1 min-w-[9rem]">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-slate-600 truncate min-w-0">
+                    {plan.name}
+                  </span>
+                  <span className="shrink-0 text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-sm font-medium">
+                    Needs update
+                  </span>
+                </div>
+                <div className="text-[10px] text-slate-600 mt-0.5">
+                  Saved by a newer version of Room Planner. Update the app to open it.
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
 
         {/* Import Section */}

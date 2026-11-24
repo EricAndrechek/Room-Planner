@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { INITIAL_DOORS, INITIAL_ITEMS, INITIAL_ROOM, INITIAL_WINDOWS } from './constants';
+import { loadPlan } from '../core/load';
+import {
+  INITIAL_DOORS,
+  INITIAL_ITEMS,
+  INITIAL_ROOM,
+  INITIAL_WINDOWS,
+} from '../core/testing/v3/constants';
+import type { Layout } from '../core/testing/v3/types';
 import {
   cycleDetent,
   detentHeights,
@@ -9,6 +16,12 @@ import {
   snapDetent,
   stepDetent,
 } from './sheet';
+
+const toPlan = (layout: Layout) => {
+  const r = loadPlan(layout, 'strict', { lengthsInFeet: true });
+  if (!r.ok) throw new Error(JSON.stringify(r));
+  return r.plan;
+};
 
 const heights = { peek: 70, half: 380, full: 790 };
 
@@ -82,36 +95,46 @@ describe('remembered detent', () => {
 });
 
 describe('sheetSummary', () => {
-  const layout = {
+  const layout = toPlan({
     roomDims: INITIAL_ROOM,
     items: INITIAL_ITEMS,
     doors: INITIAL_DOORS,
     windows: INITIAL_WINDOWS,
-  };
+  });
+  const room = layout.rooms[0]!;
+  const noOpenings = (openings: typeof room.openings) => ({
+    ...layout,
+    rooms: [{ ...room, openings }],
+  });
   it('names the active step', () => {
     expect(sheetSummary(layout, 'room-setup', null, 'ft-in')).toBe(
       `1. Room · 12' × 12' · 1 door · 1 window`,
     );
     expect(sheetSummary(layout, 'furniture', null, 'ft-in')).toBe('2. Items · 6 pieces');
-    expect(sheetSummary({ ...layout, items: [], doors: [] }, 'furniture', null, 'ft-in')).toBe(
-      '2. Items · no furniture yet',
-    );
-    expect(sheetSummary({ ...layout, doors: [], windows: [] }, 'room-setup', null, 'm')).toMatch(
+    expect(
+      sheetSummary(
+        { ...noOpenings(room.openings.filter((o) => o.kind === 'window')), items: [] },
+        'furniture',
+        null,
+        'ft-in',
+      ),
+    ).toBe('2. Items · no furniture yet');
+    expect(sheetSummary(noOpenings([]), 'room-setup', null, 'm')).toMatch(
       /^1\. Room · [\d.]+ m × [\d.]+ m$/,
     );
   });
   it('or the selected piece, door or window', () => {
-    expect(sheetSummary(layout, 'furniture', { type: 'item', id: 6 }, 'ft-in')).toBe(
+    expect(sheetSummary(layout, 'furniture', { type: 'item', id: 'item-6' }, 'ft-in')).toBe(
       `Chair · 1'6" × 1'6"`,
     );
-    expect(sheetSummary(layout, 'room-setup', { type: 'door', id: 1 }, 'ft-in')).toBe(
+    expect(sheetSummary(layout, 'room-setup', { type: 'door', id: 'door-1' }, 'ft-in')).toBe(
       'Door 1 · bottom wall',
     );
-    expect(sheetSummary(layout, 'room-setup', { type: 'window', id: 1 }, 'ft-in')).toBe(
+    expect(sheetSummary(layout, 'room-setup', { type: 'window', id: 'window-1' }, 'ft-in')).toBe(
       'Window 1 · top wall',
     );
     // A selection that no longer exists falls back to the step.
-    expect(sheetSummary(layout, 'furniture', { type: 'item', id: 99 }, 'ft-in')).toBe(
+    expect(sheetSummary(layout, 'furniture', { type: 'item', id: 'item-99' }, 'ft-in')).toBe(
       '2. Items · 6 pieces',
     );
   });
