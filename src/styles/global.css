@@ -199,6 +199,21 @@ summary:focus-visible {
 }
 
 /*
+ * Touch screens: form fields render at 16px at least, or iOS Safari zooms the whole page in when one
+ * is focused (and leaves it zoomed). Unlayered, so it beats the text-xs/text-sm utilities; the line
+ * height is set too, so a field grows by a pixel or two rather than by the utility's ratio. Page
+ * zoom itself stays allowed (no maximum-scale / user-scalable=no in the viewport tag).
+ */
+@media (pointer: coarse) {
+  html.app input:not([type='color'], [type='checkbox'], [type='radio'], [type='range']),
+  html.app select,
+  html.app textarea {
+    font-size: 16px;
+    line-height: 1.25;
+  }
+}
+
+/*
  * Printing: the export module (src/lib/export/exportPlan.ts) puts a clean SVG floor plan
  * into #print-plan and sets html.printing-plan (on the Print button and on `beforeprint`,
  * so the browser's own Print menu works too). Print only that, never the editor.
