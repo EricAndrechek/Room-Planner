@@ -91,39 +91,47 @@ there. `MCP_SHOTS_DIR=<dir>` saves screenshots of the plan viewer.
 
 `server.json` (repository root) is the MCP Registry entry and the one source of the MCP server's
 identity: the Worker's `initialize` serverInfo and its server card read their name, version, title,
-description, website and icons from it. To release, bump `version` in `server.json` in a PR.
-After the merge, `.github/workflows/mcp-registry.yml` validates it, skips a version the registry
-already has, waits until `https://room-planner.andrechek.com/mcp/server-card` serves the new
-version (Workers Builds deploys first), then logs in with GitHub OIDC (`id-token: write`, no
-secrets; the registry grants `io.github.EricAndrechek/*` to this repository's workflows) and
-publishes. Nothing is manual, including the first publish. `workflow_dispatch` reruns it. On
-PRs the workflow only validates. `mcp-publisher` is pinned to a release and its SHA-256 is
-checked; to upgrade, change both from that release's `registry_<version>_checksums.txt`.
+description, website and icons from it. It is published as `com.andrechek.room-planner/mcp`. To
+release, bump `version` in `server.json` in a PR. After the merge,
+`.github/workflows/mcp-registry.yml` validates it, skips a version the registry already has,
+waits until `https://room-planner.andrechek.com/mcp/server-card` serves the new version
+(Workers Builds deploys first) and until
+`https://room-planner.andrechek.com/.well-known/mcp-registry-auth` serves exactly the committed
+`public/.well-known/mcp-registry-auth`, then logs in over HTTP and publishes. Nothing is manual,
+including the first publish. `workflow_dispatch` reruns it. On PRs the workflow validates
+`server.json` and checks offline that the secret is the private half of the committed record
+(`scripts/registry-key.mjs`, which prints neither; secrets are not given to forks' PRs, so there
+it skips). `mcp-publisher` has no dry-run login, and the registry fetches the record from
+production, so a PR cannot test the login itself. `mcp-publisher` is pinned to a release and its
+SHA-256 is checked; to upgrade, change both from that release's `registry_<version>_checksums.txt`.
 
-A domain name instead: the owner approved `com.andrechek.room-planner/mcp`, verified over HTTP on
-`room-planner.andrechek.com` (the registry grants exactly `com.andrechek.room-planner/*` to that
-domain; no DNS change). It needs a private key that only the owner may store, so these steps are
-the owner's:
+The login proves the domain: the registry fetches the record from `room-planner.andrechek.com`
+(from Google Cloud, `Accept: text/plain`, no redirects followed) and grants exactly
+`com.andrechek.room-planner/*`. No DNS record is involved. The record is a static asset
+(`text/plain` by `public/_headers`), so serving it never invokes the Worker, and the service worker
+neither precaches it (only html, js, css and images) nor answers `/.well-known/`.
 
-1. Generate an Ed25519 key pair (OpenSSL 3 or later):
-   `openssl genpkey -algorithm Ed25519 -out key.pem`.
-2. Write the public half to `public/.well-known/mcp-registry-auth`:
-   `echo "v=MCPv1; k=ed25519; p=$(openssl pkey -in key.pem -pubout -outform DER | tail -c 32 | base64)" > public/.well-known/mcp-registry-auth`.
-   It is a static asset: served as is, with no Worker invocation; the service worker does not
-   precache it (only html, js, css and images) and never answers `/.well-known/`.
-3. Store the private half (hex) as the repository secret `MCP_REGISTRY_PRIVATE_KEY`:
+The key exists: the public half is committed in `public/.well-known/mcp-registry-auth`, the
+private half (Ed25519, hex) is the repository secret `MCP_REGISTRY_PRIVATE_KEY`, and the owner
+keeps a copy in the gitignored `.env` at the repository root. Never commit or print it.
+
+To rotate the key (the owner's step; OpenSSL 3 or later):
+
+1. `openssl genpkey -algorithm Ed25519 -out key.pem`
+2. Replace the record with the new public half:
+   `echo "v=MCPv1; k=ed25519; p=$(openssl pkey -in key.pem -pubout -outform DER | tail -c 32 | base64)" > public/.well-known/mcp-registry-auth`
+3. Store the new private half (hex) as the secret, and update the `.env` copy:
    `openssl pkey -in key.pem -noout -text | sed -n '/priv:/,/pub:/p' | sed '1d;$d' | tr -d ' :\n' | gh secret set MCP_REGISTRY_PRIVATE_KEY -R EricAndrechek/Room-Planner`
-   (and, if wanted, a copy in the gitignored `.env`), then delete `key.pem`.
-4. Change `name` in `server.json` to `com.andrechek.room-planner/mcp` and the AI Catalog
-   identifier to match, and in the workflow replace the OIDC login with
-   `./mcp-publisher login http --domain room-planner.andrechek.com --private-key "$MCP_REGISTRY_PRIVATE_KEY"`
-   (`env: MCP_REGISTRY_PRIVATE_KEY: ${{ secrets.MCP_REGISTRY_PRIVATE_KEY }}`), after a step that
-   waits until `https://room-planner.andrechek.com/.well-known/mcp-registry-auth` serves the record
-   (the registry fetches it from Google Cloud with `Accept: text/plain`; redirects fail).
-5. Optionally mark the `io.github` entry deprecated with `mcp-publisher status`.
+   Then delete `key.pem`.
+4. Open a PR with the new record. Its key check fails until the secret matches. Merge it. The
+   next publish waits for production to serve the new record. Only a publish uses the key, so a
+   rotation between releases changes nothing that is already published.
 
-The workflow carries these lines in a comment. GitHub OIDC (`io.github.EricAndrechek/*`) stays
-the fallback that needs no secret.
+If the key is lost or the domain is unavailable, the fallback needs no secret: GitHub OIDC grants
+`io.github.EricAndrechek/*` to this repository's workflows. Rename `server.json` to
+`io.github.EricAndrechek/room-planner` (with the AI Catalog identifier and `/agents/`), add
+`id-token: write` to the publish job, and log in with `./mcp-publisher login github-oidc`. That
+is a new registry entry, not a rename of the existing one.
 
 ### MCP analytics
 

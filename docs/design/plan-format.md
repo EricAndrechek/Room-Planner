@@ -854,9 +854,11 @@ supportedProtocolVersions }`, which lists 2026-07-28 and the 2025-era revisions.
 - `llms.txt` gains an "For AI agents" section with the endpoint and one line per tool.
 - A page `/agents/` explains how to add the server to a client and repeats the privacy statement.
 - The official MCP Registry gets a `server.json` (repository root) named
-  `io.github.EricAndrechek/room-planner`: the registry grants `io.github.<owner>/*` with the GitHub
-  owner's own capitals and matches the prefix case-sensitively, so the lower-case name first
-  written here would be refused. `server.json` is the one source of the server's identity: name,
+  `com.andrechek.room-planner/mcp`, a name the owner approved, proven over HTTP: the registry
+  fetches the public key at `/.well-known/mcp-registry-auth` on `room-planner.andrechek.com` and
+  grants exactly `com.andrechek.room-planner/*` (no DNS change). The record is a static
+  `text/plain` asset, so it never invokes the Worker, and the service worker neither precaches nor
+  answers it. `server.json` is the one source of the server's identity: name,
   version (its own, starting at 1.0.0, not the site's), title, a description within the
   registry's 100 characters, `websiteUrl` (`/agents/`), `repository`, icons (the brand SVG, and
   PNGs at 192 and 512 px, absolute https URLs with `mimeType` and `sizes`; the indigo tile reads
@@ -864,16 +866,14 @@ supportedProtocolVersions }`, which lists 2026-07-28 and the 2025-era revisions.
   server card read the same fields, and a unit test checks all three agree.
 - **Publishing is automatic** (`.github/workflows/mcp-registry.yml`): a merge that bumps
   `server.json`'s `version` is validated, skipped if the registry has that version, held until
-  production's server card serves it, then published with `mcp-publisher login github-oidc` (no
-  secrets; the registry derives the namespace from the OIDC token's `repository_owner`, so the
-  first publish needs no manual login). `mcp-publisher` is pinned (v1.8.8) and checksum-verified.
-  Pull requests run `mcp-publisher validate`. The owner approved the domain name
-  `com.andrechek.room-planner/mcp`, verified over HTTP (a public key at
-  `/.well-known/mcp-registry-auth` on `room-planner.andrechek.com`, which the registry grants
-  exactly `com.andrechek.room-planner/*`; no DNS change). Storing its private key as a repository
-  secret is the owner's step, so PR 4 keeps the OIDC name; the switch is the key file, the `name`
-  and the workflow's login step (docs/DEPLOY.md lists the commands; the workflow carries them in
-  a comment). GitHub OIDC stays the fallback.
+  production's server card serves it and production serves exactly the committed proof record,
+  then published with `mcp-publisher login http` and the `MCP_REGISTRY_PRIVATE_KEY` secret (the
+  first publish needs no manual login either). `mcp-publisher` is pinned (v1.8.8) and
+  checksum-verified. Pull requests run `mcp-publisher validate` and check offline that the secret
+  is the private half of the committed record (skipped on forks, which get no secrets). Key
+  rotation is in docs/DEPLOY.md. The fallback that needs no secret is GitHub OIDC under
+  `io.github.EricAndrechek/room-planner` (the registry grants `io.github.<owner>/*` with the
+  owner's own capitals, case-sensitively), a separate entry.
 
 ### Privacy statement
 
@@ -1139,8 +1139,10 @@ Each has a recommendation. The first was the owner's decision and is settled.
     last, behind feature detection, in its own chunk; re-check the API when PR 10 starts.
 12. **The MCP spec moves.** 2026-07-28 removed sessions and the handshake. Recommendation: stay on
     the official SDK's `createMcpHandler`, which serves both eras, and pin its version.
-13. **Registry listing** uses the owner's GitHub identity. Recommendation: the owner runs
-    `mcp-publisher` once after PR 4; nothing in the plan waits for it.
+13. **Registry listing** depends on a signing key the owner holds (a repository secret).
+    Recommendation: the workflow publishes on merge and checks the key on every PR; if the key is
+    lost, rotate it (docs/DEPLOY.md) or fall back to GitHub OIDC; nothing in the plan waits for
+    it.
 
 ## 12. Spikes
 

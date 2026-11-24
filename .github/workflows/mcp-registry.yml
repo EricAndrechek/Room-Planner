@@ -1,18 +1,26 @@
 name: MCP Registry
 
-# Publishes the MCP server (server.json) to the official MCP Registry, with no manual step: GitHub
-# OIDC proves the repository owner, so the registry grants io.github.EricAndrechek/*. Advisory
+# Publishes the MCP server (server.json) to the official MCP Registry as
+# com.andrechek.room-planner/mcp, with no manual step. The name is proven over HTTP: the registry
+# fetches public/.well-known/mcp-registry-auth from room-planner.andrechek.com and checks it
+# against a signature made with the MCP_REGISTRY_PRIVATE_KEY secret (docs/DEPLOY.md). Advisory
 # only: not a required check (the ruleset requires just `ci`). Never name a job `ci`.
 #
 # A release is a bump of `version` in server.json (the one source: the Worker's serverInfo and
 # server card read it). On main, the job skips a version the registry already has, waits until
-# production serves that version, then publishes. On pull requests it validates server.json.
+# production serves that version and the committed proof record, then publishes. On pull
+# requests it validates server.json and checks that the secret matches the committed record.
 on:
   push:
     branches: [main]
-    paths: ['server.json', 'worker/**', '.github/workflows/mcp-registry.yml']
+    paths: &paths
+      - 'server.json'
+      - 'worker/**'
+      - 'public/.well-known/mcp-registry-auth'
+      - 'scripts/registry-key.mjs'
+      - '.github/workflows/mcp-registry.yml'
   pull_request:
-    paths: ['server.json', 'worker/**', '.github/workflows/mcp-registry.yml']
+    paths: *paths
   workflow_dispatch:
 
 permissions:
@@ -27,7 +35,9 @@ env:
   MCP_PUBLISHER_VERSION: v1.8.8
   MCP_PUBLISHER_SHA256: 09f1fa70ee146b640584274a1a6b2b8a0310b05d4321fa9224e6df6a016d67f4
   REGISTRY: https://registry.modelcontextprotocol.io
+  DOMAIN: room-planner.andrechek.com
   SERVER_CARD: https://room-planner.andrechek.com/mcp/server-card
+  PROOF_URL: https://room-planner.andrechek.com/.well-known/mcp-registry-auth
 
 jobs:
   validate:
@@ -51,6 +61,13 @@ jobs:
       - name: Validate server.json
         run: ./mcp-publisher validate server.json
 
+      # Offline: derives the public record from the secret and compares it with the committed
+      # file, printing neither. Secrets are not given to a fork's pull request; it then skips.
+      - name: Check the signing key matches the committed proof record
+        env:
+          MCP_REGISTRY_PRIVATE_KEY: ${{ secrets.MCP_REGISTRY_PRIVATE_KEY }}
+        run: node scripts/registry-key.mjs
+
   publish:
     name: publish
     if: github.event_name != 'pull_request'
@@ -58,7 +75,6 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      id-token: write # GitHub OIDC login to the registry
     steps:
       - uses: actions/checkout@v7
 
@@ -113,16 +129,35 @@ jobs:
           echo "::error::Production did not serve ${VERSION} within 20 minutes; not publishing."
           exit 1
 
-      # The namespace follows the login: GitHub OIDC grants io.github.EricAndrechek/*. The approved
-      # domain name, com.andrechek.room-planner/mcp, logs in over HTTP instead (docs/DEPLOY.md):
-      #   - name: Wait for the registry proof record
-      #     run: until curl -sf -H 'Accept: text/plain' https://room-planner.andrechek.com/.well-known/mcp-registry-auth | grep -q 'v=MCPv1'; do sleep 20; done
-      #   - name: Log in with HTTP domain verification
-      #     env: { MCP_REGISTRY_PRIVATE_KEY: '${{ secrets.MCP_REGISTRY_PRIVATE_KEY }}' }
-      #     run: ./mcp-publisher login http --domain room-planner.andrechek.com --private-key "$MCP_REGISTRY_PRIVATE_KEY"
-      - name: Log in with GitHub OIDC
+      - name: Wait for production to serve the committed proof record
         if: steps.published.outputs.already == 'false'
-        run: ./mcp-publisher login github-oidc
+        run: |
+          # The registry fetches it the same way (Accept: text/plain, no redirects followed).
+          for i in $(seq 1 60); do
+            if curl --silent --fail --max-redirs 0 -H 'Accept: text/plain' -A 'mcp-registry/1.0' \
+                "${PROOF_URL}" | diff -q - public/.well-known/mcp-registry-auth > /dev/null; then
+              echo "production serves the committed proof record"; exit 0
+            fi
+            echo "waiting for ${PROOF_URL} to match the committed file (${i}/60)"
+            sleep 20
+          done
+          echo "::error::${PROOF_URL} does not serve the committed record; not publishing."
+          exit 1
+
+      - name: Check the signing key matches the committed proof record
+        if: steps.published.outputs.already == 'false'
+        env:
+          MCP_REGISTRY_PRIVATE_KEY: ${{ secrets.MCP_REGISTRY_PRIVATE_KEY }}
+        run: node scripts/registry-key.mjs
+
+      # HTTP domain verification grants exactly com.andrechek.room-planner/*. Fallback without a
+      # secret: rename server.json to io.github.EricAndrechek/room-planner and log in with
+      # `./mcp-publisher login github-oidc`, with `id-token: write` added to this job's permissions.
+      - name: Log in with HTTP domain verification
+        if: steps.published.outputs.already == 'false'
+        env:
+          MCP_REGISTRY_PRIVATE_KEY: ${{ secrets.MCP_REGISTRY_PRIVATE_KEY }}
+        run: ./mcp-publisher login http --domain "${DOMAIN}" --private-key "${MCP_REGISTRY_PRIVATE_KEY}"
 
       - name: Publish
         if: steps.published.outputs.already == 'false'
