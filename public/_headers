@@ -56,6 +56,11 @@
 /*.html
   Cache-Control: no-cache
 
+# MCP Registry domain proof (docs/DEPLOY.md): the public key the registry checks over HTTP.
+/.well-known/mcp-registry-auth
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: no-cache
+
 # Discovery (docs/design/plan-format.md, section 7): the AI Catalog points at the MCP server card.
 /.well-known/ai-catalog.json
   Content-Type: application/ai-catalog+json

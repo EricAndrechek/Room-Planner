@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { viewerHtml } from '../scripts/build-viewer.mjs';
@@ -423,6 +424,17 @@ test.describe('the /mcp endpoint', () => {
     expect(home.headers()['content-security-policy']).toContain("default-src 'self'");
     const catalog = await request.get('/.well-known/ai-catalog.json');
     expect(catalog.headers()['content-type']).toContain('application/ai-catalog+json');
+  });
+
+  // The registry fetches the proof with Accept: text/plain and follows no redirects.
+  test('serves the MCP Registry proof as plain text, as committed', async ({ request }) => {
+    const proof = await request.get('/.well-known/mcp-registry-auth', {
+      headers: { Accept: 'text/plain', 'User-Agent': 'mcp-registry/1.0' },
+      maxRedirects: 0,
+    });
+    expect(proof.status()).toBe(200);
+    expect(proof.headers()['content-type']).toMatch(/^text\/plain/);
+    expect(await proof.text()).toBe(readFileSync('public/.well-known/mcp-registry-auth', 'utf8'));
   });
 
   // Last: it uses up this address's allowance for a minute. Sequential, so the requests share a

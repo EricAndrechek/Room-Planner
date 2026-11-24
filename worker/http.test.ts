@@ -305,7 +305,7 @@ describe('HTTP', () => {
       description: string;
       remotes: { url: string; supportedProtocolVersions: string[] }[];
     };
-    expect(card.name).toBe('io.github.EricAndrechek/room-planner');
+    expect(card.name).toBe('com.andrechek.room-planner/mcp');
     expect(card.description.length).toBeLessThanOrEqual(100);
     expect(card.remotes[0]!.url).toBe(`${ORIGIN}/mcp`);
     expect(

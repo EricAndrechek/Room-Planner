@@ -1,4 +1,5 @@
 import type { APIRoute } from 'astro';
+import registry from '../../server.json';
 import { GUIDES, guidePath } from '../lib/guides';
 import { DEFAULT_DESCRIPTION, FEATURES, MCP_PATH, MCP_PRIVACY, SITE_NAME } from '../lib/site';
 
@@ -45,7 +46,7 @@ Room Planner has a free remote MCP server (Streamable HTTP, no authentication): 
 - \`check_layout\`: overlapping pieces, pieces outside the room, blocked doors and tight clearances, without a link.
 - \`read_plan\`: the plan in a Room Planner link, to edit and send back to create_plan.
 
-${MCP_PRIVACY} Server card: ${url(`${MCP_PATH}/server-card`)}
+${MCP_PRIVACY} Server card: ${url(`${MCP_PATH}/server-card`)}. MCP Registry: \`${registry.name}\`.
 
 ## Guides
 

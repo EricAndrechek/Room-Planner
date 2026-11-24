@@ -52,7 +52,7 @@ A powerful, intuitive tool for planning room layouts with furniture, doors, and 
 
 ### 🤖 For AI Assistants
 
-- **MCP Server** - `https://room-planner.andrechek.com/mcp`: Claude, ChatGPT, VS Code, Cursor and other MCP apps can lay out a room, check it and hand you an edit link; apps with MCP Apps show the plan in the chat. Free, no account; listed in the [MCP Registry](https://registry.modelcontextprotocol.io) as `io.github.EricAndrechek/room-planner`. See [/agents/](https://room-planner.andrechek.com/agents/)
+- **MCP Server** - `https://room-planner.andrechek.com/mcp`: Claude, ChatGPT, VS Code, Cursor and other MCP apps can lay out a room, check it and hand you an edit link; apps with MCP Apps show the plan in the chat. Free, no account; listed in the [MCP Registry](https://registry.modelcontextprotocol.io) as `com.andrechek.room-planner/mcp`. See [/agents/](https://room-planner.andrechek.com/agents/)
 
 ### 🎯 Smart Feedback
 
@@ -191,7 +191,8 @@ The public site URL used for canonical links, Open Graph tags, the sitemap and
 - `/llms.txt` (`src/pages/llms.txt.ts`) and `/llms-full.txt` (built from the rendered HTML by
   `scripts/llms-full.mjs`) for AI assistants.
 - The MCP server (`worker/`, on `/mcp`; how to connect: `/agents/`), its server card
-  (`/mcp/server-card`), `/.well-known/ai-catalog.json`, and `server.json`, the MCP Registry entry.
+  (`/mcp/server-card`), `/.well-known/ai-catalog.json`, and `server.json`, the MCP Registry entry
+  (`com.andrechek.room-planner/mcp`, proven by `/.well-known/mcp-registry-auth`).
   Merging a `version` bump in `server.json` publishes it to the registry
   (`.github/workflows/mcp-registry.yml`; [docs/DEPLOY.md](docs/DEPLOY.md)).
 - Sitemap `<lastmod>` comes from git (`scripts/lastmod.mjs`). After a production deploy,

@@ -3,6 +3,7 @@
  * /agents/: the MCP server for AI assistants (docs/design/plan-format.md, section 7): what it
  * does, how to add it to each client, example prompts, privacy and limits.
  */
+import registry from '../../server.json';
 import Content from '../layouts/Content.astro';
 import { withBase } from '../lib/paths';
 import { MCP_PATH, MCP_PRIVACY, SITE_NAME } from '../lib/site';
@@ -135,8 +136,7 @@ const code = 'block bg-slate-900 text-slate-100 rounded-lg p-3 text-sm overflow-
         <a href="https://registry.modelcontextprotocol.io" class="text-indigo-700 underline">
           MCP Registry
         </a>{' '}
-        as <code>io.github.EricAndrechek/room-planner</code>, so apps that browse the registry can
-        add it by name.
+        as <code>{registry.name}</code>, so apps that browse the registry can add it by name.
       </p>
 
       <h3>Other apps</h3>
