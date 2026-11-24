@@ -97,7 +97,7 @@ export function SelectionToolbar({
             key={a.key}
             type="button"
             onClick={a.run}
-            className={`flex items-center justify-center gap-1.5 min-h-11 px-1 rounded-xl text-xs font-medium transition-colors active:scale-95 ${
+            className={`flex flex-col items-center justify-center gap-0.5 min-h-12 px-1 py-1 rounded-xl text-[11px] leading-tight font-medium transition-colors active:scale-95 ${
               a.danger
                 ? 'text-red-700 hover:bg-red-50 active:bg-red-50'
                 : 'text-slate-700 hover:bg-white active:bg-white'
@@ -106,7 +106,7 @@ export function SelectionToolbar({
             data-action={a.key}
           >
             {a.icon}
-            <span className="truncate">{a.key === 'rotate' ? 'Rotate' : a.label}</span>
+            <span className="whitespace-nowrap">{a.key === 'rotate' ? 'Rotate' : a.label}</span>
           </button>
         ))}
       </div>
