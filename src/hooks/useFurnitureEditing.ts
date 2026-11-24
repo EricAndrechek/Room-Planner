@@ -29,13 +29,18 @@ import {
   toggleLock as toggleLockEdit,
 } from '../lib/edits';
 import { boxOf, mainRoom, roomSize, snapPieces, type PiecePatch } from '../lib/plans';
+import { roomSnapLines } from '../core/geometry/corners';
+import { isRectangle } from '../core/geometry/walls';
 import { addItem as addItemOp } from '../core/ops';
-import type { Id, Item, Plan } from '../types';
+import type { Id, Item, Plan, Room } from '../types';
 import { nextCardSeq, type CardRef } from './useCardHighlight';
 import type { History } from './useHistory';
 import type { usePointerDrag } from './usePointerDrag';
 import type { useRotationDrag } from './useRotationDrag';
 import type { useSelection } from './useSelection';
+
+/** A room that is not a rectangle snaps pieces to its own walls (a rectangle to its four). */
+const roomLines = (room: Room) => (isRectangle(room) ? undefined : roomSnapLines(room));
 
 /** A press that moves less than this (px) and is let go is a tap (it may still nudge the piece). */
 const TAP_SLOP_PX = 8;
@@ -155,7 +160,12 @@ export function useFurnitureEditing({
       let said = '';
       if (snap && snapRef.current) {
         const threshold = thresholdFeet(SNAP_THRESHOLD_PX, zoomRef.current, PIXELS_PER_UNIT);
-        const candidates = buildSnapCandidates(snapPieces(p), roomSize(mainRoom(p)), id);
+        const candidates = buildSnapCandidates(
+          snapPieces(p),
+          roomSize(mainRoom(p)),
+          id,
+          roomLines(mainRoom(p)),
+        );
         const r = snapNudge(box, dx, dy, candidates, threshold);
         x = r.x;
         y = r.y;
@@ -192,6 +202,7 @@ export function useFurnitureEditing({
         snapPieces(current),
         roomSize(mainRoom(current)),
         item.id,
+        roomLines(mainRoom(current)),
       );
       const thresholdPx = e.pointerType === 'touch' ? SNAP_THRESHOLD_TOUCH_PX : SNAP_THRESHOLD_PX;
       const box = boxOf(item);

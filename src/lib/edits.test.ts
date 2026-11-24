@@ -5,16 +5,33 @@ import { loadPlan } from '../core/load';
 import { OPENING_GAP } from '../core/placement';
 import { defaultLayout } from '../core/testing/v3/layout';
 import type { Door, FurnitureItem, Layout, RoomWindow, Wall } from '../core/testing/v3/types';
+import { lOutline, lShapeOf, wallFrame } from '../core/geometry/walls';
+import type { Plan } from '../core/schema';
 import {
+  addCorner,
   addDoor,
   addPiece,
+  addWindow,
   changePiece,
+  moveCorner,
   moveOpeningToWall,
   movePiecesInside,
   openingSpot,
+  removeCorner,
+  setRoomShape,
+  setWallLength,
+  slideOpening,
   updateOpening,
 } from './edits';
-import { boxOf, itemWarnings, mainRoom, openingPlace } from './plans';
+import {
+  WALLS,
+  boxOf,
+  editablePlan,
+  itemWarnings,
+  mainRoom,
+  openingPlace,
+  wallIndex,
+} from './plans';
 
 const toPlan = (layout: Layout) => {
   const r = loadPlan(layout, 'strict', { lengthsInFeet: true });
@@ -73,8 +90,16 @@ describe('openingSpot', () => {
     width: number,
     preferred: { wall: Wall; position: number },
     swing?: Parameters<typeof openingSpot>[3],
-  ) =>
-    openingSpot(toPlan({ doors: [], windows: [], items: [], ...layout }), width, preferred, swing);
+  ) => {
+    // The edits number walls; these tests name a rectangle's.
+    const spot = openingSpot(
+      toPlan({ doors: [], windows: [], items: [], ...layout }),
+      width,
+      { ...preferred, wall: wallIndex(preferred.wall) },
+      swing,
+    );
+    return { ...spot, wall: WALLS[spot.wall]! };
+  };
   const at = (doors: Door[], windows: RoomWindow[] = [], roomDims = room12, width = 3) =>
     find({ roomDims, doors, windows }, width, DOOR);
 
@@ -252,7 +277,7 @@ describe('moveOpeningToWall', () => {
     const plan = moveOpeningToWall(
       toPlan({ roomDims: room, doors: [], windows, items: [] }),
       'window-1',
-      wall,
+      wallIndex(wall),
     );
     if (!plan) return null;
     const r = mainRoom(plan);
@@ -303,5 +328,148 @@ describe('movePiecesInside', () => {
     expect(boxOf(fixed.items[1]!)).toMatchObject({ y: 0 });
     expect(fixed.items.slice(2)).toEqual(plan.items.slice(2));
     expect(movePiecesInside(plan)).toBe(plan);
+  });
+});
+
+describe('room shapes', () => {
+  const blank = (): Plan =>
+    toPlan({ roomDims: { width: 12, height: 10 }, doors: [], windows: [], items: [] });
+  const L = { width: 12, height: 10, corner: 'br', cutWidth: 5, cutHeight: 4 } as const;
+
+  it('setRoomShape makes an L from the room and back to its bounding box', () => {
+    const l = setRoomShape(blank(), { kind: 'l', l: L });
+    expect(mainRoom(l).outline).toEqual(lOutline(L));
+    expect(setRoomShape(l, { kind: 'l', l: L })).toBe(l);
+    const back = setRoomShape(l, { kind: 'rect' });
+    expect(mainRoom(back).outline).toEqual(mainRoom(blank()).outline);
+    // A cut too big for the room is kept inside it, half a foot from each side.
+    const big = setRoomShape(blank(), { kind: 'l', l: { ...L, cutWidth: 40 } });
+    expect(lShapeOf(mainRoom(big))).toMatchObject({ cutWidth: 11.5, cutHeight: 4 });
+  });
+
+  it('setWallLength moves the far corner along the wall, and refuses crossing walls', () => {
+    const l = setRoomShape(blank(), { kind: 'l', l: L });
+    // Wall 2 runs down the right side from (12, 0) to (12, 6).
+    const longer = setWallLength(l, 1, 8);
+    expect(mainRoom(longer).outline[2]).toEqual({ x: 12, y: 8 });
+    expect(setWallLength(l, 1, 6)).toBe(l);
+    // Wall 3 runs along the top of the cut from (12, 6) to (7, 6): at 20 ft its end would be
+    // outside the left wall. A wall shorter than the tolerance would make walls touch.
+    expect(setWallLength(l, 2, 20)).toBe(l);
+    expect(setWallLength(l, 0, 0.0001)).toBe(l);
+  });
+
+  it('addCorner splits a wall in the middle and removeCorner takes it out again', () => {
+    const p = blank();
+    const added = addCorner(p, 0);
+    expect(mainRoom(added).outline[1]).toEqual({ x: 6, y: 0 });
+    expect(removeCorner(added, 1)).toEqual(p);
+    // A triangle keeps its three corners.
+    const tri = removeCorner(p, 0);
+    expect(removeCorner(tri, 0)).toBe(tri);
+  });
+
+  it('moveCorner makes an angled wall that doors and windows can be put on and slid along', () => {
+    // Pull the top-right corner in: wall 0 runs from (0, 0) to (9, 3).
+    const p = moveCorner(blank(), 1, { x: 9, y: 3 });
+    expect(p).not.toBe(blank());
+    const angled = Math.hypot(9, 3);
+    const { plan: withWin, window: win } = addWindow(p);
+    expect(win.wall).toBe(0);
+    const moved = moveOpeningToWall(withWin, win.id, 0);
+    expect(moved).toBe(withWin);
+    // Sliding by (1, 0) moves it along the wall by the part of the move along it.
+    const slid = slideOpening(withWin, win.id, 1, 0);
+    const before = openingPlace(mainRoom(withWin), win).position;
+    const after = openingPlace(mainRoom(slid), mainRoom(slid).openings[0]!).position;
+    expect(after - before).toBeCloseTo(9 / angled, 9);
+  });
+
+  it('movePiecesInside brings a piece out of the cut-out of an L to the nearest free spot', () => {
+    const l = setRoomShape(
+      toPlan({
+        roomDims: { width: 12, height: 10 },
+        doors: [],
+        windows: [],
+        items: [
+          { id: 1, label: 'Chair', width: 2, height: 2, x: 9, y: 7, rotation: 0, color: '#93c5fd' },
+          { id: 2, label: 'Desk', width: 2, height: 2, x: 4, y: 7, rotation: 0, color: '#93c5fd' },
+        ],
+      }),
+      { kind: 'l', l: L },
+    );
+    expect(itemWarnings(l).get('item-1')?.outOfBounds).toBe(true);
+    const fixed = movePiecesInside(l);
+    const w = itemWarnings(fixed);
+    expect(w.get('item-1')).toEqual({ outOfBounds: false, collision: false });
+    expect(fixed.items[1]).toBe(l.items[1]);
+    // Nearest: straight up out of the cut (the cut starts at y 6), not across to the left.
+    expect(boxOf(fixed.items[0]!)).toMatchObject({ x: 9, y: 4 });
+  });
+});
+
+describe('editablePlan', () => {
+  it('opens any single-room outline, listed from its top-left corner and moved to the origin', () => {
+    const outline = lOutline(
+      { width: 8, height: 6, corner: 'tl', cutWidth: 3, cutHeight: 2 },
+      { x: 5, y: 5 },
+    );
+    // Listed from its third corner, with a window on what is then wall 0.
+    const turned = [...outline.slice(2), ...outline.slice(0, 2)];
+    const r = loadPlan(
+      {
+        version: 4,
+        unit: 'ft',
+        rooms: [
+          {
+            id: 'room-1',
+            outline: turned,
+            openings: [{ id: 'window-1', kind: 'window', wall: 0, offset: 1, width: 2 }],
+          },
+        ],
+        items: [{ id: 'item-1', label: 'Bed', width: 2, depth: 2, placement: { x: 10, y: 10 } }],
+      },
+      'strict',
+    );
+    if (!r.ok) throw new Error('invalid');
+    const e = editablePlan(r.plan);
+    if (!e.ok) throw new Error(e.why.join());
+    const room = mainRoom(e.plan);
+    expect(room.outline).toEqual(
+      lOutline({ width: 8, height: 6, corner: 'tl', cutWidth: 3, cutHeight: 2 }),
+    );
+    expect(room.openings[0]!.wall).toBe(2);
+    expect(e.plan.items[0]!.placement).toMatchObject({ x: 5, y: 5 });
+    // Nothing moves on the floor: the window is on the same wall segment.
+    const a = wallFrame(mainRoom(r.plan), 0);
+    const b = wallFrame(room, 2);
+    expect(b.origin).toEqual({ x: a.origin.x - 5, y: a.origin.y - 5 });
+  });
+
+  it('still refuses several rooms', () => {
+    const r = loadPlan(
+      {
+        version: 4,
+        unit: 'ft',
+        rooms: [
+          {
+            id: 'a',
+            outline: lOutline({ width: 4, height: 4, corner: 'tr', cutWidth: 1, cutHeight: 1 }),
+          },
+          {
+            id: 'b',
+            outline: [
+              { x: 10, y: 0 },
+              { x: 12, y: 0 },
+              { x: 12, y: 2 },
+              { x: 10, y: 2 },
+            ],
+          },
+        ],
+      },
+      'strict',
+    );
+    if (!r.ok) throw new Error('invalid');
+    expect(editablePlan(r.plan)).toEqual({ ok: false, why: ['several rooms'] });
   });
 });

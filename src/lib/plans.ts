@@ -1,18 +1,21 @@
 /**
  * The editor's view of a plan. The app holds a v4 `Plan` (core/schema.ts) in feet; its editor
- * shows one rectangular room at the origin with doors and windows on the walls named top, right,
- * bottom and left, and pieces by the top-left corner of their unrotated box, exactly as before the
- * plan format existed (docs/design/plan-format.md, section 9: "Rectangles keep the four names").
- * These helpers translate between the two; nothing here changes what a plan means.
+ * shows one room of any outline, listed from its top-left corner, with doors and windows on its
+ * walls (on a rectangle named top, right, bottom and left, otherwise "Wall 1" to "Wall N"), and
+ * pieces by the top-left corner of their unrotated box (docs/design/plan-format.md, section 9:
+ * "Rectangles keep the four names"). These helpers translate between the two; nothing here
+ * changes what a plan means.
  */
 import { checkLayout, type IssueCode } from '../core/check';
 import { normalizeDegrees, type ItemWarning } from '../core/geometry';
 import { itemBox } from '../core/geometry/shapes';
 import {
   drawingFrame,
+  firstCorner,
   isRectangle,
   offsetFromPosition,
   openingInFrame,
+  outlineArea,
   roomBounds,
 } from '../core/geometry/walls';
 import type { Unit } from '../core/schema';
@@ -124,16 +127,35 @@ export const doorsOf = (room: Pick<Room, 'openings'>): Opening[] =>
 export const windowsOf = (room: Pick<Room, 'openings'>): Opening[] =>
   room.openings.filter((o) => o.kind === 'window');
 
-// --- Doors and windows on a rectangle -------------------------------------------------------
+/** A room's floor area (square feet): the shoelace formula, so any outline. */
+export const roomArea = (room: Pick<Room, 'outline'>): number => outlineArea(room);
+
+// --- Walls -------------------------------------------------------------------------------------
+
+/** A wall's name in a sentence: "top" on a rectangle, otherwise "wall 3" (numbered from 1). */
+export const wallName = (room: Pick<Room, 'outline'>, wall: number): string =>
+  isRectangle(room) ? (WALLS[wall] ?? 'top') : `wall ${wall + 1}`;
+
+/** A wall's name as a label: "Top" on a rectangle, otherwise "Wall 3". */
+export const wallLabel = (room: Pick<Room, 'outline'>, wall: number): string => {
+  const name = wallName(room, wall);
+  return name.charAt(0).toUpperCase() + name.slice(1);
+};
+
+/** "the top wall" on a rectangle, otherwise "wall 3". */
+export const theWall = (room: Pick<Room, 'outline'>, wall: number): string =>
+  isRectangle(room) ? `the ${wallName(room, wall)} wall` : wallName(room, wall);
+
+// --- Doors and windows ------------------------------------------------------------------------
 
 /**
- * Where an opening is, in the editor's terms: its wall by name, `position` from the wall's left
- * (top, for the side walls) end, and the hinge on the left or right as drawn. On the bottom and
- * left walls these run against the outline (whose walls go clockwise), so `offset` and `hinge`
- * are mirrored there.
+ * Where an opening is, in the editor's terms: its wall, `position` from the start of the wall's
+ * drawing (its left end, or its top end for an upright wall), and the hinge on the left or right
+ * as drawn. Where a wall runs against the drawing (the bottom and left walls of a rectangle,
+ * whose outline goes clockwise), `offset` and `hinge` are mirrored.
  */
 export interface OpeningPlace {
-  wall: Wall;
+  wall: number;
   position: number;
   width: number;
   hinge: 'left' | 'right';
@@ -141,7 +163,7 @@ export interface OpeningPlace {
 
 export const openingPlace = (room: Pick<Room, 'outline'>, o: Opening): OpeningPlace => {
   const { position, width, hingeAtEnd } = openingInFrame(room, o);
-  return { wall: WALLS[o.wall] ?? 'top', position, width, hinge: hingeAtEnd ? 'right' : 'left' };
+  return { wall: o.wall, position, width, hinge: hingeAtEnd ? 'right' : 'left' };
 };
 
 /** The v4 `hinge` for a hinge on the `side` (as drawn) of wall `wall`. */
@@ -151,16 +173,19 @@ export const hingeFor = (
   side: 'left' | 'right',
 ): Opening['hinge'] => ((side === 'right') !== drawingFrame(room, wall).reversed ? 'end' : 'start');
 
-/** The `wall` and `offset` of an opening at `position` (from the left or top) on `wall`. */
+/** The `wall` and `offset` of an opening at `position` (along the drawing) on `wall`. */
 export const placeOn = (
   room: Pick<Room, 'outline'>,
-  wall: Wall,
+  wall: number,
   position: number,
   width: number,
-): Pick<Opening, 'wall' | 'offset'> => {
-  const index = WALLS.indexOf(wall);
-  return { wall: index, offset: offsetFromPosition(room, index, position, width) };
-};
+): Pick<Opening, 'wall' | 'offset'> => ({
+  wall,
+  offset: offsetFromPosition(room, wall, position, width),
+});
+
+/** The index of a rectangle's wall by name. */
+export const wallIndex = (wall: Wall): number => WALLS.indexOf(wall);
 
 // --- Pieces ------------------------------------------------------------------------------------
 
@@ -309,12 +334,13 @@ export const samePlan = (a: Plan, b: Plan): boolean => planContent(a) === planCo
 // --- What this editor can show ---------------------------------------------------------------
 
 /**
- * `plan` in the form the editor works on, or what keeps it from showing the plan. A single
- * rectangular room listed from any corner, anywhere, is turned to start at its top-left corner
- * and moved to the origin (with everything in it), which changes no drawing. Several rooms,
- * another outline, L-shaped or round pieces, and pieces in the inventory are in the format
- * (section 3) but not yet in the editor (PRs 7a, 7b, 8, 9): such a plan is not opened, so that no
- * edit made here can damage it.
+ * `plan` in the form the editor works on, or what keeps it from showing the plan. A single room
+ * of any outline (the load has made it simple and clockwise) is listed from its top-left corner
+ * (`firstCorner`: a rectangle's walls are then top, right, bottom, left) and moved so its
+ * bounding box starts at the origin, with everything in it, which changes no drawing. Several
+ * rooms, L-shaped or round pieces, and pieces in the inventory are in the format (section 3) but
+ * not yet in the editor (PRs 7a, 8, 9): such a plan is not opened, so that no edit made here can
+ * damage it.
  */
 export function editablePlan(plan: Plan): { ok: true; plan: Plan } | { ok: false; why: string[] } {
   const why: string[] = [];
@@ -325,23 +351,20 @@ export function editablePlan(plan: Plan): { ok: true; plan: Plan } | { ok: false
   const room = plan.rooms[0];
   if (!room) return { ok: false, why };
   const outline = room.outline;
-  let start = -1;
-  if (outline.length === 4) {
-    const left = Math.min(...outline.map((p) => p.x));
-    const top = Math.min(...outline.map((p) => p.y));
-    start = outline.findIndex((p) => p.x === left && p.y === top);
-  }
-  const turned =
-    start < 0 ? null : { ...room, outline: [...outline.slice(start), ...outline.slice(0, start)] };
-  if (!turned || !isRectangle(turned)) why.push('a room that is not a rectangle');
-  if (why.length || !turned) return { ok: false, why };
-  if (start === 0 && outline[0]!.x === 0 && outline[0]!.y === 0) return { ok: true, plan };
+  if (outline.length < 3) why.push('a room with fewer than 3 corners');
+  if (why.length) return { ok: false, why };
 
-  const { x: dx, y: dy } = turned.outline[0]!;
+  const n = outline.length;
+  const start = firstCorner(outline);
+  const b = roomBounds(room);
+  if (start === 0 && b.left === 0 && b.top === 0) return { ok: true, plan };
+
+  const turned = [...outline.slice(start), ...outline.slice(0, start)];
+  const { left: dx, top: dy } = b;
   const shift = <T extends { x: number; y: number }>(p: T): T => ({
     ...p,
-    x: p.x - dx,
-    y: p.y - dy,
+    x: p.x - dx + 0,
+    y: p.y - dy + 0,
   });
   return {
     ok: true,
@@ -349,9 +372,9 @@ export function editablePlan(plan: Plan): { ok: true; plan: Plan } | { ok: false
       ...plan,
       rooms: [
         {
-          ...turned,
-          outline: turned.outline.map(shift),
-          openings: room.openings.map((o) => ({ ...o, wall: (o.wall - start + 4) % 4 })),
+          ...room,
+          outline: turned.map(shift),
+          openings: room.openings.map((o) => ({ ...o, wall: (o.wall - start + n) % n })),
         },
       ],
       items: plan.items.map((i) => (i.placement ? { ...i, placement: shift(i.placement) } : i)),
