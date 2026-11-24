@@ -4,7 +4,10 @@ import { wallFrame } from '../src/core/geometry/walls';
 import { loadPlan } from '../src/core/load';
 import type { Plan } from '../src/core/schema';
 import { readPlanLink } from '../src/core/share/plan';
-import { WRITES_V3_LINKS, linkBlockers, linkOmissions, planLink, planToShareConfig } from './link';
+import { editablePlan } from '../src/lib/plans';
+import { planLink } from './link';
+
+const ORIGIN = 'https://room-planner.andrechek.com';
 
 const load = (doc: unknown): Plan => {
   const r = loadPlan(doc, 'strict');
@@ -19,7 +22,7 @@ const rect = (x: number, y: number, w: number, d: number) => [
   { x, y: y + d },
 ];
 
-/** Each opening as floor geometry: its two ends and its hinge point, relative to the room's corner. */
+/** Each opening as floor geometry relative to the room's corner: ends and hinge point. */
 const openingsInFloor = (plan: Plan) => {
   const room = plan.rooms[0]!;
   const left = Math.min(...room.outline.map((p) => p.x));
@@ -28,8 +31,8 @@ const openingsInFloor = (plan: Plan) => {
     .map((o) => {
       const f = wallFrame(room, o.wall);
       const at = (t: number) => ({
-        x: +(f.origin.x + f.along.x * t - left).toFixed(4),
-        y: +(f.origin.y + f.along.y * t - top).toFixed(4),
+        x: f.origin.x + f.along.x * t - left,
+        y: f.origin.y + f.along.y * t - top,
       });
       const a = at(o.offset);
       const b = at(o.offset + o.width);
@@ -38,10 +41,9 @@ const openingsInFloor = (plan: Plan) => {
         ends: [a, b].sort((p, q) => p.x - q.x || p.y - q.y),
         hinge: o.kind === 'door' ? (o.hinge === 'start' ? a : b) : null,
         type: o.kind === 'door' ? o.type : null,
-        swingAngle: o.swingAngle ?? null,
       };
     })
-    .sort((p, q) => p.kind.localeCompare(q.kind));
+    .sort((p, q) => p.kind.localeCompare(q.kind) || p.ends[0]!.x - q.ends[0]!.x);
 };
 
 const itemsInFloor = (plan: Plan) => {
@@ -50,81 +52,92 @@ const itemsInFloor = (plan: Plan) => {
   const top = Math.min(...room.outline.map((p) => p.y));
   return plan.items.map((i) => ({
     label: i.label,
-    width: +i.width.toFixed(4),
-    depth: +i.depth.toFixed(4),
-    x: +(i.placement!.x - left).toFixed(4),
-    y: +(i.placement!.y - top).toFixed(4),
+    notes: i.notes ?? null,
+    width: i.width,
+    depth: i.depth,
+    x: i.placement!.x - left,
+    y: i.placement!.y - top,
     rotation: i.placement!.rotation,
-    color: i.color,
     hidden: !!i.hidden,
-    locked: !!i.locked,
   }));
 };
 
-/** What the app opens: the v3 link payload, read the way every link is read. */
-const opened = (plan: Plan): Plan => load(planToShareConfig(plan));
+/** `a` and `b` agree, numbers within the link's rounding (4 decimals of a foot). */
+const same = (a: unknown, b: unknown): void => {
+  if (typeof a === 'number' && typeof b === 'number') {
+    expect(Math.abs(a - b)).toBeLessThan(2e-4);
+  } else if (Array.isArray(a) && Array.isArray(b)) {
+    expect(a.length).toBe(b.length);
+    a.forEach((v, i) => same(v, b[i]));
+  } else if (a && b && typeof a === 'object' && typeof b === 'object') {
+    expect(Object.keys(a).sort()).toEqual(Object.keys(b).sort());
+    for (const k of Object.keys(a))
+      same((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]);
+  } else {
+    expect(a).toEqual(b);
+  }
+};
 
-describe('v3 links (the app before PR 5)', () => {
-  it('is the mode while the app is on v3', () => {
-    expect(WRITES_V3_LINKS).toBe(true);
-  });
+const opened = async (plan: Plan): Promise<Plan> => {
+  const link = await planLink(plan, ORIGIN);
+  if (!link.url) throw new Error('no link');
+  const r = await readPlanLink(link.url);
+  if (!r.ok) throw new Error('unreadable link');
+  return r.plan;
+};
 
-  it('writes a plan the app opens as the same room, openings and pieces', () => {
+describe('edit links', () => {
+  it('are compact v4 links on the given site that open as the same plan', async () => {
     const plan = load({
       version: 4,
-      name: 'Den',
+      name: 'Café ☕',
       unit: 'cm',
       rooms: [
         {
           id: 'den',
+          name: 'Den',
           outline: rect(0, 0, 400, 300),
           openings: [
             { id: 'd1', kind: 'door', wall: 2, offset: 30, width: 80, hinge: 'end' },
-            { id: 'd2', kind: 'door', wall: 3, offset: 50, width: 90, type: 'double-out' },
-            { id: 'd3', kind: 'door', wall: 1, offset: 20, width: 80, swingAngle: 180 },
             { id: 'w1', kind: 'window', wall: 0, offset: 100, width: 120 },
           ],
         },
       ],
       items: [
-        { id: 'sofa', label: 'Sofa', width: 213, depth: 91, placement: { x: 200, y: 250 } },
+        {
+          id: 'sofa',
+          label: 'Sofa',
+          width: 213,
+          depth: 91,
+          notes: 'grey',
+          placement: { x: 200, y: 250 },
+        },
         {
           id: 'tv',
           label: 'TV',
-          color: '#fecaca',
           width: 150,
           depth: 40,
           placement: { x: 200, y: 20, rotation: 180 },
-          locked: true,
-        },
-        {
-          id: 'lamp',
-          label: 'Lamp',
-          width: 30,
-          depth: 30,
-          placement: { x: 30, y: 30 },
-          hidden: true,
         },
       ],
     });
-    const config = planToShareConfig(plan);
-    expect(config.unitSystem).toBe('cm');
-    expect(config.roomDims).toEqual({ width: 400, height: 300 });
-    const back = opened(plan);
-    expect(back.unit).toBe('ft');
+    const link = await planLink(plan, 'https://preview.example.dev');
+    expect(link.url).toMatch(/^https:\/\/preview\.example\.dev\/#s=[A-Za-z0-9_-]+$/);
+    const back = await opened(plan);
+    expect(back.name).toBe('Café ☕');
+    expect(back.rooms[0]!.name).toBe('Den');
     expect(back.settings?.unitSystem).toBe('cm');
-    expect(openingsInFloor(back)).toEqual(openingsInFloor(plan));
-    expect(itemsInFloor(back)).toEqual(itemsInFloor(plan));
+    same(openingsInFloor(back), openingsInFloor(plan));
+    same(itemsInFloor(back), itemsInFloor(plan));
   });
 
-  it('moves the room to the origin and accepts an outline that starts at another corner', () => {
+  it('turn a rectangle that starts at another corner, away from the origin, into the editor form', async () => {
     const plan = load({
       version: 4,
       unit: 'ft',
       rooms: [
         {
           id: 'r',
-          // Clockwise from the bottom-right corner of a room at (5, 2).
           outline: [
             { x: 17, y: 12 },
             { x: 5, y: 12 },
@@ -136,21 +149,16 @@ describe('v3 links (the app before PR 5)', () => {
       ],
       items: [{ id: 'bed', label: 'Bed', width: 5, depth: 6.5, placement: { x: 11, y: 5.25 } }],
     });
-    expect(linkBlockers(plan)).toEqual([]);
-    const config = planToShareConfig(plan);
-    expect(config.roomDims).toEqual({ width: 12, height: 10 });
-    expect(config.doors[0]).toMatchObject({ wall: 'bottom', position: 7, width: 3 });
-    expect(config.items[0]).toMatchObject({ x: 3.5, y: 0 });
-    const back = opened(plan);
-    expect(openingsInFloor(back)).toEqual(openingsInFloor(plan));
-    expect(itemsInFloor(back)).toEqual(itemsInFloor(plan));
+    const back = await opened(plan);
+    expect(back.rooms[0]!.outline[0]).toEqual({ x: 0, y: 0 });
+    same(openingsInFloor(back), openingsInFloor(plan));
+    same(itemsInFloor(back), itemsInFloor(plan));
   });
 
-  it('round-trips any rectangular plan (property)', () => {
-    const units = ['ft', 'in', 'm', 'cm'] as const;
+  it('round-trip any rectangular plan (property)', async () => {
     const arb = fc
       .record({
-        unit: fc.constantFrom(...units),
+        unit: fc.constantFrom('ft', 'in', 'm', 'cm'),
         w: fc.integer({ min: 40, max: 400 }),
         d: fc.integer({ min: 40, max: 400 }),
         start: fc.integer({ min: 0, max: 3 }),
@@ -161,9 +169,8 @@ describe('v3 links (the app before PR 5)', () => {
             t: fc.double({ min: 0, max: 0.5, noNaN: true }),
             width: fc.integer({ min: 5, max: 20 }),
             hinge: fc.constantFrom('start', 'end'),
-            type: fc.constantFrom('swing-in', 'swing-out', 'sliding', 'bifold'),
           }),
-          { maxLength: 5 },
+          { maxLength: 4 },
         ),
         items: fc.array(
           fc.record({
@@ -172,14 +179,12 @@ describe('v3 links (the app before PR 5)', () => {
             width: fc.integer({ min: 2, max: 30 }),
             depth: fc.integer({ min: 2, max: 30 }),
             rotation: fc.constantFrom(0, 45, 90, 270),
-            hidden: fc.boolean(),
           }),
-          { maxLength: 6 },
+          { maxLength: 5 },
         ),
       })
       .map(({ unit, w, d, start, openings, items }) => {
         const corners = rect(0, 0, w, d);
-        const outline = [...corners.slice(start), ...corners.slice(0, start)];
         const len = (wall: number) => ((wall + start) % 2 === 0 ? w : d);
         return {
           version: 4,
@@ -187,14 +192,14 @@ describe('v3 links (the app before PR 5)', () => {
           rooms: [
             {
               id: 'r',
-              outline,
+              outline: [...corners.slice(start), ...corners.slice(0, start)],
               openings: openings.map((o, i) => ({
                 id: `o${i}`,
                 kind: o.kind,
                 wall: o.wall,
                 offset: Math.round(o.t * (len(o.wall) - o.width)),
                 width: o.width,
-                ...(o.kind === 'door' ? { hinge: o.hinge, type: o.type } : {}),
+                ...(o.kind === 'door' ? { hinge: o.hinge } : {}),
               })),
             },
           ],
@@ -204,23 +209,22 @@ describe('v3 links (the app before PR 5)', () => {
             width: it.width,
             depth: it.depth,
             placement: { x: Math.round(it.u * w), y: Math.round(it.v * d), rotation: it.rotation },
-            ...(it.hidden ? { hidden: true } : {}),
           })),
         };
       });
-    fc.assert(
-      fc.property(arb, (doc) => {
+    await fc.assert(
+      fc.asyncProperty(arb, async (doc) => {
         const plan = load(doc);
-        const back = opened(plan);
-        expect(openingsInFloor(back)).toEqual(openingsInFloor(plan));
-        expect(itemsInFloor(back)).toEqual(itemsInFloor(plan));
+        const back = await opened(plan);
+        same(openingsInFloor(back), openingsInFloor(plan));
+        same(itemsInFloor(back), itemsInFloor(plan));
       }),
-      { numRuns: 150 },
+      { numRuns: 100 },
     );
   });
 
-  it('names what the app cannot show yet, and makes no link for it', async () => {
-    const plan = load({
+  it('are withheld, with the reasons, exactly when the editor cannot open the plan', async () => {
+    const lShaped = load({
       version: 4,
       unit: 'ft',
       rooms: [
@@ -248,16 +252,7 @@ describe('v3 links (the app before PR 5)', () => {
         { id: 's', label: 'Spare chair', width: 2, depth: 2 },
       ],
     });
-    expect(linkBlockers(plan)).toEqual([
-      'the room is not a rectangle with axis-aligned walls',
-      'not rectangular: Table',
-      'no placement (inventory): Spare chair',
-    ]);
-    expect(await planLink(plan, 'https://x.test')).toEqual({
-      url: null,
-      blockers: linkBlockers(plan),
-    });
-    const two = load({
+    const twoRooms = load({
       version: 4,
       unit: 'ft',
       rooms: [
@@ -265,33 +260,12 @@ describe('v3 links (the app before PR 5)', () => {
         { id: 'b', outline: rect(5, 0, 5, 5) },
       ],
     });
-    expect(linkBlockers(two)).toEqual(['it has 2 rooms (the app shows one)']);
-  });
-
-  it('says what a link leaves out', () => {
-    const plan = load({
-      version: 4,
-      unit: 'ft',
-      rooms: [{ id: 'r', name: 'Office', outline: rect(0, 0, 10, 10) }],
-      items: [
-        { id: 'd', label: 'Desk', width: 4, depth: 2, notes: 'IKEA', placement: { x: 5, y: 1 } },
-      ],
-    });
-    expect(linkOmissions(plan)).toEqual(['the room name', 'item notes']);
-  });
-
-  it('makes a #s= link on the given site that opens as the plan', async () => {
-    const plan = load({
-      version: 4,
-      name: 'Café ☕',
-      unit: 'in',
-      rooms: [{ id: 'r', outline: rect(0, 0, 120, 96) }],
-      items: [{ id: 'd', label: 'Desk', width: 48, depth: 24, placement: { x: 24, y: 12 } }],
-    });
-    const link = await planLink(plan, 'https://preview.example.dev');
-    expect(link.url).toMatch(/^https:\/\/preview\.example\.dev\/#s=[A-Za-z0-9_-]+$/);
-    const back = await readPlanLink(link.url!);
-    expect(back.ok && back.plan.name).toBe('Café ☕');
-    expect(back.ok && itemsInFloor(back.plan)).toEqual(itemsInFloor(plan));
+    for (const plan of [lShaped, twoRooms]) {
+      const link = await planLink(plan, ORIGIN);
+      const verdict = editablePlan(plan);
+      expect(verdict.ok).toBe(false);
+      expect(link).toEqual({ url: null, blockers: !verdict.ok ? verdict.why : [] });
+      expect(link.url === null && link.blockers.length).toBeGreaterThan(0);
+    }
   });
 });

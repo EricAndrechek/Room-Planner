@@ -20,8 +20,8 @@ Workflow: write the plan; call check_layout and fix what it reports (repeat as n
 Nothing is stored: every call takes the whole plan. The plan format is in the create_plan and check_layout descriptions.`;
 
 export const CREATE_PLAN = `Make a Room Planner plan and the link that opens it in the editor (https://room-planner.andrechek.com), where the user can see it to scale, drag and rotate the furniture, export and share. In clients with MCP Apps the drawing is shown in the chat, with the problems marked.
-Returns {plan, issues, summary, url}: the plan normalised (defaults and ids filled) in your unit, every layout issue (as check_layout), one paragraph describing it, and the url. Give the user the url exactly as returned, whole and unchanged; it holds the entire plan.
-The editor currently opens one rectangular room with doors, windows and rectangular pieces that have a placement; for any other plan this tool returns an error saying what to change (check_layout accepts every plan).
+Returns {plan, issues, summary, url, editable}: the plan normalised (defaults and ids filled) in your unit, every layout issue (as check_layout), one paragraph describing it, and the url. Give the user the url exactly as returned, whole and unchanged; it holds the entire plan.
+Every plan the format allows is accepted, checked and drawn: several rooms, any outline, L-shaped and round pieces, pieces in the inventory. The edit link comes when Room Planner's editor can open the plan (today: one rectangular room whose pieces are all rectangles with a placement); otherwise url is null, editable is false and notEditable says why.
 
 ${FORMAT}`;
 
@@ -31,5 +31,5 @@ minClearance is in the plan's unit.
 
 ${FORMAT}`;
 
-export const READ_PLAN = `Read the plan in a Room Planner link that the user gives you: any link from room-planner.andrechek.com (#s=, #j= or the older ?config= form). Returns {plan, summary, issues}, the plan in the unit it is displayed in, ready to edit and send to create_plan for a new link. In clients with MCP Apps the drawing is shown in the chat.
+export const READ_PLAN = `Read the plan in a Room Planner link that the user gives you: any link from room-planner.andrechek.com (#s=, #j= or the older ?config= form). Returns {plan, summary, issues, url, editable}, the plan in the unit it is displayed in, ready to edit and send to create_plan for a new link. In clients with MCP Apps the drawing is shown in the chat.
 A link that was cut off when it was copied returns an error; ask the user for the whole link.`;

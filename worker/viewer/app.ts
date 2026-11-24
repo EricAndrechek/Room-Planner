@@ -19,7 +19,14 @@ type UnitSystem = (typeof UNIT_SYSTEMS)[number];
 type Json = Record<string, unknown>;
 interface ToolResult {
   content?: { type: string; text?: string }[];
-  structuredContent?: { plan?: Plan; issues?: Issue[]; summary?: string; url?: string };
+  structuredContent?: {
+    plan?: Plan;
+    issues?: Issue[];
+    summary?: string;
+    url?: string | null;
+    editable?: boolean;
+    notEditable?: string[];
+  };
   isError?: boolean;
 }
 interface HostContext {
@@ -165,6 +172,11 @@ function show(result: ToolResult) {
   if (svg) sheet.append(svg);
   sheet.hidden = !svg;
   if (!svg) $('note').textContent = 'The drawing could not be made; open the plan to see it.';
+  else if (data.editable === false) {
+    const why = data.notEditable?.length ? ` with ${data.notEditable.join(', ')}` : '';
+    $('note').textContent =
+      `Room Planner's editor can't open plans${why} yet; the drawing shows this one in full.`;
+  }
   renderIssues(data.issues ?? [], svg);
 }
 

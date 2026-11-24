@@ -21,7 +21,7 @@ import {
   fromFeet,
   roundNum,
 } from '../src/core/units';
-import { linkOmissions, planLink } from './link';
+import { planLink, type PlanLink } from './link';
 
 type UnitSystem = (typeof UNIT_SYSTEMS)[number];
 
@@ -47,7 +47,6 @@ export type ErrorKind =
   | 'missing_plan'
   | 'invalid_plan'
   | 'newer_version'
-  | 'unsupported_plan'
   | 'bad_argument'
   | 'missing_url'
   | 'bad_url'
@@ -56,6 +55,8 @@ export type ErrorKind =
 
 export interface ToolStats {
   errorKind?: ErrorKind;
+  /** Whether the editor can open the plan (an edit link was made). */
+  editable?: boolean;
   rooms?: number;
   items?: number;
   unit?: string;
@@ -245,30 +246,32 @@ export async function createPlan(args: { plan?: unknown }, origin: string): Prom
   const issues = [...warnings, ...checkLayout(plan, { unitSystem })];
   const summary = summarize(plan, unitSystem);
   const link = await planLink(plan, origin);
-  if (link.url === null) {
-    return {
-      isError: true,
-      text: [
-        `Room Planner cannot open this plan yet: ${link.blockers.join('; ')}.`,
-        'The app currently edits one rectangular room with doors, windows and rectangular pieces that have a placement. Change the plan to fit and call create_plan again, or use check_layout to check it as it is.',
-      ].join('\n'),
-      stats: { ...planStats(plan, unit, issues), errorKind: 'unsupported_plan' },
-    };
-  }
-  const omitted = linkOmissions(plan);
-  const text = [
-    summary,
-    ...issueLines(issues),
-    ...(omitted.length ? [`The link does not carry ${omitted.join(' or ')} yet.`] : []),
-    'Open and edit the plan in Room Planner (the whole plan is in the link; give it to the user exactly as it is):',
-    link.url,
-  ].join('\n');
   return {
-    text,
-    structured: { plan: fromFeet(plan, unit), issues, summary, url: link.url },
-    stats: planStats(plan, unit, issues),
+    text: [summary, ...issueLines(issues), ...linkLines(link)].join('\n'),
+    structured: { plan: fromFeet(plan, unit), issues, summary, ...linkFields(link) },
+    stats: { ...planStats(plan, unit, issues), editable: link.url !== null },
   };
 }
+
+/**
+ * The link as text: last, alone on its line, or why there is none. Every valid plan is accepted
+ * and drawn; only the edit link waits for the editor (link.ts).
+ */
+const linkLines = (link: PlanLink): string[] =>
+  link.url === null
+    ? [
+        `No edit link yet: Room Planner's editor can't open plans with ${link.blockers.join(', ')} yet. The plan above is complete and checked, and the drawing shows it in full; editing support is coming. For a link now, use one rectangular room with rectangular pieces that all have a placement.`,
+      ]
+    : [
+        'Open and edit the plan in Room Planner (the whole plan is in the link; give it to the user exactly as it is):',
+        link.url,
+      ];
+
+/** `url` (null without one), `editable`, and `notEditable` (the reasons) when there is none. */
+const linkFields = (link: PlanLink) =>
+  link.url === null
+    ? { url: null, editable: false, notEditable: link.blockers }
+    : { url: link.url, editable: true };
 
 /** `check_layout`: every layout problem, no link and no drawing. */
 export function checkPlan(args: { plan?: unknown; minClearance?: unknown }): ToolOutcome {
@@ -337,12 +340,16 @@ export async function readPlan(args: { url?: unknown }, origin: string): Promise
   const unitSystem = displayUnitOf(plan);
   const issues = checkLayout(plan, { unitSystem });
   const summary = summarize(plan, unitSystem);
-  // The same payload on this site (for the viewer's button), never whatever host the link named.
-  const parsed = new URL(href);
-  const own = new URL(`/${parsed.search}${parsed.hash}`, origin).toString();
+  // A fresh link on this site (never whatever host the link named), when the editor can open it.
+  const link = await planLink(plan, origin);
   return {
-    text: [summary, ...issueLines(issues)].join('\n'),
-    structured: { plan: fromFeet(plan, unitOfDisplay(unitSystem)), issues, summary, url: own },
-    stats: planStats(plan, unitOfDisplay(unitSystem), issues),
+    text: [summary, ...issueLines(issues), ...linkLines(link)].join('\n'),
+    structured: {
+      plan: fromFeet(plan, unitOfDisplay(unitSystem)),
+      issues,
+      summary,
+      ...linkFields(link),
+    },
+    stats: { ...planStats(plan, unitOfDisplay(unitSystem), issues), editable: link.url !== null },
   };
 }

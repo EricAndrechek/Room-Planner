@@ -2,6 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { viewerHtml } from '../scripts/build-viewer.mjs';
 import { createPlan, readPlan, type ToolOutcome } from '../worker/tools';
+import { storedDims, storedOpenings, storedPieces, workingPlan } from './storage';
 
 // The MCP server (docs/design/plan-format.md, section 7) as users meet it:
 // - a link the server makes opens in the real app as the same plan;
@@ -85,15 +86,6 @@ async function ready(page: Page) {
   await page.waitForTimeout(500);
 }
 
-const storedLayout = (page: Page) =>
-  page.evaluate(() => ({
-    dims: JSON.parse(localStorage.getItem('room-sim-v3-dims') ?? 'null'),
-    doors: JSON.parse(localStorage.getItem('room-sim-v3-doors') ?? '[]'),
-    windows: JSON.parse(localStorage.getItem('room-sim-v3-windows') ?? '[]'),
-    items: JSON.parse(localStorage.getItem('room-sim-v3-items') ?? '[]'),
-    units: localStorage.getItem('room-sim-v3-units'),
-  }));
-
 /** The link `create_plan` gives, on this server's origin. */
 async function serverLink(baseURL: string, plan: unknown = bedroom): Promise<string> {
   const r = await createPlan({ plan }, new URL(baseURL).origin);
@@ -111,35 +103,32 @@ test('a link from create_plan opens in the app as the same plan', async ({ page,
   // No "made with a newer version" or "damaged link" dialog.
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  const s = await storedLayout(page);
-  // (The app keeps the visitor's own display unit; the link's lengths are converted to feet.)
-  expect(s.dims).toMatchObject({ width: 11, height: 12 });
+  // What the editor stored (feet) is the plan the server made (inches).
+  const inches = (v: number) => +(v * 12).toFixed(2) + 0; // + 0 turns -0 into 0
+  const dims = await storedDims(page);
+  expect([inches(dims.width), inches(dims.height)]).toEqual([132, 144]);
   // The door is on the bottom wall, 90 in from the bottom-right corner: 10 in from the left.
-  expect(s.doors).toEqual([
-    expect.objectContaining({
-      wall: 'bottom',
-      width: 32 / 12,
-      position: 10 / 12,
-      type: 'swing-in',
-    }),
+  const doors = await storedOpenings(page, 'door');
+  expect(doors.map((d) => [d.wall, inches(d.position), inches(d.width), d.type])).toEqual([
+    ['bottom', 10, 32, 'swing-in'],
   ]);
-  expect(s.windows).toEqual([expect.objectContaining({ wall: 'top', width: 4, position: 3.5 })]);
-  const items = s.items.map((i: Record<string, number | string>) => ({
-    label: i.label,
-    x: +(+i.x * 12).toFixed(3),
-    y: +(+i.y * 12).toFixed(3),
-    width: +(+i.width * 12).toFixed(3),
-    height: +(+i.height * 12).toFixed(3),
-  }));
-  expect(items).toEqual(
-    bedroom.items.map((i) => ({
-      label: i.label,
-      x: i.placement.x - i.width / 2,
-      y: i.placement.y - i.depth / 2,
-      width: i.width,
-      height: i.depth,
-    })),
+  const windows = await storedOpenings(page, 'window');
+  expect(windows.map((w) => [w.wall, inches(w.position), inches(w.width)])).toEqual([
+    ['top', 42, 48],
+  ]);
+  const pieces = await storedPieces(page);
+  expect(
+    pieces.map((p) => [p.label, inches(p.x), inches(p.y), inches(p.width), inches(p.height)]),
+  ).toEqual(
+    bedroom.items.map((i) => [
+      i.label,
+      i.placement.x - i.width / 2,
+      i.placement.y - i.depth / 2,
+      i.width,
+      i.depth,
+    ]),
   );
+  expect((await workingPlan(page)).name).toBe('Guest bedroom');
   // The app shows the same problems the server reported (the desk and the chair overlap).
   await expect(page.getByText(/Overlapping/).first()).toBeVisible();
 });
@@ -304,6 +293,52 @@ test.describe('plan viewer', () => {
     const errorView = await host(page, toResult(bad));
     await expect(errorView.locator('#summary')).toContainText('The plan is not valid');
     await expect(errorView.getByRole('button', { name: 'Open in Room Planner' })).toBeHidden();
+  });
+
+  test('draws a plan the editor cannot open yet, without the Open button', async ({
+    page,
+    baseURL,
+  }) => {
+    const flat = {
+      version: 4,
+      name: 'Flat',
+      unit: 'ft',
+      rooms: [
+        {
+          id: 'living',
+          outline: [
+            { x: 0, y: 0 },
+            { x: 12, y: 0 },
+            { x: 12, y: 6 },
+            { x: 7, y: 6 },
+            { x: 7, y: 12 },
+            { x: 0, y: 12 },
+          ],
+        },
+      ],
+      items: [
+        {
+          id: 'table',
+          label: 'Round table',
+          shape: 'ellipse',
+          width: 3,
+          depth: 3,
+          placement: { x: 3, y: 3 },
+        },
+        { id: 'chair', label: 'Spare chair', width: 2, depth: 2 },
+      ],
+    };
+    const outcome = await createPlan({ plan: flat }, new URL(baseURL!).origin);
+    expect(outcome.isError).toBeFalsy();
+    expect(outcome.structured).toMatchObject({ url: null, editable: false });
+    const view = await host(page, toResult(outcome));
+    await expect(view.locator('#sheet svg')).toBeVisible();
+    await expect(view.locator('g[data-id="table"]')).toHaveCount(1);
+    await expect(view.getByRole('button', { name: 'Open in Room Planner' })).toBeHidden();
+    await expect(view.locator('#note')).toContainText("editor can't open plans");
+    if (SHOTS && test.info().project.name === 'chromium') {
+      await page.locator('#view').screenshot({ path: `${SHOTS}/viewer-not-editable.png` });
+    }
   });
 
   test('screenshots for review', async ({ page, baseURL, browserName }) => {

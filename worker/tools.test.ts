@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildShareUrl, encodeLegacyConfig } from '../src/core/share/link';
+import { buildShareUrl } from '../src/core/share/link';
 import { checkPlan, createPlan, readPlan, readPlanInput, summarize, unknownFields } from './tools';
 
 const ORIGIN = 'https://room-planner.andrechek.com';
@@ -108,6 +108,108 @@ describe('summary', () => {
   });
 });
 
+describe('plans the editor cannot open yet', () => {
+  const lRoom = {
+    id: 'living',
+    outline: [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 5 },
+      { x: 5, y: 5 },
+      { x: 5, y: 10 },
+      { x: 0, y: 10 },
+    ],
+  };
+  const cases: [string, Record<string, unknown>, RegExp][] = [
+    [
+      'several rooms',
+      {
+        rooms: [
+          room(10, 10),
+          {
+            ...room(4, 4),
+            id: 'hall',
+            outline: [
+              { x: 10, y: 0 },
+              { x: 14, y: 0 },
+              { x: 14, y: 4 },
+              { x: 10, y: 4 },
+            ],
+          },
+        ],
+      },
+      /several rooms/,
+    ],
+    ['a polygon room', { rooms: [lRoom] }, /not a rectangle/],
+    [
+      'an L-shaped piece',
+      {
+        rooms: [room(10, 10)],
+        items: [
+          {
+            id: 'l',
+            label: 'Sectional',
+            shape: 'l',
+            width: 6,
+            depth: 6,
+            cut: { corner: 'tr', width: 3, depth: 3 },
+            placement: { x: 4, y: 4 },
+          },
+        ],
+      },
+      /not rectangles/,
+    ],
+    [
+      'a round piece',
+      {
+        rooms: [room(10, 10)],
+        items: [
+          {
+            id: 't',
+            label: 'Table',
+            shape: 'ellipse',
+            width: 3,
+            depth: 3,
+            placement: { x: 5, y: 5 },
+          },
+        ],
+      },
+      /not rectangles/,
+    ],
+    [
+      'a piece in the inventory',
+      { rooms: [room(10, 10)], items: [{ id: 'c', label: 'Chair', width: 2, depth: 2 }] },
+      /not placed/,
+    ],
+  ];
+  for (const [name, parts, why] of cases) {
+    it(`accepts and checks ${name}, without a link`, async () => {
+      const r = await createPlan({ plan: { version: 4, unit: 'ft', ...parts } }, ORIGIN);
+      expect(r.isError).toBeFalsy();
+      const s = r.structured as {
+        url: null;
+        editable: boolean;
+        notEditable: string[];
+        plan: unknown;
+        issues: unknown[];
+      };
+      expect(s.url).toBeNull();
+      expect(s.editable).toBe(false);
+      expect(s.notEditable.join(' ')).toMatch(why);
+      expect(s.plan).toBeTruthy();
+      expect(r.text).toMatch(/No edit link yet: Room Planner's editor can't open plans with/);
+      expect(r.text).not.toContain('#s=');
+      expect(r.stats.editable).toBe(false);
+    });
+  }
+
+  it('gives the link and editable: true when the editor can open the plan', async () => {
+    const r = await createPlan({ plan: { version: 4, unit: 'ft', rooms: [room(10, 10)] } }, ORIGIN);
+    expect(r.structured).toMatchObject({ editable: true });
+    expect((r.structured as { url: string }).url).toMatch(/#s=/);
+  });
+});
+
 describe('check_layout', () => {
   it('rejects a bad minClearance', () => {
     const r = checkPlan({
@@ -155,12 +257,12 @@ describe('read_plan', () => {
     expect((s.structured as { url: string }).url.startsWith(`${ORIGIN}/#s=`)).toBe(true);
     const legacy = await readPlan(
       {
-        url: `https://evil.example/?config=${encodeURIComponent(encodeLegacyConfig(config as never))}`,
+        url: `https://evil.example/?config=${encodeURIComponent(btoa(JSON.stringify(config)))}`,
       },
       ORIGIN,
     );
     expect(legacy.isError).toBeFalsy();
-    expect((legacy.structured as { url: string }).url.startsWith(`${ORIGIN}/?config=`)).toBe(true);
+    expect((legacy.structured as { url: string }).url.startsWith(`${ORIGIN}/#s=`)).toBe(true);
   });
 
   it('explains what is wrong with a link', async () => {
