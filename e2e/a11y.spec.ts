@@ -74,10 +74,17 @@ for (const [name, viewport] of [
       await openStep(page, 'room');
       await expect(page.getByRole('radiogroup', { name: 'Door 1 wall' })).toBeVisible();
       const width = page.getByLabel('Room width');
-      await width.fill('500');
+      await width.fill('600');
       await width.press('Enter');
       await expect(width).toHaveAttribute('aria-invalid', 'true');
       await expectNoSeriousViolations(page);
+
+      // An unusually large size: the "did you mean?" prompt.
+      await width.fill('117');
+      await width.press('Enter');
+      await expect(page.getByTestId('dimension-confirm')).toBeVisible();
+      await expectNoSeriousViolations(page);
+      await page.keyboard.press('Escape');
 
       // Shrinking strands pieces: the "Move them inside" notice.
       await width.fill('6');

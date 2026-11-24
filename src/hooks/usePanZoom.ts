@@ -19,9 +19,14 @@ export function usePanZoom(
   const [zoom, setZoomState] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const zoomRef = useRef(zoom);
+  // How far out zooming may go: MIN_ZOOM, or further if the last fit needed it (a very big room).
+  const minZoomRef = useRef(MIN_ZOOM);
 
   const setZoom = useCallback((value: number | ((z: number) => number)) => {
-    const next = clampZoom(typeof value === 'function' ? value(zoomRef.current) : value);
+    const next = clampZoom(
+      typeof value === 'function' ? value(zoomRef.current) : value,
+      minZoomRef.current,
+    );
     zoomRef.current = next;
     setZoomState(next);
   }, []);
@@ -31,13 +36,13 @@ export function usePanZoom(
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const padding = isMobile ? 32 : 64;
-    setZoom(
-      computeFitZoom(
-        { width: rect.width - padding, height: rect.height - padding },
-        room,
-        PIXELS_PER_UNIT,
-      ),
+    const fit = computeFitZoom(
+      { width: rect.width - padding, height: rect.height - padding },
+      room,
+      PIXELS_PER_UNIT,
     );
+    minZoomRef.current = Math.min(MIN_ZOOM, fit);
+    setZoom(fit);
     setPan({ x: 0, y: 0 });
   }, [containerRef, isMobile, room, setZoom]);
 
@@ -166,7 +171,10 @@ export function usePanZoom(
   }, [containerRef, setZoom]);
 
   const zoomIn = useCallback(() => setZoom((z) => Math.min(MAX_ZOOM, z + ZOOM_STEP)), [setZoom]);
-  const zoomOut = useCallback(() => setZoom((z) => Math.max(MIN_ZOOM, z - ZOOM_STEP)), [setZoom]);
+  const zoomOut = useCallback(
+    () => setZoom((z) => Math.max(minZoomRef.current, z - ZOOM_STEP)),
+    [setZoom],
+  );
 
   return { zoom, zoomRef, pan, zoomIn, zoomOut, fitToView };
 }

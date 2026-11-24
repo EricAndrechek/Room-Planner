@@ -87,50 +87,100 @@ test.describe('locked furniture in room setup', () => {
 });
 
 test.describe('room size input', () => {
-  test('an over-limit size is rejected with an inline error, not clamped', async ({ page }) => {
+  const setup = async (page: Page) => {
     await returningIn(page, 'room-setup');
     await page.goto('/');
     await ready(page);
     await openStep(page, 'room');
-    const width = page.getByLabel('Room width');
+    return page.getByLabel('Room width');
+  };
+  const storedWidth = async (page: Page) =>
+    (await stored<{ width: number }>(page, 'room-sim-v3-dims')).width;
+
+  test('"117" asks "did you mean 11\'7"?", and Use 11\'7" sets it', async ({ page }) => {
+    const width = await setup(page);
     await width.fill('117');
     await width.press('Enter');
-    await expect(width).toHaveAttribute('aria-invalid', 'true');
-    const describedBy = (await width.getAttribute('aria-describedby'))!;
-    await expect(page.locator(`[id="${describedBy}"]`)).toHaveText(
-      `Max 100'. For 11'7", type 11 7`,
-    );
-    await expect(width).toHaveValue(`12'`);
-    expect(await stored(page, 'room-sim-v3-dims')).toEqual({ width: 12, height: 12 });
-
-    // Typing again clears the error; "11 7" is 11'7".
-    await width.fill('11 7');
-    await expect(width).not.toHaveAttribute('aria-invalid');
-    await width.press('Enter');
+    const prompt = page.getByTestId('dimension-confirm');
+    await expect(prompt).toContainText(`That's a 117 ft room — did you mean 11'7"?`);
+    // Nothing is used until a choice is made; focus is on the first choice.
+    expect(await storedWidth(page)).toBe(12);
+    const use = prompt.getByRole('button', { name: `Use 11'7"` });
+    await expect(use).toBeFocused();
+    await expect(prompt.getByRole('button', { name: 'Keep 117 ft' })).toBeVisible();
+    await use.click();
+    await expect(prompt).toHaveCount(0);
     await expect(width).toHaveValue(`11'7"`);
-    await expect
-      .poll(async () => (await stored<{ width: number }>(page, 'room-sim-v3-dims')).width)
-      .toBeCloseTo(11 + 7 / 12, 6);
+    await expect.poll(() => storedWidth(page)).toBeCloseTo(11 + 7 / 12, 6);
+
+    // "11 7" is 11'7" too, with no question asked.
+    await width.fill('11 7');
+    await width.press('Enter');
+    await expect(page.getByTestId('dimension-confirm')).toHaveCount(0);
+    await expect(width).toHaveValue(`11'7"`);
   });
 
-  test('the view re-fits after the room size changes, so the whole room stays visible', async ({
+  test('"120" -> Keep 120 ft: the room is 120 ft and the view re-fits to show all of it', async ({
     page,
   }) => {
-    await returningIn(page, 'room-setup');
-    await page.goto('/');
-    await ready(page);
-    await openStep(page, 'room');
-    const width = page.getByLabel('Room width');
-    await width.fill('60');
+    const width = await setup(page);
+    await width.fill('120');
     await width.press('Enter');
+    const prompt = page.getByTestId('dimension-confirm');
+    await expect(prompt).toContainText(`That's a 120 ft room — did you mean 12'?`);
+    await prompt.getByRole('button', { name: 'Keep 120 ft' }).click();
+    await expect.poll(() => storedWidth(page)).toBe(120);
     await viewPlan(page);
     await page.waitForTimeout(400);
     const plan = (await page.locator('#floor-plan').boundingBox())!;
     const room = (await page.getByTestId('room').boundingBox())!;
     expect(room.x).toBeGreaterThanOrEqual(plan.x - 1);
     expect(room.x + room.width).toBeLessThanOrEqual(plan.x + plan.width + 1);
-    // And it was not just left tiny: it fills most of the width.
     expect(room.width).toBeGreaterThan(plan.width * 0.6);
+  });
+
+  test('a large size with no other likely reading: keep it? (Escape cancels)', async ({
+    page,
+    isMobile,
+  }) => {
+    const width = await setup(page);
+    await width.fill('75');
+    await width.press('Enter');
+    const prompt = page.getByTestId('dimension-confirm');
+    await expect(prompt).toContainText(`That's a 75 ft room — keep it?`);
+    await expect(prompt.getByRole('button', { name: 'Cancel' })).toBeVisible();
+    if (!isMobile) {
+      await page.keyboard.press('Escape');
+      await expect(prompt).toHaveCount(0);
+      await expect(width).toBeFocused();
+    } else {
+      await prompt.getByRole('button', { name: 'Cancel' }).click();
+    }
+    await expect(width).toHaveValue(`12'`);
+    expect(await storedWidth(page)).toBe(12);
+    await width.fill('75');
+    await width.press('Enter');
+    await page.getByTestId('dimension-confirm').getByRole('button', { name: 'Keep' }).click();
+    await expect.poll(() => storedWidth(page)).toBe(75);
+  });
+
+  test('over the 500 ft ceiling is rejected with an inline error, not clamped', async ({
+    page,
+  }) => {
+    const width = await setup(page);
+    await width.fill('600');
+    await width.press('Enter');
+    await expect(width).toHaveAttribute('aria-invalid', 'true');
+    const describedBy = (await width.getAttribute('aria-describedby'))!;
+    await expect(page.locator(`[id="${describedBy}"]`)).toHaveText(
+      `Max 500'. For 11'7", type 11 7`,
+    );
+    await expect(page.getByTestId('dimension-confirm')).toHaveCount(0);
+    await expect(width).toHaveValue(`12'`);
+    expect(await storedWidth(page)).toBe(12);
+    // Typing again clears the error.
+    await width.fill('14');
+    await expect(width).not.toHaveAttribute('aria-invalid');
   });
 });
 

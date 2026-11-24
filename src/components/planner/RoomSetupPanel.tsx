@@ -5,7 +5,7 @@ import type { AddedOpening } from '../../hooks/useOpenings';
 import { DOOR_TYPES, WALL_OPTIONS } from '../../lib/constants';
 import { wallLength } from '../../lib/geometry';
 import { doorSwingAngle, hasHingeSide, isSwingDoor } from '../../lib/openings';
-import { feetToDisplay, formatArea } from '../../lib/units';
+import { feetToDisplay, formatArea, roomConfirmAboveFeet, roomMaxFeet } from '../../lib/units';
 import type { Door, DoorType, Id, RoomDims, RoomWindow, UnitSystem, Wall } from '../../types';
 import { DimensionInput } from './DimensionInput';
 import { StepHeader } from './StepHeader';
@@ -117,7 +117,8 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                   className={inputClass}
                   placeholder="e.g. 12"
                   min={1}
-                  max={100}
+                  max={roomMaxFeet(unitSystem)}
+                  confirmAbove={roomConfirmAboveFeet(unitSystem)}
                   label="Room width"
                   unitSystem={unitSystem}
                 />
@@ -133,7 +134,8 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                   className={inputClass}
                   placeholder="e.g. 12"
                   min={1}
-                  max={100}
+                  max={roomMaxFeet(unitSystem)}
+                  confirmAbove={roomConfirmAboveFeet(unitSystem)}
                   label="Room length"
                   unitSystem={unitSystem}
                 />

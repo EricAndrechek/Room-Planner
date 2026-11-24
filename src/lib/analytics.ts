@@ -35,6 +35,7 @@ export type AnalyticsEvent =
   | 'opening_moved'
   | 'locked_piece_pressed'
   | 'dimension_rejected'
+  | 'dimension_confirm'
   | 'room_resized'
   | 'pieces_moved_inside'
   | 'snap_toggled'

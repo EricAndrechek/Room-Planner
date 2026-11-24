@@ -223,3 +223,44 @@ export const nudgeStep = (size: NudgeSize, unitSystem: UnitSystem): number => {
   }
   return { fine: FEET_PER_INCH, normal: 0.25, coarse: 1 }[size];
 };
+
+// --- Room size limits and the "did you mean?" check -----------------------------------------
+
+/**
+ * Hard ceiling for a room side: 500 ft, or 150 m when working in metric (about 492 ft). Only a
+ * safety net against nonsense; ordinary large rooms are confirmed instead (see below).
+ */
+export const roomMaxFeet = (unitSystem: UnitSystem): number =>
+  isMetric(unitSystem) ? 150 * FEET_PER_METER : 500;
+
+/** Above this a room side is unusual enough to ask before using it: 50 ft, or 15 m in metric. */
+export const roomConfirmAboveFeet = (unitSystem: UnitSystem): number =>
+  isMetric(unitSystem) ? 15 * FEET_PER_METER : 50;
+
+/**
+ * A plausible other reading (in feet) of an unusually large entry, or null when there is none.
+ * Only unit-less input is reinterpreted, as the usual slip for each unit system:
+ * - feet & inches: a bare 3-4 digit number is feet then inches (`117` = 11'7", `1210` = 12'10";
+ *   the inches must be 0-11);
+ * - meters: a bare number is centimeters (`450` = 4.5 m); centimeters: millimeters.
+ * The result must itself be a sensible size: within [`min`, `max`] feet.
+ */
+export const suggestReading = (
+  input: string,
+  unitSystem: UnitSystem,
+  { min, max }: { min: number; max: number },
+): number | null => {
+  const s = input.trim();
+  const ok = (feet: number) => (feet >= min && feet <= max ? feet : null);
+  if (unitSystem === 'ft-in') {
+    if (!/^\d{3,4}$/.test(s)) return null;
+    const twoDigitInches = s.length === 4 ? Number(s.slice(2)) : NaN;
+    if (twoDigitInches <= 11) return ok(Number(s.slice(0, 2)) + twoDigitInches / 12);
+    if (s.length === 3) return ok(Number(s.slice(0, 2)) + Number(s.slice(2)) / 12);
+    return null;
+  }
+  if (!/^\d*\.?\d+$/.test(s)) return null;
+  if (unitSystem === 'm') return ok(Number(s) * FEET_PER_CM);
+  if (unitSystem === 'cm') return ok(Number(s) * FEET_PER_MM);
+  return null;
+};
