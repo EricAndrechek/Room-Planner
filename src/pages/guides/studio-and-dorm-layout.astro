@@ -1,0 +1,132 @@
+---
+import ExamplePlan from '../../components/content/ExamplePlan.astro';
+import Guide from '../../layouts/Guide.astro';
+import { examplesFor } from '../../lib/guides/examples';
+import { len, range, size } from '../../lib/guides/measure';
+import { withBase } from '../../lib/paths';
+
+const slug = 'studio-and-dorm-layout';
+---
+
+<Guide slug={slug}>
+  <p class="text-lg text-slate-600">
+    In a studio apartment or a dorm room, one room does the work of three: bedroom, living room and
+    dining room or study. The trick is to give each activity its own zone, keep one clear path
+    through the room, and choose pieces that are a size smaller than usual.
+  </p>
+
+  <h2 id="furniture-sizes">Compact furniture sizes</h2>
+  <div class="overflow-x-auto">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Piece</th>
+          <th scope="col">Typical size (width × depth)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Twin XL mattress (used in many US dorms)</th>
+          <td>{size(38, 80)}</td>
+        </tr>
+        <tr>
+          <th scope="row">Full (double) mattress</th>
+          <td>{size(54, 75)}</td>
+        </tr>
+        <tr>
+          <th scope="row">Daybed (takes a twin mattress)</th>
+          <td>a little over {size(38, 75)}</td>
+        </tr>
+        <tr>
+          <th scope="row">Loveseat</th>
+          <td>
+            about {range(52, 72)} wide, {range(32, 38)} deep
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">Café table for two</th>
+          <td>about {range(24, 30)} square or round</td>
+        </tr>
+        <tr>
+          <th scope="row">Dining chair</th>
+          <td>about {size(18, 20)}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="dining-clearance">Space around a small table</h2>
+  <p>Kitchen designers (the NKBA guidelines) use these distances from a table or counter edge:</p>
+  <div class="overflow-x-auto">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Behind a seated person</th>
+          <th scope="col">Clear space</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Nobody walks behind</th>
+          <td>{len(32)}</td>
+        </tr>
+        <tr>
+          <th scope="row">Someone edges past</th>
+          <td>{len(36)}</td>
+        </tr>
+        <tr>
+          <th scope="row">Someone walks past</th>
+          <td>{len(44)}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    A table pushed against a wall seats one fewer person but saves a whole side of clearance, which
+    is often the right trade in a studio.
+  </p>
+
+  <h2 id="doors">Doors take up floor too</h2>
+  <p>
+    A hinged door sweeps a quarter circle as wide as the door: a 32 in (81 cm) door needs that much
+    empty floor in front of it, all the time. Where you can choose, a <strong>pocket door</strong>{' '}
+    (slides into the wall) or a <strong>sliding</strong> or <strong>barn door</strong> needs no
+    swing space, and a <strong>bi-fold</strong> needs about half. A door that swings out of the
+    room, or a plain opening with no door, frees that floor entirely. The planner has all of these
+    door types, so you can see the difference in your own room.
+  </p>
+
+  <h2 id="tips">Layout tips</h2>
+  <ul>
+    <li>
+      <strong>Zone the room.</strong> Sleep in the corner farthest from the entrance, put seating in
+      the middle and eating near the kitchen.
+    </li>
+    <li>
+      <strong>Push the bed into a corner.</strong> It only needs a walkway on one side, which frees
+      about {len(24)} of floor along the other.
+    </li>
+    <li>
+      <strong>Use furniture as walls.</strong> A sofa's back or an open bookcase can divide the
+      sleeping area from the living area without blocking light.
+    </li>
+    <li>
+      <strong>Keep one clear path</strong> at least {range(30, 36)} wide from the front door to the
+      bed, the kitchen and the bathroom.
+    </li>
+    <li>
+      <strong>Dorm rooms:</strong> many come with a bed, desk, chair and dresser for each student.
+      Find out their sizes (and which ones can be moved) before you buy anything else.
+    </li>
+  </ul>
+
+  <h2 id="examples">Example studio and dorm layouts</h2>
+  {examplesFor(slug).map((e) => (
+    <ExamplePlan example={e} />
+  ))}
+
+  <p>
+    Next: the <a href={withBase('guides/bedroom-layout/')}>bedroom layout guide</a> for bed sizes
+    and clearances, or the <a href={withBase('faq/')}>FAQ</a>.
+  </p>
+</Guide>

@@ -23,7 +23,7 @@
     "assets": "node brand/generate.mjs",
     "screenshots": "node brand/screenshots.mjs",
     "build:ci": "astro build && node scripts/csp-hashes.mjs && sh scripts/upload-sourcemaps.sh",
-    "deploy": "wrangler deploy",
+    "deploy": "wrangler deploy && node scripts/indexnow.mjs",
     "dev:worker": "pnpm build && wrangler dev"
   },
   "dependencies": {

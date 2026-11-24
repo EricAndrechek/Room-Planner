@@ -1,0 +1,148 @@
+---
+import ExamplePlan from '../../components/content/ExamplePlan.astro';
+import Guide from '../../layouts/Guide.astro';
+import { examplesFor } from '../../lib/guides/examples';
+import { feetInches, len, range, viewingDistanceFeet } from '../../lib/guides/measure';
+import { withBase } from '../../lib/paths';
+
+const slug = 'living-room-layout';
+
+const meters = (feet: number) => (feet * 0.3048).toFixed(1);
+const tvs = [43, 50, 55, 65, 75, 85].map((d) => ({
+  size: d,
+  near: viewingDistanceFeet(d, 40),
+  far: viewingDistanceFeet(d, 30),
+}));
+---
+
+<Guide slug={slug}>
+  <p class="text-lg text-slate-600">
+    A living room has to work for sitting, talking, watching and walking through. Most layouts that
+    feel right follow a handful of distances: how far the coffee table is from the sofa, how wide
+    the walkways are, and how far the seats are from the TV. Here they are, with example floor plans
+    you can open and edit.
+  </p>
+
+  <h2 id="spacing">Spacing rules of thumb</h2>
+  <div class="overflow-x-auto">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Distance</th>
+          <th scope="col">Typical range</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Sofa (or chair) to coffee table</th>
+          <td>{range(14, 18)}</td>
+        </tr>
+        <tr>
+          <th scope="row">Main walkway through the room</th>
+          <td>{range(30, 36)}</td>
+        </tr>
+        <tr>
+          <th scope="row">Narrow path between pieces, used now and then</th>
+          <td>at least {len(24)}</td>
+        </tr>
+        <tr>
+          <th scope="row">Coffee table length</th>
+          <td>about two-thirds of the sofa's length</td>
+        </tr>
+        <tr>
+          <th scope="row">Seats facing each other, for easy conversation</th>
+          <td>no more than about 8–10 ft (2.4–3 m) apart</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    Plan the walkways before the furniture: a path from each door to the seats, and through the room
+    to other doors, should not run between the sofa and the coffee table.
+  </p>
+
+  <h2 id="tv-distance">TV viewing distance by screen size</h2>
+  <p>
+    Viewing distance is usually set by how much of your view the screen fills. SMPTE recommends at
+    least 30° for general viewing; THX recommends about 40° for a cinema-like picture. For a 16:9
+    screen, that works out to:
+  </p>
+  <div class="overflow-x-auto">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Screen (diagonal)</th>
+          <th scope="col">Closer: 40° (THX)</th>
+          <th scope="col">Farther: 30° (SMPTE)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {tvs.map((t) => (
+          <tr>
+            <th scope="row">{t.size} in</th>
+            <td>
+              {feetInches(t.near)} <span class="whitespace-nowrap">({meters(t.near)} m)</span>
+            </td>
+            <td>
+              {feetInches(t.far)} <span class="whitespace-nowrap">({meters(t.far)} m)</span>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+  <p class="text-sm text-slate-600">
+    Distances are from your eyes to the screen. Anywhere between the two columns is reasonable; sit
+    closer for films, farther if the TV is mostly on in the background.
+  </p>
+
+  <h2 id="furniture-sizes">Typical living room furniture sizes</h2>
+  <p>Sizes vary a lot between models, so measure yours or check the product page.</p>
+  <ul>
+    <li>
+      <strong>Three-seat sofa:</strong> about {range(72, 90)} wide, {range(32, 40)} deep.
+    </li>
+    <li>
+      <strong>Loveseat:</strong> about {range(52, 72)} wide, the same depth as a sofa.
+    </li>
+    <li>
+      <strong>Armchair:</strong> about {range(28, 40)} wide and deep.
+    </li>
+    <li>
+      <strong>Coffee table:</strong> about {range(36, 54)} long, {range(18, 30)} wide.
+    </li>
+    <li>
+      <strong>TV console:</strong> a little wider than the TV, about {range(16, 20)} deep.
+    </li>
+  </ul>
+
+  <h2 id="tips">Layout tips</h2>
+  <ul>
+    <li>
+      <strong>Pick a focal point</strong> (TV, fireplace or window) and face the main seating
+      towards it.
+    </li>
+    <li>
+      <strong>Float the sofa</strong> away from the wall if a walkway would otherwise cut between
+      the sofa and the coffee table. A sofa back makes a natural edge for the walkway.
+    </li>
+    <li>
+      <strong>Avoid glare:</strong> a TV directly opposite a bright window is hard to watch in the
+      day. A side wall usually works better.
+    </li>
+    <li>
+      <strong>Leave every doorway clear.</strong> The planner marks a piece that stands in a doorway
+      or in a door's swing.
+    </li>
+  </ul>
+
+  <h2 id="examples">Example living room layouts</h2>
+  {examplesFor(slug).map((e) => (
+    <ExamplePlan example={e} />
+  ))}
+
+  <p>
+    Next: <a href={withBase('guides/home-office-layout/')}>home office layouts</a>, or the{' '}
+    <a href={withBase('guides/bedroom-layout/')}>bedroom layout guide</a>.
+  </p>
+</Guide>
