@@ -7,6 +7,7 @@ import {
   describeSnap,
   fitMeasurementLabels,
   itemBounds,
+  itemRects,
   measureClearances,
   snapAxis,
   snapGuides,
@@ -415,5 +416,60 @@ describe('performance', () => {
     const perMove = (performance.now() - t0) / 1000;
     // Typically ~0.01 ms; a 16 ms frame budget leaves a huge margin even on a slow phone.
     expect(perMove).toBeLessThan(1);
+  });
+});
+
+describe('shaped pieces', () => {
+  // A 9' x 7' sectional with a 6' x 4' cut at the top right, its box at (0, 3): the notch is
+  // x 3..9, y 3..7.
+  const sofa = item({
+    id: 'sofa',
+    label: 'Sofa',
+    x: 0,
+    y: 3,
+    width: 9,
+    height: 7,
+    shape: 'l',
+    cut: { corner: 'tr', width: 6, depth: 4 },
+  });
+  const big = { width: 20, height: 20 };
+
+  it('bounds follow the true outline when turned: a circle stays its size', () => {
+    const table = item({ width: 4, height: 4, x: 2, y: 2, shape: 'ellipse', rotation: 30 });
+    const b = itemBounds(table);
+    expect(b.left).toBeCloseTo(2, 12);
+    expect(b.right).toBeCloseTo(6, 12);
+    // A square box turned 30 degrees is wider than the circle in it.
+    expect(itemBounds({ ...table, shape: 'rect' }).right).toBeGreaterThan(6.7);
+    // At a quarter turn, an L's bounds are its box's (exact, as for a rectangle).
+    expect(itemBounds({ ...sofa, rotation: 90 })).toEqual(
+      itemBounds({ ...sofa, shape: 'rect', cut: undefined, rotation: 90 }),
+    );
+  });
+
+  it("other pieces snap to the inner edges of an L's notch", () => {
+    const c = buildSnapCandidates([sofa], big, 1);
+    expect(c.x).toContainEqual(expect.objectContaining({ pos: 3, edge: 'end', span: [3, 7] }));
+    expect(c.y).toContainEqual(expect.objectContaining({ pos: 7, edge: 'start', span: [3, 9] }));
+    // A 2' x 2' chair in the notch, a little off both inner edges, snaps flush against them.
+    const r = snapItem(item({ x: 3.1, y: 4.9 }), c, T);
+    expect(r.x).toBe(3);
+    expect(r.y).toBe(5);
+    expect(describeSnap(r)).toBe('Against Sofa');
+  });
+
+  it("measures into an L's notch to its inner edges, not across its box", () => {
+    expect(itemRects(sofa)).toEqual([
+      { left: 0, top: 3, right: 3, bottom: 10 },
+      { left: 3, top: 7, right: 9, bottom: 10 },
+    ]);
+    const chair = { left: 5, top: 4, right: 7, bottom: 6 };
+    const m = measureClearances(chair, [sofa], big, 1);
+    expect(m.find((x) => x.side === 'left')).toMatchObject({ distance: 2, to: 'item' });
+    expect(m.find((x) => x.side === 'bottom')).toMatchObject({ distance: 1, to: 'item' });
+    // A round table is measured to its bounds.
+    expect(itemRects(item({ x: 1, y: 1, width: 2, height: 2, shape: 'ellipse' }))).toEqual([
+      { left: 1, top: 1, right: 3, bottom: 3 },
+    ]);
   });
 });

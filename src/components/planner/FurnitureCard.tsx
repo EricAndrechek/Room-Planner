@@ -7,6 +7,7 @@ import { boxOf, doorBlockText, type PiecePatch } from '../../lib/plans';
 import type { Id, Item, RoomDims, UnitSystem } from '../../types';
 import { ColorPicker } from './ColorPicker';
 import { DimensionInput } from './DimensionInput';
+import { PieceShapeFields } from './PieceShapeFields';
 import { Tooltip } from './Tooltip';
 
 interface FurnitureCardProps {
@@ -29,7 +30,10 @@ interface FurnitureCardProps {
   onCloseColorPicker: () => void;
 }
 
-/** A furniture entry in the sidebar: label, color, lock/visibility, size, position and rotation. */
+/**
+ * A furniture entry in the sidebar: label, color, lock/visibility, shape, size, position and
+ * rotation.
+ */
 export const FurnitureCard = memo(function FurnitureCard({
   item,
   warning,
@@ -198,6 +202,7 @@ export const FurnitureCard = memo(function FurnitureCard({
         </div>
       ) : (
         <>
+          <PieceShapeFields item={item} unitSystem={unitSystem} onChange={onChange} />
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label htmlFor={fieldId('width')} className="text-[10px] text-slate-500">

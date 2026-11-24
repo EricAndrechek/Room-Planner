@@ -370,24 +370,46 @@ export const narrowedOpenings = (before: Plan, after: Plan): Opening[] => {
 /** A new piece's size. */
 export const NEW_PIECE = { width: 3, depth: 2 };
 
-/** A new piece at the free spot nearest the middle of the room. */
-export function addPiece(plan: Plan, color: string): { plan: Plan; item: Item } {
+/**
+ * What "Add Item" can add: a plain piece, or one of two starters with a shape (a 9' x 7'
+ * sectional with a 6' x 4' cut, so 3' deep arms; a 4' round table).
+ */
+export const PIECE_PRESETS = {
+  new: { label: 'New Item', shape: 'rect', ...NEW_PIECE },
+  'l-sofa': {
+    label: 'L-shaped sofa',
+    shape: 'l',
+    width: 9,
+    depth: 7,
+    cut: { corner: 'tr', width: 6, depth: 4 },
+  },
+  'round-table': { label: 'Round table', shape: 'ellipse', width: 4, depth: 4 },
+} as const satisfies Record<string, Pick<Item, 'label' | 'shape' | 'width' | 'depth' | 'cut'>>;
+
+export type PiecePreset = keyof typeof PIECE_PRESETS;
+
+/** A new piece (`preset`) at the free spot nearest the middle of the room. */
+export function addPiece(
+  plan: Plan,
+  color: string,
+  preset: PiecePreset = 'new',
+): { plan: Plan; item: Item } {
+  const p: Pick<Item, 'label' | 'shape' | 'width' | 'depth' | 'cut'> = PIECE_PRESETS[preset];
   const corner = furnitureSpotBox(plan, mainRoom(plan), {
-    width: NEW_PIECE.width,
-    height: NEW_PIECE.depth,
+    width: p.width,
+    height: p.depth,
+    shape: p.shape,
+    cut: p.cut,
   });
   const item: Item = {
     id: nextId(plan, 'item'),
-    label: 'New Item',
+    label: p.label,
     color,
-    shape: 'rect',
-    width: NEW_PIECE.width,
-    depth: NEW_PIECE.depth,
-    placement: {
-      x: corner.x + NEW_PIECE.width / 2,
-      y: corner.y + NEW_PIECE.depth / 2,
-      rotation: 0,
-    },
+    shape: p.shape,
+    width: p.width,
+    depth: p.depth,
+    ...(p.cut && { cut: { ...p.cut } }),
+    placement: { x: corner.x + p.width / 2, y: corner.y + p.depth / 2, rotation: 0 },
   };
   return { plan: addItem(plan, item), item };
 }
@@ -395,8 +417,8 @@ export function addPiece(plan: Plan, color: string): { plan: Plan; item: Item } 
 export const deletePiece = (plan: Plan, id: Id): Plan => removeItem(plan, id);
 
 /**
- * Edit a piece in the editor's terms (see `patchPiece`). The piece is replaced, not merged, so a
- * flag the patch turns off (`locked`, `hidden`) is gone.
+ * Edit a piece in the editor's terms (see `patchPiece`). The patched piece replaces the old one, so
+ * a field the patch removes (`locked`, `hidden`, an L's `cut`) is gone.
  */
 export const changePiece = (plan: Plan, id: Id, patch: PiecePatch): Plan => {
   const i = plan.items.findIndex((it) => it.id === id);
