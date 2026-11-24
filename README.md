@@ -165,7 +165,7 @@ Open [http://localhost:4321](http://localhost:4321) in your browser.
 | `pnpm assets`      | Regenerate icons and social images from `brand/`                                                     |
 | `pnpm screenshots` | Regenerate the PWA manifest screenshots (needs a running preview server)                             |
 | `pnpm dev:worker`  | Build, then serve `dist/` locally with `wrangler dev`                                                |
-| `pnpm deploy`      | Deploy the Worker (normally done by Cloudflare Workers Builds; see [docs/DEPLOY.md](docs/DEPLOY.md)) |
+| `pnpm deploy`      | Deploys, then pings IndexNow (normally done by Workers Builds; see [docs/DEPLOY.md](docs/DEPLOY.md)) |
 
 To run the e2e suite against an already-running server (for example `wrangler dev`
 on port 8787, which also exercises the CSP headers), set `E2E_BASE_URL`:
@@ -174,6 +174,20 @@ on port 8787, which also exercises the CSP headers), set `E2E_BASE_URL`:
 The public site URL used for canonical links, Open Graph tags, the sitemap and
 `robots.txt` comes from `SITE_URL` at build time (default
 `https://room-planner.andrechek.com`), e.g. `SITE_URL=https://example.com pnpm build`.
+
+### Search and AI discoverability
+
+- Content pages: `/help/`, `/faq/` and `/guides/` (four room layout guides). Each guide's example
+  layouts live in `src/lib/guides/examples.ts`; they are drawn at build time with the export
+  pipeline and link to the planner with a precomputed `#s=` share link.
+  `src/lib/guides/examples.test.ts` keeps them free of warnings and keeps the captions'
+  clearances true.
+- Structured data (JSON-LD): `WebSite` everywhere, `WebApplication` on the home page, `Article` +
+  `BreadcrumbList` on guides, `FAQPage` on the FAQ (same strings as the visible answers).
+- `/llms.txt` (`src/pages/llms.txt.ts`) and `/llms-full.txt` (built from the rendered HTML by
+  `scripts/llms-full.mjs`) for AI assistants.
+- Sitemap `<lastmod>` comes from git (`scripts/lastmod.mjs`). After a production deploy,
+  `scripts/indexnow.mjs` submits recently changed URLs to IndexNow (Bing, Yandex, ...).
 
 ### The old domain (`roomplanner.andrechek.com`)
 
@@ -200,8 +214,10 @@ Deployment and the domain cutover are documented in [docs/DEPLOY.md](docs/DEPLOY
 
 ```
 src/
-├── pages/                 # index (planner island), help, 404, robots.txt
-├── layouts/Base.astro     # <head>: SEO, Open Graph, icons, JSON-LD
+├── pages/                 # index (planner island), help, faq, guides/, 404, robots.txt,
+│                          # llms.txt, og/<guide>.png (social cards, rendered at build)
+├── layouts/               # Base (<head>: SEO, Open Graph, icons, JSON-LD), Content
+│                          # (static pages: header, breadcrumbs, footer), Guide
 ├── components/
 │   ├── PlannerApp.tsx     # client-only island root: boot + ErrorBoundary
 │   ├── ErrorBoundary.tsx
@@ -212,7 +228,8 @@ src/
 │                          # useSelection, useOpenings, useFurnitureEditing,
 │                          # usePanZoom, usePointerDrag, useKeyboardShortcuts...
 ├── lib/                   # pure, unit-tested logic: units, geometry, layout,
-│                          # share, storage, projects, boot, analytics facade
+│                          # share, storage, projects, boot, analytics facade;
+│                          # guides/ (example layouts, their drawings and share links)
 ├── styles/global.css      # Tailwind v4 + app styles
 └── types.ts
 e2e/                       # Playwright specs

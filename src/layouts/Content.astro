@@ -1,0 +1,89 @@
+---
+/**
+ * Static content pages (help, FAQ, guides): header, optional breadcrumbs (visible and as
+ * BreadcrumbList JSON-LD), the page, and the site footer.
+ */
+import SiteFooter from '../components/content/SiteFooter.astro';
+import { withBase } from '../lib/paths';
+import { SITE_NAME } from '../lib/site';
+import Base from './Base.astro';
+
+interface Props {
+  title: string;
+  description: string;
+  /** Trail below Home, ending with this page, e.g. [{ name: 'Guides', path: 'guides/' }, ...]. */
+  breadcrumbs?: { name: string; path: string }[];
+  jsonLd?: Record<string, unknown>[];
+  ogImage?: { path: string; width: number; height: number; alt: string };
+  ogType?: 'website' | 'article';
+}
+
+const { title, description, breadcrumbs, jsonLd = [], ogImage, ogType } = Astro.props;
+
+const site = Astro.site ?? new URL(Astro.url.origin);
+const abs = (path: string) => new URL(withBase(path), site).toString();
+const trail = breadcrumbs ? [{ name: 'Home', path: '' }, ...breadcrumbs] : [];
+const breadcrumbLd = trail.length
+  ? [
+      {
+        '@type': 'BreadcrumbList',
+        itemListElement: trail.map((c, i) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          name: c.name,
+          item: abs(c.path),
+        })),
+      },
+    ]
+  : [];
+---
+
+<Base
+  title={title}
+  description={description}
+  jsonLd={[...jsonLd, ...breadcrumbLd]}
+  ogImage={ogImage}
+  ogType={ogType}
+>
+  <header class="bg-white border-b border-slate-200">
+    <div class="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
+      <a href={withBase('')} class="flex items-center gap-2 font-bold text-slate-800">
+        <img src={withBase('favicon.svg')} width="28" height="28" alt="" />
+        {SITE_NAME}
+      </a>
+      <a
+        href={withBase('')}
+        class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors"
+      >
+        Open the planner
+      </a>
+    </div>
+  </header>
+
+  <main
+    id="main"
+    tabindex="-1"
+    class="outline-hidden max-w-3xl mx-auto px-4 py-10 text-slate-700 leading-relaxed"
+  >
+    {trail.length > 0 && (
+      <nav aria-label="Breadcrumb" class="mb-4 text-sm text-slate-600">
+        <ol class="flex flex-wrap gap-1">
+          {trail.map((c, i) => (
+            <li class="flex gap-1">
+              {i > 0 && <span aria-hidden="true">/</span>}
+              {i < trail.length - 1 ? (
+                <a href={withBase(c.path)} class="hover:text-indigo-700 underline">
+                  {c.name}
+                </a>
+              ) : (
+                <span aria-current="page">{c.name}</span>
+              )}
+            </li>
+          ))}
+        </ol>
+      </nav>
+    )}
+    <slot />
+  </main>
+  <SiteFooter />
+</Base>

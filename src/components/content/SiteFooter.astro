@@ -1,0 +1,49 @@
+---
+import { GUIDES, guidePath } from '../../lib/guides';
+import { withBase } from '../../lib/paths';
+import { SITE_NAME } from '../../lib/site';
+
+// Plain links on every static page, so people and crawlers can reach all of them.
+const columns = [
+  {
+    title: SITE_NAME,
+    links: [
+      { label: 'Open the planner', href: withBase('') },
+      { label: 'Help', href: withBase('help/') },
+      { label: 'FAQ', href: withBase('faq/') },
+    ],
+  },
+  {
+    title: 'Guides',
+    links: [
+      { label: 'All guides', href: withBase('guides/') },
+      ...GUIDES.map((g) => ({ label: g.label, href: withBase(guidePath(g.slug)) })),
+    ],
+  },
+];
+---
+
+<footer class="border-t border-slate-200 bg-white mt-16">
+  <div class="max-w-3xl mx-auto px-4 py-8 grid gap-6 sm:grid-cols-3 text-sm">
+    {columns.map((c) => (
+      <nav aria-label={c.title === SITE_NAME ? 'Site' : c.title}>
+        <h2 class="font-semibold text-slate-900 mb-2">{c.title}</h2>
+        <ul class="space-y-1">
+          {c.links.map((l) => (
+            <li>
+              <a
+                href={l.href}
+                class="text-slate-600 hover:text-indigo-700 underline-offset-2 hover:underline"
+              >
+                {l.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    ))}
+    <p class="text-slate-600">
+      Free, with no sign-up. Your floor plans are saved in your browser and never uploaded.
+    </p>
+  </div>
+</footer>

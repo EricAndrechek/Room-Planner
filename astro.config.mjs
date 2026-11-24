@@ -5,6 +5,8 @@ import sitemap from '@astrojs/sitemap';
 import tailwindcss from '@tailwindcss/vite';
 import { AstroPWAIntegration } from '@vite-pwa/astro';
 import { pwaOptions } from './pwa-options.mjs';
+import { lastModified } from './scripts/lastmod.mjs';
+import { llmsFull } from './scripts/llms-full.mjs';
 
 /**
  * The public origin of the site. Every absolute URL (canonical, og:url,
@@ -21,7 +23,13 @@ export default defineConfig({
     react(),
     sitemap({
       filter: (page) => !/\/404\/?$/.test(page),
+      // <lastmod>: when the page's source last changed in git (see scripts/lastmod.mjs).
+      serialize: (item) => ({
+        ...item,
+        lastmod: lastModified(new URL(item.url).pathname).toISOString(),
+      }),
     }),
+    llmsFull(),
     AstroPWAIntegration(pwaOptions),
   ],
   vite: {
