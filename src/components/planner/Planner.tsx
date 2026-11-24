@@ -445,6 +445,10 @@ export function Planner({ store, initial }: PlannerProps) {
       dismissNotice(o.key);
     }
   }, [plan, dismissNotice]);
+  const undoRef = useRef(undo);
+  useEffect(() => {
+    undoRef.current = undo;
+  });
   const offerUndo = (key: string, message: string) => {
     undoOffer.current = { key, plan: null };
     showNotice({
@@ -457,7 +461,8 @@ export function Planner({ store, initial }: PlannerProps) {
           const o = undoOffer.current;
           undoOffer.current = null;
           dismissNotice(key);
-          if (o?.plan && o.plan === planRef.current) undo();
+          // The latest undo (the one this toast was made with may predate the edit).
+          if (o?.plan && o.plan === planRef.current) undoRef.current();
         },
       },
     });
@@ -641,10 +646,6 @@ export function Planner({ store, initial }: PlannerProps) {
         return true;
       },
       deselect: () => {
-        if (placingId) {
-          cancelPlacing();
-          return;
-        }
         sel.clearSelection();
         roomShape.clearCorner();
         focusCanvas();
@@ -843,8 +844,13 @@ export function Planner({ store, initial }: PlannerProps) {
   useEffect(() => {
     if (!placingId) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Enter' || e.defaultPrevented) return;
       const t = e.target as HTMLElement | null;
+      if (e.key === 'Escape' && !t?.closest('input, select, textarea, [role="menu"], dialog')) {
+        e.preventDefault();
+        cancelPlacing();
+        return;
+      }
+      if (e.key !== 'Enter' || e.defaultPrevented) return;
       if (t?.closest('button, input, select, textarea, a, [role="button"]')) return;
       e.preventDefault();
       placeInFreeSpot(placingId);

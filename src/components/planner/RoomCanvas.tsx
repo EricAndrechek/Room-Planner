@@ -407,7 +407,7 @@ export function RoomCanvas({
                     role="button"
                     tabIndex={0}
                     aria-pressed={on}
-                    aria-label={`${name}, ${feetToDisplay(sz.width, unitSystem)} by ${feetToDisplay(sz.height, unitSystem)}, ${area}. Drag it or use the arrow keys to move it.`}
+                    aria-label={`${name}${roomy ? ` ${area}` : ''}: ${feetToDisplay(sz.width, unitSystem)} by ${feetToDisplay(sz.height, unitSystem)}${roomy ? '' : `, ${area}`}. Drag it or use the arrow keys to move it.`}
                     className={`touch-hit absolute flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-1 text-[11px] font-semibold leading-4 shadow-sm outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-400 cursor-move ${
                       on
                         ? 'bg-indigo-600 text-white'
@@ -428,7 +428,7 @@ export function RoomCanvas({
                           on ? 'font-normal text-indigo-100' : 'font-normal text-slate-500'
                         }
                       >
-                        {area}
+                        {` ${area}`}
                       </span>
                     )}
                   </div>
