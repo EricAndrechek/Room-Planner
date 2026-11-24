@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { animationsSettled, openStep, viewPlan } from './ui';
+import { storedOpenings } from './storage';
 
 // Door types, opening angles, and furniture blocking doors (#27 follow-up).
 
@@ -133,8 +134,7 @@ test('the door card offers every type, and the 90/180 angle only for swing doors
   await expect(angle).toBeVisible();
   await angle.getByRole('radio', { name: '180°' }).click();
   await expect(angle.getByRole('radio', { name: '180°' })).toHaveAttribute('aria-checked', 'true');
-  const stored = () =>
-    page.evaluate(() => JSON.parse(localStorage.getItem('room-sim-v3-doors') ?? '[]')[0]);
+  const stored = async () => (await storedOpenings(page, 'door'))[0]!;
   await expect.poll(async () => (await stored()).swingAngle).toBe(180);
 
   for (const [value, hasAngle, hingeText] of [

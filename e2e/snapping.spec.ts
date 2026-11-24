@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { storedPieces } from './storage';
 
 // Snapping, guides and measurements (#10) on a known layout: a 12' x 12' room with a 2' x 2' Box
 // at (3, 4.5) and a 4' x 6' Bed at (7, 3). Mouse on desktop projects, touch on mobile ones.
@@ -52,11 +53,7 @@ async function seed(page: Page, extra: Record<string, string> = {}) {
 }
 
 const stored = async (page: Page, label: string) =>
-  (
-    (await page.evaluate(() =>
-      JSON.parse(localStorage.getItem('room-sim-v3-items') ?? '[]'),
-    )) as typeof ITEMS
-  ).find((i) => i.label === label)!;
+  (await storedPieces(page)).find((i) => i.label === label)!;
 
 /** Screen pixels per foot, from the room's on-screen size (12 ft + two 4px borders, scaled). */
 async function pxPerFoot(page: Page) {

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { storedOpenings } from './storage';
 import { announcements, openStep, recordAnnouncements } from './ui';
 
 // Adding doors/windows (issue #25): each new one lands in its own spot, is selected, and its
@@ -10,8 +11,8 @@ async function ready(page: Page) {
 }
 
 const KINDS = [
-  { kind: 'door', label: 'Door', key: 'room-sim-v3-doors' },
-  { kind: 'window', label: 'Window', key: 'room-sim-v3-windows' },
+  { kind: 'door', label: 'Door' },
+  { kind: 'window', label: 'Window' },
 ] as const;
 
 /** Bounding boxes of the on-canvas handles, rounded to whole pixels. */
@@ -23,7 +24,7 @@ const handleBoxes = (page: Page, label: string) =>
     }),
   );
 
-async function addThreeThenDelete(page: Page, { kind, label, key }: (typeof KINDS)[number]) {
+async function addThreeThenDelete(page: Page, { kind, label }: (typeof KINDS)[number]) {
   await page.goto('/');
   await ready(page);
   await openStep(page, 'room');
@@ -54,10 +55,7 @@ async function addThreeThenDelete(page: Page, { kind, label, key }: (typeof KIND
   await expect(newest).not.toHaveAttribute('data-highlighted', 'true', { timeout: 4000 });
 
   // Three distinct spots: in the saved layout and on the canvas.
-  const stored: { wall: string; position: number }[] = await page.evaluate(
-    (k) => JSON.parse(localStorage.getItem(k) ?? '[]'),
-    key,
-  );
+  const stored = await storedOpenings(page, kind);
   expect(stored).toHaveLength(before + 3);
   const spots = stored.map((o) => `${o.wall}@${o.position}`);
   expect(new Set(spots).size).toBe(spots.length);
