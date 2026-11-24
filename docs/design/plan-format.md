@@ -1,0 +1,938 @@
+# Plan format v4 and agent interfaces
+
+Status: design, not yet implemented. Measurements were taken on 2026-11-24 against `main` at
+`6aed18d` (Node 22.23.5, Apple silicon). The spike scripts are not committed; section 12 lists them.
+
+This document fixes the next plan format and the architecture around it, so that the phased PRs in
+section 10 can be implemented without re-deriving decisions. Every question has one answer and the
+reason for it.
+
+## 1. Summary of decisions
+
+| Question                  | Decision                                                                                                                               |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Schema library            | Zod 4, written with the `zod/mini` API. One file, `src/core/schema.ts`. Adds 8.0 KB gzip to the planner chunk.                         |
+| Canonical document        | JSON object `Plan` with `version: 4`. One floor, many rooms, all coordinates in one floor space.                                       |
+| Rooms                     | A polygon outline, clockwise. A rectangle is a 4-point outline. No separate rectangle type.                                            |
+| Walls                     | Derived: wall `i` runs from `outline[i]` to `outline[i+1]`. Never stored.                                                              |
+| Openings                  | Nested in their room: `{ wall: index, offset, width }`. Vertex edits go through core operations that re-anchor them.                   |
+| Doors between rooms       | Not stored. A door connects two rooms when it lies on a wall segment both rooms share. Derived geometrically.                          |
+| Items                     | Top level, floor coordinates, centre + rotation. Shape is `rect`, `l` or `ellipse`. No `placement` means the item is in the inventory. |
+| Lengths                   | The document names its own `unit`. The app always holds and stores feet. Agents may send `in`, `cm`, `m` or `ft`.                      |
+| Geometry                  | Own code, no clipping library: every shape becomes convex parts, tested with the SAT already in `geometry.ts`. 1.2 KB gzip.            |
+| Migrations                | One entry point, `loadPlan`, used by every load path. Steps `2→3→4`, pure, tested with fixtures of every historical format.            |
+| Storage                   | New keys for v4. The v3 keys are never rewritten, so they are the raw pre-migration backup and a rollback still works.                 |
+| Newer document, older app | Never loaded, never overwritten. The app shows "update Room Planner". Ships in the first schema PR.                                    |
+| Share links               | Still `#s=` + deflate + base64url. The JSON inside becomes a positional array. 43% shorter than the canonical JSON.                    |
+| Core package              | `src/core/`, a folder with an import boundary enforced by ESLint. Not a workspace package.                                             |
+| MCP server                | `/mcp` on the existing Worker, official SDK `createMcpHandler`, stateless. Four tools that take or return a whole plan.                |
+| MCP image                 | PNG through `@resvg/resvg-wasm`. Needs 30 to 65 ms of CPU per image, so it needs the Workers Paid plan. The account is on Free.        |
+| WebMCP                    | Ten tools registered from a lazy chunk when `document.modelContext` (or `navigator.modelContext`) exists. Each is one undo step.       |
+
+One decision needs the owner: whether to pay for Workers Paid (USD 5 per month) so the MCP server
+can return PNG images. Section 11 has the detail and the fallback.
+
+## 2. Schema library
+
+### Measurements
+
+The v4 schema in section 3 was written in each library and imported on the planner's boot path.
+The planner was built once per library. Sizes are the `PlannerApp` chunk.
+
+| Library                   | Chunk raw | Chunk gzip | Added gzip |
+| ------------------------- | --------: | ---------: | ---------: |
+| none (today)              | 157,866 B |   46,499 B |          0 |
+| valibot 1.5.0             | 168,544 B |   49,255 B |    +2.8 KB |
+| zod 4.6.7 via `zod/mini`  | 184,288 B |   54,529 B |    +8.0 KB |
+| zod 4.6.7 (classic API)   | 245,897 B |   71,194 B |   +24.7 KB |
+| typebox 1.4.7 (`Value.*`) | 298,911 B |   83,215 B |   +36.7 KB |
+
+JSON Schema output for the full `Plan`:
+
+| Library               | Generator                              | Dialect  | Size    | Notes                                                                                             |
+| --------------------- | -------------------------------------- | -------- | ------- | ------------------------------------------------------------------------------------------------- |
+| zod, classic and mini | built in, `z.toJSONSchema`             | 2020-12  | 3,831 B | All 14 descriptions and 8 defaults kept. Mini and classic output is identical.                    |
+| valibot               | separate `@valibot/to-json-schema` 1.8 | draft-07 | 3,635 B | Threw on the `finite` action until `errorMode: 'ignore'` was set. Enums as `enum`.                |
+| typebox               | the schema is the JSON Schema          | none set | 4,240 B | Enums come out as `anyOf` of `const`, which is longer and weaker for language models than `enum`. |
+
+Validation cost, warm, per document: under 0.5 ms for the 40-item apartment in zod and valibot,
+about 1.4 ms in typebox. The first call costs 2 to 7 ms once. None of this matters at load time.
+
+### Decision: Zod 4 with the `zod/mini` API
+
+- The JSON Schema generator is part of the library and understands every construct we use. Valibot's
+  is a second package that already failed on one of our validators.
+- The official MCP server SDK (`@modelcontextprotocol/server` 2.4.0) depends on `zod ^4.2`. The
+  spike registered a tool with the `zod/mini` schema unchanged and the SDK produced the tool's JSON
+  Schema from it. The Worker carries Zod regardless of what the app uses.
+- 8.0 KB gzip is 17% of the planner chunk and 5.2 KB more than valibot. That is the price of one
+  schema for the app, the Worker and WebMCP with no adapter.
+- The classic Zod API costs three times as much for the same schema. The schema file must import
+  from `zod/mini` only. An ESLint `no-restricted-imports` rule on `zod` and `zod/v4` enforces this.
+- TypeBox is the largest and its fast path compiles code with `new Function`, which the site's CSP
+  and Workers both forbid.
+
+`z.toJSONSchema` is never imported by the planner chunk. The Worker calls it at start-up, and
+WebMCP reads schemas generated at build time (section 8).
+
+## 3. The v4 document model
+
+### Schema
+
+This is the single source of truth. TypeScript types are inferred from it (`z.infer`), so
+`src/types.ts` loses `Layout`, `Door`, `RoomWindow` and `FurnitureItem` when the app moves to v4.
+
+```ts
+// src/core/schema.ts
+import * as z from 'zod/mini';
+
+export const PLAN_VERSION = 4;
+
+const d = <T extends z.ZodMiniType>(schema: T, description: string): T =>
+  schema.register(z.globalRegistry, { description }) as T;
+
+const Id = d(
+  z.string().check(z.regex(/^[A-Za-z0-9_-]{1,40}$/)),
+  'Unique within the plan. Letters, digits, "-" and "_".',
+);
+const Coord = z.number().check(z.minimum(-100000), z.maximum(100000));
+const size = () => z.number().check(z.positive(), z.maximum(10000));
+const Point = z.object({ x: Coord, y: Coord });
+const Color = z.string().check(z.regex(/^#[0-9a-fA-F]{6}$/));
+
+export const DOOR_TYPES = [
+  'swing-in',
+  'swing-out',
+  'double-in',
+  'double-out',
+  'sliding',
+  'pocket',
+  'bifold',
+  'opening',
+] as const;
+
+export const Opening = z.looseObject({
+  id: Id,
+  kind: z.enum(['door', 'window']),
+  wall: d(z.int().check(z.minimum(0)), 'Wall index. Wall i runs from outline[i] to outline[i+1].'),
+  offset: d(
+    z.number().check(z.minimum(0)),
+    'Distance along the wall from its start corner to the near edge of the opening.',
+  ),
+  width: d(size(), 'Width along the wall.'),
+  type: d(z._default(z.enum(DOOR_TYPES), 'swing-in'), 'Doors only.'),
+  hinge: d(
+    z._default(z.enum(['start', 'end']), 'start'),
+    'Doors only. Seen from inside the room facing the wall, "start" is on the left.',
+  ),
+  swingAngle: z.optional(z.union([z.literal(90), z.literal(180)])),
+});
+
+export const Room = z.looseObject({
+  id: Id,
+  name: z.optional(z.string().check(z.maxLength(80))),
+  outline: d(
+    z.array(Point).check(z.minLength(3), z.maxLength(64)),
+    'Interior corners in floor coordinates, clockwise as drawn (y grows downward). ' +
+      'A rectangle is 4 points starting at its top-left corner; its walls are then ' +
+      '0 = top, 1 = right, 2 = bottom, 3 = left.',
+  ),
+  openings: z._default(z.array(Opening).check(z.maxLength(64)), []),
+});
+
+export const Item = z.looseObject({
+  id: Id,
+  label: z.string().check(z.maxLength(80)),
+  color: z._default(Color, '#93c5fd'),
+  shape: z._default(z.enum(['rect', 'l', 'ellipse']), 'rect'),
+  width: d(size(), 'Bounding-box size along x before rotation.'),
+  depth: d(size(), 'Bounding-box size along y before rotation.'),
+  cut: d(
+    z.optional(
+      z.object({ corner: z.enum(['tl', 'tr', 'br', 'bl']), width: size(), depth: size() }),
+    ),
+    'Shape "l" only: the rectangle removed from one corner of the bounding box.',
+  ),
+  placement: d(
+    z.optional(
+      z.object({
+        x: Coord,
+        y: Coord,
+        rotation: z._default(z.number().check(z.minimum(0), z.lt(360)), 0),
+      }),
+    ),
+    'Centre of the piece in floor coordinates and its clockwise rotation in degrees. ' +
+      'Omit it to keep the piece in the inventory.',
+  ),
+  locked: z.optional(z.boolean()),
+  hidden: z.optional(z.boolean()),
+  notes: z.optional(z.string().check(z.maxLength(500))),
+});
+
+export const Plan = z.looseObject({
+  version: z.literal(PLAN_VERSION),
+  name: z._default(z.string().check(z.maxLength(100)), 'Untitled'),
+  unit: d(z.enum(['ft', 'in', 'm', 'cm']), 'Unit of every length in this document.'),
+  rooms: z.array(Room).check(z.minLength(1), z.maxLength(50)),
+  items: z._default(z.array(Item).check(z.maxLength(500)), []),
+  settings: z.optional(
+    z.looseObject({ unitSystem: z.optional(z.enum(['ft-in', 'ft', 'in', 'm', 'cm'])) }),
+  ),
+});
+export type Plan = z.infer<typeof Plan>;
+```
+
+Rules the JSON Schema cannot express live in one function, `checkIntegrity(plan)`, which returns
+issues with paths. It runs after the schema on every load path:
+
+- ids are unique across the whole document (one namespace for rooms, openings and items);
+- `opening.wall` is below `outline.length` and `offset + width` fits the wall;
+- `cut` is present exactly when `shape` is `l`, and is smaller than the bounding box;
+- an outline is a simple polygon with a non-zero area.
+
+### Why it looks like this
+
+**One floor, no `floors` array.** The feature list asks for one connected floor plan. A later
+`rooms → floors[0].rooms` step is mechanical if storeys are ever wanted.
+
+**Rooms are polygons only.** A rectangle is `[(0,0), (w,0), (w,h), (0,h)]`. One representation
+means one code path for geometry, rendering and validation. `isRectangle(room)` (4 axis-aligned
+corners) lets the UI keep today's Width and Length fields for the common case.
+
+**Walls are derived, openings store an index.** The alternatives were wall or vertex ids (a graph
+model that agents would have to build by hand) and absolute door coordinates (ambiguous at corners,
+and still invalid after a wall moves). An index is the simplest thing an agent can write. Its
+weakness is vertex edits, so vertices change only through three core operations, which re-anchor
+openings:
+
+- `insertVertex(room, wall, t)` splits wall `k`. Openings on `k` go to `k` or `k+1` by position.
+  Openings on later walls shift by one. An opening the new vertex would cut stays whole on the
+  longer side.
+- `removeVertex(room, i)` merges two walls. Openings keep their floor position projected onto the
+  merged wall, clamped to it.
+- `moveVertex(room, i, to)` keeps each opening's offset from the corner that did not move, clamped
+  to the new length.
+
+A property test asserts that after any sequence of these, every opening lies on a wall of its room,
+and that an opening whose wall did not change did not move.
+
+**Openings are nested in their room.** They cannot dangle, deleting a room deletes them, and the
+shape matches how people and agents describe a room.
+
+**Doors between rooms are derived.** Rooms abut with zero wall thickness: a shared wall is two
+collinear edges of different rooms that overlap (tolerance `GEOMETRY_EPSILON`). An opening that
+lies on a shared segment connects the two rooms. Nothing is stored, so nothing can disagree. The
+door belongs to the room that lists it, and `swing-in` and `swing-out` are relative to that room.
+Because clearance zones are computed in floor coordinates, a door that swings out into the next
+room is checked against that room's furniture with no extra code.
+
+**Items use floor coordinates, and which room they are in is derived.** Room-relative coordinates
+would need an origin for a polygon room and a transform in every geometry function. One coordinate
+space makes cross-room snapping, collision and dragging a piece from room to room trivial. An
+item's room is the room that contains its centre. Moving a room moves the items whose centre is
+inside it, in the same undo step. For a single room at the origin, floor coordinates are today's
+room coordinates.
+
+**`placement` is the centre, not the top-left corner.** Today `x, y` is the corner of the unrotated
+box, so a sofa turned 90° and pushed against the left wall has a negative `x`. An agent cannot be
+expected to produce that. The centre is unambiguous at any rotation and for any shape. Core keeps a
+helper `itemBox(item)` that returns today's `{x, y, width, height, rotation}` box, so the snapping
+code does not change.
+
+**The inventory is the absence of `placement`.** No second list, no flag. Taking a piece out of a
+room deletes `placement`; putting it in a room sets it. `hidden` stays a separate flag because it
+keeps the position.
+
+**Shapes are flat fields, not a union.** `shape` plus an optional `cut` gives a JSON Schema with
+no `oneOf`, which every model API accepts. An L is its bounding box minus a corner rectangle, and
+`cut.corner` makes mirrored sectionals direct instead of a rotate-and-swap trick. `ellipse` covers
+round and oval.
+
+**`height` becomes `depth`.** The UI already calls it Depth, and agents think "84 wide, 36 deep".
+
+**Points are `{x, y}` objects.** Tuples need `prefixItems`, which several model APIs reject.
+
+**The document names its unit.** Agents and people who paste JSON think in inches or centimetres.
+`unit` is required so the choice is explicit. `toFeet(plan)` is the last step of loading and
+returns the same type with `unit: 'ft'`; it does nothing when the plan is already in feet. The app
+only ever holds, stores and shares feet, so no conversion happens on its own data and no core
+function needs to know about units. `fromFeet(plan, unit)` converts back for JSON export and MCP
+output, with today's rounding (6 decimals for feet and metres, 4 for inches and centimetres).
+`settings.unitSystem` is the display preference; when absent it follows `unit` (`ft` shows as
+`ft-in`).
+
+**Ids are strings.** Migrated ids are `room-1`, `door-<old id>`, `window-<old id>` and
+`item-<old id>`, which is deterministic and removes the collisions between today's door 1, window 1
+and item 1. New ids are `<kind>-<n>` with `n` one above the highest in use.
+
+**`designMode` leaves the document.** It is UI state and moves to the storage record.
+
+**Objects are loose.** Unknown keys survive a load and save. This is what makes additive changes
+safe when an older build opens a newer document of the same version.
+
+### Geometry
+
+All of it stays our own code, in `src/core/geometry/`. `polygon-clipping` was measured as the
+alternative: 9.8 KB gzip against 1.2 KB for the approach below, and it answers a harder question
+than we ask.
+
+| Need                    | Approach                                                                                                                                                                          |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Item outline            | `itemParts(item)`: convex polygons in floor coordinates. `rect` is 1 part, `l` is 2 rectangles, `ellipse` is one 32-sided polygon.                                                |
+| Item overlaps item      | Bounding-box reject, then today's SAT with `GEOMETRY_EPSILON` on each pair of parts. Flush pieces still do not collide.                                                           |
+| Item inside a room      | Each part: every vertex inside or on the outline, no edge properly crossing an outline edge, no concave room corner strictly inside the part. The item must be inside one room.   |
+| Wall frame              | `wallFrame(room, i)`: `origin = outline[i]`, `along` = unit vector to `outline[i+1]`, `inward` = its right-hand normal. This replaces the four hard-coded `WALL_FRAMES`.          |
+| Door shape and blocking | `doorGeometry(opening, frame)` is today's function with the frame passed in. Clearance and doorway polygons come out in floor coordinates and are tested against item parts.      |
+| Snapping                | Unchanged for axis-aligned walls and item bounds. Angled walls add their angle to the rotation snap targets. No edge snapping to angled walls in the first version.               |
+| New piece placement     | `findFurnitureSpot` scans the room's bounding box and keeps candidates that pass "inside a room".                                                                                 |
+| Room shrinks or changes | `moveInside` keeps today's behaviour for rectangles. For other outlines it moves a piece to the nearest free spot, or leaves it with the "outside room" warning if there is none. |
+| Rooms overlap           | Same part-against-outline test on the two outlines. Reported as a warning.                                                                                                        |
+
+Measured cost of a full check (every item against every item and against the rooms): 11 µs for the
+sample plan, 104 µs for 25 pieces, 387 µs for the 40-item apartment. The worst case tried, 40
+ellipses stacked on one spot, took 12 ms; a drag only tests the moved piece against the rest, which
+is 1/40 of that. Nine spot checks passed, among them a chair in the notch of a sectional, a round
+table beside a corner, and a rotated piece against an angled wall.
+
+## 4. Migration chain
+
+### Version numbers
+
+`version` is one integer. It goes up only when an older reader could misread or fail to draw the
+document: a field renamed, removed or given a new meaning, or a new enum value such as a fourth
+shape. Adding an optional field with a default does not change it. A field is never repurposed.
+
+| Version | What it is                                                             | How it is recognised                          |
+| ------- | ---------------------------------------------------------------------- | --------------------------------------------- |
+| 2       | First release: one `door` with `open: 'in' \| 'out'`, Tailwind colours | object with `door` and no `doors`             |
+| 3       | Everything else written before v4                                      | object with `roomDims` and no `version`       |
+| 4       | This document                                                          | object with `version: 4`, or array starting 4 |
+
+### One entry point
+
+```ts
+// src/core/load.ts
+type LoadResult =
+  | { ok: true; plan: Plan; from: number; repairs: string[] }
+  | { ok: false; reason: 'newer'; version: number }
+  | { ok: false; reason: 'invalid'; issues: Issue[] };
+
+export function loadPlan(input: unknown, mode: 'lenient' | 'strict'): LoadResult;
+```
+
+Steps, in order:
+
+1. Detect the version. If it is above `PLAN_VERSION`, return `newer` and stop.
+2. Expand the compact share form (section 5) if the input is an array.
+3. Run the steps `MIGRATIONS[v]` up to the current version. Each is a small pure function from JSON
+   to JSON in its own file, `src/core/migrate/v2.ts`, `v3.ts`.
+4. Lenient mode only: `repair`. It drops an entity that cannot be fixed, clamps an opening onto its
+   wall, renames duplicate ids, reverses a counter-clockwise outline, and records each action in
+   `repairs`. This is today's `normalize*` behaviour, kept so one bad field never costs a plan.
+5. Validate with the schema, then `checkIntegrity`.
+6. `toFeet`.
+
+Lenient mode is for storage, share links and JSON import. Strict mode is for MCP and WebMCP, where
+the caller should get the error and fix it.
+
+Every path calls `loadPlan`: boot from storage (the working plan and each saved plan), `#s=` and
+`#j=` links, `?config=` links, the JSON box in the Share dialog, the plans file import, MCP tool
+input, WebMCP tool input, and the guide examples at build time.
+
+### Every historical input, with its fixture
+
+| Input                                                         | Written by                            | Fixture                                                |
+| ------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------ |
+| Storage `room-sim-v2-{dims,door,items}`                       | `650f35d`                             | exists: `v2-storage.json`                              |
+| Storage `room-sim-v3-*`, Tailwind colours, no units in plans  | `3bd206d`                             | exists: `early-v3-storage.json`                        |
+| Storage `room-sim-v3-*`, hex colours, `locked`, units in plan | `2c81c9d` to `2cae5c5`                | exists: `original-storage.json`                        |
+| Storage as above plus `room-planner-schema: 1`, new doors     | 2.0 (`ece4748`) and doors (`aeda08b`) | new: capture from `main` with every door type and 180° |
+| Link `?config=` `{roomDims, door, items}`                     | `650f35d`                             | new: built from the v2 storage fixture                 |
+| Link `?config=` `{roomDims, doors, windows, items}`, feet     | `3bd206d`                             | new                                                    |
+| Link `?config=` with `name` and `unitSystem`                  | `2c81c9d` to `2cae5c5`                | exists: `original-share-links.json` (ft-in and metres) |
+| Link `#s=` and `#j=`, same JSON as UTF-8                      | 2.0                                   | new: one of each, with a non-Latin name                |
+| Share dialog JSON box                                         | all                                   | same JSON as the link fixtures                         |
+| Plans file `{version: 1, exportedAt, projects}`               | `3bd206d` onwards                     | new                                                    |
+| Bare layout object in a plans file                            | `3bd206d` onwards                     | new                                                    |
+
+The legacy-domain bridge (`24fc2a4`, removed in `1a26cc4`) never wrote a format of its own. The
+fixtures already in `src/lib/__fixtures__/` move to `src/core/__fixtures__/` unchanged.
+
+### The 3 → 4 step
+
+| v3                                               | v4                                                                                         |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `roomDims {width, height}`                       | `rooms[0] = { id: 'room-1', outline: [(0,0), (w,0), (w,h), (0,h)] }`                       |
+| `doors[]`, `windows[]`                           | `rooms[0].openings[]` with `kind`, doors first                                             |
+| `wall: top / right / bottom / left`              | `wall: 0 / 1 / 2 / 3`                                                                      |
+| `position` (from the left or the top)            | `offset`. Same value on top and right. On bottom and left, `length - position - width`.    |
+| `hinge: left / right`                            | `start / end`. Same on top and right, swapped on bottom and left.                          |
+| `type`, `swingAngle`                             | unchanged                                                                                  |
+| item `x, y` (corner), `width`, `height`          | `placement {x: x + width/2, y: y + height/2, rotation}`, `width`, `depth`                  |
+| `visible: false`                                 | `hidden: true`                                                                             |
+| `locked`, `label`, `color`                       | unchanged (colours already hex after the 2 → 3 step)                                       |
+| `unitSystem`, numbers in that unit (links, JSON) | `unit` = `ft` for `ft-in`, `ft` or missing, otherwise the same; numbers copied as they are |
+| storage: feet, units in a separate key           | `unit: 'ft'`, `settings.unitSystem` from the key or the plan                               |
+| project `designMode`                             | storage record `ui.designMode`                                                             |
+| unknown extra fields                             | kept on the same entity                                                                    |
+
+Bottom and left reverse because a clockwise outline runs right to left along the bottom and bottom
+to top along the left.
+
+### Guarantees and how they are tested
+
+- **Idempotent.** A step runs only on its own version, and the result carries the next version.
+  Test: `loadPlan(loadPlan(x).plan)` equals `loadPlan(x).plan` for every fixture.
+- **Lossless.** Test: for every fixture, the SVG drawn from the migrated plan is byte-identical to
+  the SVG today's code draws from the original, and the same warnings are reported. That is the
+  definition that matters to a user. Unknown fields are asserted to survive.
+- **Property tests** (`fast-check`, a new dev dependency): arbitrary valid v3 layouts go through
+  3 → 4 and satisfy the schema, the integrity check and the SVG equality above; arbitrary valid
+  plans round-trip through the compact share form and through `fromFeet` then `toFeet`; lenient
+  loading of arbitrary JSON never throws.
+- **Fixtures are frozen.** A fixture file is never edited after it is committed. New formats add
+  files.
+
+### Storage, backup and rollback
+
+The v4 app reads and writes new keys:
+
+| Key                    | Content                                                              |
+| ---------------------- | -------------------------------------------------------------------- |
+| `room-planner-plans`   | `[{ id, createdAt, updatedAt, ui: { designMode }, plan }]`           |
+| `room-planner-working` | the plan being edited                                                |
+| `room-planner-ui`      | `{ currentPlanId, designMode, legacy: { migratedAt, fingerprint } }` |
+| `room-planner-schema`  | `2`                                                                  |
+
+The first boot of the v4 app migrates `room-planner-projects` and `room-sim-v3-*` into these keys
+and then never touches the old keys again. Consequences:
+
+- The old keys are the raw pre-migration backup. No extra copy is made, and nothing can
+  corrupt them.
+- A rollback to a v3 build finds its own keys exactly as it left them.
+- If a v3 build runs again after the migration (rollback, or a stale tab) and the user edits there,
+  the next v4 boot sees that `room-planner-projects` no longer matches `legacy.fingerprint`. It
+  imports every legacy plan whose `updatedAt` is later than `legacy.migratedAt` as a new plan named
+  "<name> (recovered)" and updates the fingerprint. No edit is lost in either direction.
+- If writing the new keys fails (quota), the app keeps working in memory, shows the existing
+  storage notice, and the old keys still hold everything.
+
+Later in-place migrations (4 → 5) are per document. Before the first write that would replace a
+stored plan of an older version, the raw string of `room-planner-plans` and `room-planner-working`
+is copied to `room-planner-backup` as `{ at, raw }`. One generation is kept. If the copy fails, the
+app does not overwrite; it runs in memory and asks the user to export.
+
+### An older app opens a newer document
+
+`loadPlan` returns `{ ok: false, reason: 'newer' }` and each caller follows the same rule: do not
+load it, do not write over it, say what to do.
+
+| Where               | Behaviour                                                                                                                                                       |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Share link          | The URL is left as it is and no plan is created. A dialog says the plan needs a newer Room Planner, with an Update button (service worker update, then reload). |
+| Saved plan          | Listed as "needs update" and cannot be opened. Its record is written back byte for byte whenever the list is saved.                                             |
+| Working plan        | The app starts on the update dialog and writes nothing to `room-planner-working`.                                                                               |
+| JSON or file import | The existing error line says the file needs a newer version.                                                                                                    |
+| MCP, WebMCP         | A validation error that names the highest supported version.                                                                                                    |
+
+After the update and reload, the link is still in the URL and opens normally.
+
+Builds that are already deployed cannot be changed. Given a v4 link, today's `isShareConfig` fails
+(there is no `roomDims`), so the link is ignored and nothing is touched. That is safe but silent.
+The update dialog therefore ships in the first schema PR (PR 2), several PRs before the app starts
+writing v4 links (PR 5), so that most installed copies know how to ask for an update by then.
+
+## 5. Share links and QR
+
+### Measurements
+
+Each plan was encoded eight ways. Bytes are after compression. URL is the full link on
+`https://room-planner.andrechek.com/`. QR is the QR version at error correction L; the Share dialog
+shows a code up to version 25 (about 1,270 characters).
+
+| Encoding                           | Sample plan, 6 items | 25-piece room      | 4 rooms, 40 items | L-shaped room, 8 items |
+| ---------------------------------- | -------------------- | ------------------ | ----------------- | ---------------------- |
+| A. Today: v3 JSON + deflate        | 480 chars, QR 15     | 1,318 chars, QR 26 | not expressible   | not expressible        |
+| B. v4 JSON as stored + deflate     | 585, QR 16           | 1,424, QR 27       | 2,026, QR 33      | 856, QR 20             |
+| C. B without defaults, 4 decimals  | 532, QR 16           | 1,328, QR 26       | 1,888, QR 32      | 784, QR 19             |
+| D. C with one-letter keys          | 449, QR 14           | 1,209, QR 25       | 1,753, QR 31      | 689, QR 18             |
+| **E. Positional arrays + deflate** | **261, QR 10**       | **929, QR 21**     | **1,157, QR 24**  | **406, QR 13**         |
+| E2. E with every id written out    | 318, QR 11           | 966, QR 22         | 1,398, QR 27      | 490, QR 15             |
+| F. Hand-written binary, no deflate | 292, QR 11           | 949, QR 22         | 1,608, QR 29      | 432, QR 14             |
+| F2. Hand-written binary + deflate  | 262, QR 10           | 778, QR 19         | 1,282, QR 26      | 413, QR 13             |
+| G. MessagePack of D + deflate      | 461, QR 15           | 1,466, QR 28       | 2,088, QR 34      | 792, QR 19             |
+
+Two things stand out. Deflate removes most of the cost of long keys, so shortening keys (D) buys
+little. And the binary format is no better than positional JSON once both are compressed: it wins
+on the 25-piece room and loses on the apartment, where deflate finds more repetition in text.
+
+### Decision: positional arrays inside the existing `#s=` scheme
+
+The link stays `#s=<base64url(deflate-raw(utf8(JSON)))>`, with `#j=` as the uncompressed fallback.
+Only the JSON changes: an array instead of an object. It is still JSON, readable in a debugger, and
+decoded with `JSON.parse`. Against writing the canonical JSON (B) it is 43% shorter on the
+apartment and 55% shorter on the sample plan. Against today's links it is 46% and 30% shorter for
+the two plans both can express.
+
+It earns its place for three reasons. The apartment fits in a QR code (version 24) where the
+canonical JSON does not (version 33). The 25-piece room fits where today it does not. And an MCP
+client's language model has to copy the link into its answer, where every character is a chance to
+corrupt it.
+
+The form, with trailing defaults trimmed from every tuple:
+
+```text
+[4, name, unit, unitSystem | 0, rooms, items]
+room    = [[x0, y0, x1, y1, ...], openings, name?, id?]
+opening = [kind, wall, offset, width, type?, hinge?, swing180?, id?]     kind, type: enum index
+item    = [label, width, depth, color, [x, y, rotation?] | 0, shape?, [corner, w, d] | 0, flags?, notes?, id?]
+```
+
+- `color` is an index into the ten presets, or six hex digits.
+- `flags` is `locked` (1) plus `hidden` (2).
+- An id is written only when it differs from the positional default (`room-1`, `door-2`, `item-7`
+  by order). The decoder regenerates the defaults.
+- Lengths are rounded to 4 decimals of a foot (0.03 mm) and rotation to 2 decimals. Today's links
+  already round to 6.
+- Unknown loose fields are not carried. A link holds the fields this version knows.
+- A later optional field is appended to the end of its tuple, so older links stay valid and the
+  trimmed default costs nothing.
+
+`compact(plan)` and `expand(array)` are two hand-written functions of about 80 lines each in
+`src/core/share/compact.ts`. A property test asserts `expand(compact(p))` equals `p` after the same
+rounding. "Is this link already one of my plans" compares `compact` output, so rounding cannot
+create duplicates.
+
+### Old links
+
+Decoding accepts, forever: an array (compact, version in element 0), an object with `version`, and
+an object without one (versions 2 and 3), from `#s=`, `#j=` and `?config=`. The `?config=` decoder
+keeps its Latin-1 behaviour and its "+ arrived as a space" tolerance. All of them end in
+`loadPlan`. The fixture table in section 4 covers each.
+
+### QR
+
+Nothing changes in `qr.ts`. Codes get smaller for the same plan (the sample goes from version 15 to
+10), and plans of about 40 pieces now get a code at all. Beyond version 25 the dialog offers the
+link without a code, as today. An upper-case base-32 payload in QR alphanumeric mode was measured:
+it saves two more versions, which does not justify a second link format.
+
+## 6. Core package
+
+### Decision: `src/core/`, not a workspace package
+
+The Worker, the Astro build and Vitest all bundle TypeScript source through the same toolchain, so
+a folder is importable by all three with no build step, no second `package.json` and no lockfile
+change. A workspace package would add those without adding isolation that a lint rule cannot give.
+If the core is ever published, moving a folder that already has a clean boundary is a small job.
+
+The boundary is an ESLint rule on `src/core/**`: no import of `react`, `astro`, `lucide-react`,
+`../components`, `../hooks`, or anything outside `src/core`, and no use of `window`, `document` or
+`localStorage`. Core depends on `zod/mini` and nothing else.
+
+```text
+src/core/
+  schema.ts            Plan schema, inferred types, PLAN_VERSION
+  load.ts              loadPlan, checkIntegrity, repair
+  units.ts             toFeet, fromFeet, parsing and display (today's lib/units.ts)
+  colors.ts
+  migrate/             v2.ts, v3.ts, index.ts
+  geometry/            polygon.ts, shapes.ts (itemParts), walls.ts (wallFrame), doors.ts (doorGeometry)
+  check.ts             checkLayout(plan) -> Issue[]   (overlap, outside room, blocked door, clearances)
+  placement.ts         findFurnitureSpot, findOpeningSpot, moveInside
+  snapping.ts
+  ops.ts               pure edits: addItem, moveItem, toInventory, insertVertex, moveRoom, ...
+  share/               codec.ts (base64url, deflate), compact.ts, link.ts
+  render/              scene.ts, scene/rooms.ts, scene/items.ts, svg.ts, fontMetrics.ts
+  __fixtures__/
+```
+
+What stays outside: `storage.ts`, `projects.ts`, `boot.ts`, `pwa.ts`, `analytics.ts`, `qr.ts`,
+`export/exportPlan.ts` and `export/planPdf.ts` (browser APIs), and the React style helpers now at
+the bottom of `openings.ts` (`doorStyles`, `windowStyles`, `doorSvg`), which move to
+`src/components/planner/openingStyles.ts`.
+
+`ops.ts` is new and matters for WebMCP: every edit the UI makes becomes a pure function
+`(plan, args) => plan`. The hooks call them through `history.apply`, and the WebMCP tools call the
+same functions.
+
+How each consumer uses it:
+
+- **App:** `import { loadPlan } from '../core/load'`. Storage and boot call `loadPlan`; components
+  import types from `core/schema`.
+- **Worker:** `worker/index.ts` imports `../src/core/...` by relative path. Wrangler bundles it. A
+  `worker/tsconfig.json` with the Workers types and no DOM library type-checks the Worker and, by
+  inclusion, proves core compiles without the DOM.
+- **Guides build:** `src/lib/guides/examples.ts` defines each example as a `Plan` and
+  `guides/render.ts` calls `core/render` and `core/share`. The examples test runs `checkLayout`
+  and still requires zero issues.
+
+## 7. MCP server
+
+### Shape
+
+One Worker serves the site's static assets and `/mcp`. The endpoint is stateless Streamable HTTP
+with no authentication, no storage and no session. It uses `createMcpHandler` from
+`@modelcontextprotocol/server` 2.4.0, which the spike confirmed does the following with one
+server factory:
+
+- answers clients on the 2026-07-28 protocol (no handshake, one JSON response per POST);
+- answers 2025-era clients statelessly (`initialize`, then each call as its own POST);
+- returns 405 for GET and DELETE;
+- turns a schema failure into a tool error that names the path, for example
+  `plan.unit: Invalid option: expected one of "ft"|"in"|"m"|"cm"`.
+
+Measured: the Worker bundle with the SDK and the schema is 326 KB (87 KB gzip). A `tools/list` or a
+`check_layout` call on the 40-item apartment costs about 1 ms of CPU.
+
+Cloudflare's `agents` package wraps the same SDK function and adds nothing a stateless server
+needs, so it is not used.
+
+### Whole documents, not incremental operations
+
+The server keeps nothing between calls, so an "add item" tool would need the whole plan as input
+anyway. Every tool therefore takes or returns a whole `Plan`. To change a plan, the agent edits the
+JSON and calls again. This also keeps the tool list short, which is what makes agents pick the
+right tool.
+
+### Tools
+
+All four are read-only in the MCP sense (`readOnlyHint: true`): they compute and return.
+
+| Tool           | Input                                              | Output (`structuredContent`)                | Use                                                        |
+| -------------- | -------------------------------------------------- | ------------------------------------------- | ---------------------------------------------------------- |
+| `create_plan`  | `{ plan: Plan }`                                   | `{ plan, issues, summary, url }`            | Turn rooms and items into a checked plan and an edit link. |
+| `check_layout` | `{ plan: Plan, minClearance?: number }`            | `{ ok, issues, summary }`                   | Cheap loop while arranging: no link, no image.             |
+| `render_plan`  | `{ plan?: Plan, url?: string, width?: 400..1600 }` | PNG image content, plus `{ issues, url }`   | Show the user the plan.                                    |
+| `read_plan`    | `{ url: string }`                                  | `{ plan }` in the unit the plan displays in | Start from a plan the user already has (any link format).  |
+
+Details that implementers need:
+
+- `plan` in an input is the `Plan` schema itself. `plan.version` is required. The server's
+  JSON Schema is `z.toJSONSchema(schema, { io: 'input' })`, so fields with defaults are optional
+  for the agent.
+- `plan` in an output is normalised (ids and defaults filled, outline clockwise) and converted back
+  to the unit the agent sent, so the agent can edit and resend it.
+- `url` is the `#s=` link in compact form. It is also the last line of the text content, alone on
+  its line, so a client that shows only text still shows it whole.
+- `Issue` is `{ code, severity: 'error' | 'warning' | 'info', message, ids: string[] }`. Codes:
+  `item_overlap`, `item_outside_room`, `door_blocked`, `doorway_blocked`, `opening_overlap`,
+  `opening_off_wall`, `room_overlap`, `tight_clearance`, `unknown_field`. `message` is a full
+  sentence with names and distances in the plan's unit ("Sofa overlaps Coffee Table by 4 in").
+- `tight_clearance` is `info`: a gap above zero and below `minClearance` (default 24 in) between
+  two pieces or a piece and a wall. It reuses `measureClearances`.
+- `summary` is one paragraph: room sizes and areas, counts, and what is in the inventory.
+- Tool descriptions carry what an agent needs to write a plan cold: the coordinate system, the
+  rectangle recipe and its wall numbers, that `placement` is the centre, and a short list of common
+  sizes (queen bed 60 × 80 in, three-seat sofa 84 × 36 in, interior door 30 to 32 in). There is no
+  catalogue.
+- The loose schema accepts unknown keys. For agents that is usually a typo, so the MCP layer
+  reports each as `unknown_field` instead of rejecting or silently keeping it.
+- Limits: request body 256 KB; the schema's own caps (50 rooms, 500 items, 64 corners per room).
+
+### Image output
+
+Most MCP clients show PNG or JPEG image content and nothing else; at least one fails outright on an
+SVG image. So `render_plan` must rasterise. `@resvg/resvg-wasm` 2.6.2 was measured on the SVG that
+today's export pipeline produces (the 4-room drawing is four of today's room drawings in a grid,
+104 text labels):
+
+| Plan              | 800 px wide | 1200 px wide | 1600 px wide | PNG at 1200 px |
+| ----------------- | ----------: | -----------: | -----------: | -------------: |
+| Sample plan       |    32–38 ms |     39–43 ms |     58–67 ms |          68 KB |
+| 25-piece room     |    25–29 ms |     40–43 ms |     57–66 ms |         108 KB |
+| 4 rooms, 40 items |    36–37 ms |     59–65 ms |    96–103 ms |         157 KB |
+
+These are CPU times per image in Node (the same V8 and WebAssembly engine as Workers). Starting the
+wasm module costs another 28 to 55 ms once per isolate. The wasm file is 2.48 MB (947 KB gzip),
+inside the Worker size limit. Text needs fonts passed in: Inter Latin 500 and 700 as `.woff2`
+(24 KB each, already a dev dependency) rendered correctly; the `.woff` files rendered no text.
+
+**The account is on the Workers Free plan** (checked read-only: the account's subscriptions are
+Cloudflare Free, R2 Paid, Zero Trust Free and the Analytics Engine beta; there is no Workers Paid
+subscription). Free allows 10 ms of CPU per request. Every image above needs three to ten times
+that. Paid allows 30 s by default.
+
+Decision: `render_plan` needs Workers Paid. Until the owner enables it, the tool is not registered,
+and `create_plan` tells the agent that the link shows the drawing. With Paid:
+
+- default width 1000 px, maximum 1600 px;
+- `limits.cpu_ms` set to 500, so one request cannot run away;
+- the wasm module and fonts are imported statically and initialised on first use.
+
+Rejected fallbacks: returning SVG as image content (clients do not show it); a JavaScript
+rasteriser (slower than the wasm one, so further over the limit); a second host for rendering
+(more to run, and the plan would leave Cloudflare).
+
+Labels outside Latin and Latin Extended would draw as missing glyphs in the PNG. PR 6 adds the
+Latin Extended files (36 KB each) and replaces characters the fonts lack with `?`, with a test. The
+edit link always shows the real text.
+
+### Rate limiting and abuse
+
+- Two Workers rate-limit bindings (`ratelimits` in `wrangler.jsonc`), keyed by client IP because
+  there is no other identity: `MCP_LIMIT` at 60 per 60 s for every call, `MCP_RENDER_LIMIT` at
+  10 per 60 s for `render_plan`. Cloudflare's guidance prefers a key other than IP; with no
+  accounts there is none, and the counters are per location and approximate, which is acceptable.
+- Over the limit: HTTP 429 with `Retry-After` and a JSON-RPC error that says to wait.
+- The zone has Bot Fight Mode off and no AI-bot blocking (checked read-only). Keep it that way: on
+  a Free zone Bot Fight Mode cannot be skipped for one path and would challenge MCP clients.
+
+### HTTP details
+
+- **CORS:** `Access-Control-Allow-Origin: *`, methods `POST, OPTIONS`, headers `content-type`,
+  `accept`, `mcp-protocol-version`, `mcp-method`, `mcp-name`, `mcp-session-id`. `OPTIONS` returns 204. The
+  endpoint has no cookies and no credentials, so any origin is safe, and "any origin, or none" is
+  the Origin validation policy.
+- **Response headers:** `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`. `_headers`
+  does not apply to Worker responses, so the site's CSP is neither needed nor sent here.
+- **Routing:** `wrangler.jsonc` gains `main: "worker/index.ts"`, an `ASSETS` binding and
+  `assets.run_worker_first: ["/mcp", "/mcp/*"]`. Every other request is served from assets without
+  running the Worker, so the site stays free and unmetered. A request that matches no asset reaches
+  the Worker, which returns `env.ASSETS.fetch(request)` so the existing 404 page still appears. An
+  e2e test covers the 404 page, `/mcp` and the home page on the preview URL.
+- **Service worker:** `/mcp` is already outside it (`navigateFallbackAllowlist` is `/` only and
+  nothing is cached at runtime). PR 4 adds `/^\/mcp/` and `/^\/\.well-known\//` to
+  `navigateFallbackDenylist` as a guard, and a PWA e2e test that a fetch to `/mcp` from the
+  installed app reaches the network.
+- **Deploys:** still one Worker named `room-planner`, so the Workers Builds warning in
+  `docs/DEPLOY.md` about a second Worker does not apply. Branch previews get a working `/mcp`.
+- **Logging:** the Worker never logs a request body or a plan. Observability keeps Cloudflare's
+  request metadata only.
+
+### Discovery
+
+- `GET /mcp/server-card` returns the MCP Server Card (SEP-2127, media type
+  `application/mcp-server-card+json`): name, title, description, version, website, repository, and
+  the remote `{ type: "streamable-http", url: "https://room-planner.andrechek.com/mcp" }`.
+- `/.well-known/ai-catalog.json` is a static asset with one entry that points at the card.
+- `llms.txt` gains an "For AI agents" section with the endpoint and one line per tool.
+- A page `/agents/` explains how to add the server to a client and repeats the privacy statement.
+- The official MCP Registry gets a `server.json` named `io.github.ericandrechek/room-planner`
+  (GitHub namespace, published with `mcp-publisher`). This is a one-time manual step for the owner
+  after PR 4 is live.
+
+### Privacy statement
+
+For `/agents/`, the server card description and the help page:
+
+> The MCP server processes each plan in memory to answer the request and then discards it. It
+> stores nothing, has no accounts, and does not log plans. A plan link it returns holds the whole
+> plan in the part of the URL after `#`, which browsers do not send to any server.
+
+`llms.txt` and the FAQ currently say plans are never uploaded. PR 4 changes that to: never
+uploaded by the app; sent to the MCP server only when an AI assistant is asked to use it.
+
+### Versioning the tool API
+
+- The endpoint is `/mcp` permanently. Tool names and output fields are only added, never renamed or
+  removed.
+- The input schema always shows the current plan version. Older versions keep working because tool
+  input goes through `loadPlan`: an agent that cached the v4 schema keeps sending `version: 4`
+  after v5 exists and gets a migrated plan back.
+- `serverInfo.version` is the site's package version. The server card repeats it.
+
+## 8. WebMCP
+
+### Status of the API
+
+Chrome exposes `document.modelContext`. `navigator.modelContext` was the earlier name and is
+deprecated. Tools are registered with `registerTool(tool, { signal })` and removed by aborting the
+signal. It is in origin trial through Chrome 156 and planned to ship in 157. No other browser has
+signalled support.
+
+### Design
+
+`src/webmcp/register.ts` is loaded by a dynamic import from `Planner.tsx` only when
+`document.modelContext ?? navigator.modelContext` exists, so other browsers download nothing. It
+registers the tools once the planner has mounted and aborts them on unmount. A rejected
+registration (permission disabled) is ignored.
+
+Each tool validates its arguments with the shared schema, calls a `core/ops` function through
+`history.apply` (one undo step), announces the result through the existing live region, and returns
+the affected entity plus the current issues. An agent's edits are therefore undoable with Ctrl+Z
+and audible to screen-reader users exactly like the user's own.
+
+| Tool                | App action                                               | Hints         |
+| ------------------- | -------------------------------------------------------- | ------------- |
+| `get_plan`          | read the working plan (in the display unit)              | read-only     |
+| `check_layout`      | `checkLayout`, the same issues the canvas shows          | read-only     |
+| `add_item`          | add furniture; no `placement` means a free spot is found |               |
+| `update_item`       | resize, rename, recolour, move, rotate, lock, hide       |               |
+| `move_to_inventory` | take a piece out of its room                             |               |
+| `remove_item`       | delete a piece                                           |               |
+| `add_opening`       | add a door or window to a wall                           |               |
+| `update_opening`    | change or move a door or window                          |               |
+| `remove_opening`    | delete a door or window                                  |               |
+| `replace_plan`      | replace the whole working plan                           | consequential |
+
+- **Confirmation.** `replace_plan` sets `consequentialHint` and also opens the app's own confirm
+  dialog ("Replace this plan with the assistant's version?"). The tool's promise resolves when the
+  user answers. The browser API has no confirmed way to ask the user, so the app does it. Every
+  other tool is one undo step and needs no prompt. Declining returns a tool error.
+- **Rooms.** Editing room outlines through WebMCP is left out of the first version. `replace_plan`
+  covers it.
+- **Schemas.** A build step writes `src/webmcp/schemas.json` from the shared schema with
+  `z.toJSONSchema` (`Item` and `Opening` with every field optional for the update tools, `Plan` for
+  `replace_plan`). The lazy chunk imports the JSON, so the generator never reaches the browser, and
+  a unit test fails if the file is stale.
+- **Trust.** `get_plan` sets `untrustedContentHint`: labels and notes are user text.
+- **Testing.** Unit tests call each tool's `execute` against a fake `modelContext`. One Playwright
+  test injects a fake `document.modelContext`, runs `add_item` and checks that undo removes it.
+
+## 9. UX implications
+
+This section scopes the UI work; it is not a visual design. The phone bottom sheet from issue #32
+is assumed to exist: on a phone, every panel below lives in the sheet with the plan visible above.
+
+**The two steps stay.** "Room Setup" becomes "Rooms" and "Furniture" keeps its name. Nothing moves
+for a user with one rectangular room: Width and Length are still the first two fields.
+
+**Drawing a room that is not a rectangle.**
+
+- The Rooms step gets a Shape control: Rectangle, L-shape, or Custom. L-shape asks for the overall
+  width and length and the size of the cut-out corner, which is four fields and covers most real
+  cases with no drawing.
+- Custom shows a corner handle at every vertex and a "+" handle at the middle of every wall. Drag a
+  corner to move it; tap "+" to add a corner; select a corner and press Delete (or its remove
+  button) to remove it. Corners snap to 90° and 45° relative to their neighbours and to whole units.
+- Every wall has a row in the panel with its length and angle as fields. Typing a length moves the
+  wall's far corner along the wall's direction. This is the keyboard and screen-reader path, and
+  the precise path on a phone, where dragging a corner under a finger is coarse.
+- Corner handles are focusable. Arrow keys move the focused corner by the nudge step, with the same
+  fine and coarse modifiers as furniture, and the live region announces the two adjacent wall
+  lengths.
+- An outline that crosses itself is refused while dragging: the corner stops at the last valid
+  position, and the announcement says why.
+- Doors and windows choose their wall from the list ("Wall 3, 9 ft") instead of Top / Right /
+  Bottom / Left. Rectangles keep the four names.
+
+**Furniture shapes.** The furniture card gets a Shape control: Rectangle, L-shape, Round. L-shape
+adds the two cut fields and a Flip button that moves the cut to the next corner. Round has Width
+and Depth; equal values give a circle. Resizing, rotating, snapping and colour work as they do now.
+
+**Inventory.** A collapsible "Not placed" tray at the bottom of the Furniture list, with a count.
+Each placed piece's card gets "Take out of room"; each tray piece gets "Place", which puts it in
+the free spot nearest the middle of the room in view. On desktop a piece can also be dragged
+between the canvas and the tray. Pieces in the tray keep their size, colour and name, appear in
+exports as a list under the drawing, and never warn. Deleting stays a separate action.
+
+**Several rooms.**
+
+- "Add room" in the Rooms step places a new rectangle against the right side of the plan.
+- In the Rooms step a room can be selected and dragged by its floor. Its walls snap flush to other
+  rooms' walls and its corners to their corners. Its furniture moves with it. Arrow keys nudge the
+  selected room.
+- A door on a wall segment that two rooms share is drawn once and belongs to both. Its card names
+  both rooms ("Bedroom to Hallway").
+- The Rooms panel lists rooms; selecting one shows its fields. The Furniture list groups pieces
+  under room names. Each room has a name field, shown at the top of the room on the canvas.
+- "Fit" fits the whole floor. Choosing a room in the list zooms to it. This matters on a phone.
+- Deleting a room moves its furniture to the inventory, in one undo step.
+
+**Exports** draw the whole floor on one page, with room names and each room's area, then the
+inventory list.
+
+## 10. Phased plan
+
+Each PR is shippable on its own and leaves nothing half-visible. Effort is for one agent with
+review: S is under a day, M is one to two days, L is three to five.
+
+| PR  | Scope                                                                                                                                                                                             | Visible to users                        | Depends on | Effort | Risk   |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | ---------- | ------ | ------ |
+| 1   | Core extraction: move the pure modules into `src/core/`, split React style helpers out of `openings.ts`, split `scene.ts` into rooms and items files, ESLint boundary. No behaviour change.       | nothing                                 | none       | M      | low    |
+| 2   | Schema and migrations, unused by the app: `schema.ts`, `migrate/`, `load.ts`, `toFeet`, compact share codec, every fixture, property tests. The "needs a newer version" dialog on all read paths. | nothing (the dialog cannot trigger yet) | 1          | M      | low    |
+| 3   | Core on `Plan`: `wallFrame`, `itemParts`, `checkLayout`, `ops.ts`, placement and scene take a `Plan`. The app keeps its v3 state and calls core through `planFromLayout`. Golden SVG tests.       | nothing                                 | 2          | L      | medium |
+| 4   | MCP server: Worker, `create_plan`, `check_layout`, `read_plan`, rate limits, CORS, server card, `/agents/` page, llms.txt, privacy text, PWA denylist.                                            | new `/agents/` page                     | 3          | M      | medium |
+| 5   | App state on v4: history holds a `Plan`, new storage keys with the legacy recovery, links and JSON written in v4, guide examples as plans. Removes `planFromLayout` and the old types.            | nothing (shorter links)                 | 3          | L      | high   |
+| 6   | `render_plan` with resvg. Needs Workers Paid.                                                                                                                                                     | no                                      | 4, owner   | S      | low    |
+| 7a  | Furniture shapes: L and round in the card, the canvas, the export.                                                                                                                                | yes                                     | 5          | M      | medium |
+| 7b  | Room shapes: Shape control, L-shape fields, custom outline editing, wall list, openings on any wall.                                                                                              | yes                                     | 5          | L      | high   |
+| 8   | Inventory: tray, take out, place, export list.                                                                                                                                                    | yes                                     | 5          | M      | low    |
+| 9   | Several rooms: add, move, snap together, shared walls and doors, grouped lists, whole-floor export and fit.                                                                                       | yes                                     | 7b, 8      | L      | high   |
+| 10  | WebMCP: lazy chunk, ten tools, confirm dialog, generated schemas.                                                                                                                                 | only in Chrome with the feature         | 9          | M      | low    |
+
+### Test strategy per PR
+
+| PR  | Tests                                                                                                                                                                         |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | The existing unit and e2e suites pass with no edits except import paths. The planner chunk size is within 1%.                                                                 |
+| 2   | Fixture tests for every row of the table in section 4, the property tests listed there, a chunk-size check (the planner chunk does not grow in this PR).                      |
+| 3   | SVG export byte-identical to `main` for every fixture and guide example. Warnings identical. The existing snapping, openings and placement tests pass through the adapter.    |
+| 4   | Worker unit tests through the handler with both protocol eras. e2e on the preview URL: 404 page, `/mcp` call, CORS preflight, 429. CSP and PWA e2e unchanged and passing.     |
+| 5   | Storage migration e2e from each storage fixture. Rollback and recovery test. Old and new links open. Two-tab test. A newer-version plan in storage survives a save untouched. |
+| 6   | PNG decodes, has the expected size and is not blank. CPU time logged in a preview deploy.                                                                                     |
+| 7–9 | Geometry unit and property tests per shape, e2e for each new control on desktop and phone projects, axe checks, keyboard-only e2e for outline editing.                        |
+| 10  | Fake `modelContext` unit tests and one e2e, as in section 8.                                                                                                                  |
+
+### What can run in parallel
+
+- **PR 4 and PR 5** after PR 3. PR 4 owns `worker/**`, `wrangler.jsonc`, `public/_headers`,
+  `pwa-options.mjs`, `src/pages/agents.astro`, `src/pages/llms.txt.ts`, and the privacy wording in
+  `help.astro` and `faq.astro`. PR 5 owns `src/hooks/**`, `src/components/**`, `src/lib/storage.ts`,
+  `boot.ts`, `projects.ts`, `src/lib/guides/**` and `src/types.ts`. Neither edits `src/core/**`
+  except to fix a bug, in its own commit.
+- **PR 7a, PR 7b and PR 8** after PR 5. 7a owns `FurnitureCard.tsx`, `FurniturePiece.tsx`,
+  `FurniturePanel.tsx`, `core/geometry/shapes.ts` and `core/render/scene/items.ts`. 7b owns
+  `RoomSetupPanel.tsx`, `RoomCanvas.tsx`, `Openings.tsx`, `useOpenings.ts`, `core/geometry/walls.ts`
+  and `core/render/scene/rooms.ts`. PR 8 also needs `FurniturePanel.tsx`, so it starts when 7a has
+  merged, or takes the tray as a new component file and adds one line to the panel.
+- **PR 6** any time after PR 4.
+- PRs 1, 2 and 3 are strictly in order. PR 9 and PR 10 are last and in order.
+
+The phone bottom sheet (issue #32) touches `Sidebar.tsx`, `Planner.tsx` and the mobile e2e specs.
+PR 5 also edits `Planner.tsx`; whichever merges second rebases. PRs 1 to 4 do not conflict with it.
+
+## 11. Risks and open questions
+
+Each has a recommendation. Only the first needs the owner.
+
+1. **Workers Paid for PNG images (owner decision).** The account is on Free; a PNG needs 30 to
+   65 ms of CPU and Free allows 10 ms. Recommendation: enable Workers Paid (USD 5 per month) when
+   PR 4 is live, then merge PR 6. Without it, the MCP server ships without `render_plan` and agents
+   give the user the link to see the drawing. Nothing else in the plan depends on this.
+2. **Free-plan limits without the image tool.** Tool calls measured about 1 ms of CPU, well inside
+   10 ms. Free also caps Worker invocations at 100,000 per day; requests for missing pages count,
+   site assets do not. Recommendation: accept, and watch the invocation count after PR 4.
+3. **PR 5 is the risky one.** It changes what is in every user's storage. Recommendation: the old
+   keys are never written (section 4), the PR ships alone, and its storage tests run against every
+   storage fixture on all three browser engines before merge.
+4. **Stale installed copies and v4 links.** A copy older than PR 2 ignores a v4 link without
+   saying anything. Recommendation: keep at least two weeks between PR 2 reaching production and
+   PR 5, and do not change the hash key (a new key would be ignored just the same).
+5. **Language models miscopy long links.** Recommendation: the compact form, the link alone on the
+   last line of the text, and the link in `structuredContent`. A damaged link already fails to
+   decode and opens the user's own plan; PR 2 adds a "this link is damaged" message.
+6. **Wall thickness between rooms.** Rooms abut with no thickness, so a floor is a little narrower
+   than the building. Recommendation: accept. Because shared walls are derived, treating a gap of
+   up to a foot as a shared wall later needs no format change.
+7. **A piece across a doorway between rooms** (a rug) reports "outside room". Recommendation:
+   accept for the first version; it is today's rule.
+8. **Ellipse precision.** A 32-sided polygon is up to 0.5% inside the true curve (0.1 in on a
+   4 ft table). Recommendation: accept; it only affects warnings, and drawing uses true ellipses.
+9. **`hidden` and the inventory overlap in purpose.** Recommendation: keep both in the format,
+   and decide in PR 8 whether the eye button stays in the UI.
+10. **Zod's classic API imported by mistake** would add 17 KB gzip. Recommendation: the lint rule
+    in section 2 and the chunk-size check in PR 2.
+11. **WebMCP is still in origin trial** and has already been renamed once. Recommendation: it stays
+    last, behind feature detection, in its own chunk; re-check the API when PR 10 starts.
+12. **The MCP spec moves.** 2026-07-28 removed sessions and the handshake. Recommendation: stay on
+    the official SDK's `createMcpHandler`, which serves both eras, and pin its version.
+13. **Registry listing** uses the owner's GitHub identity. Recommendation: the owner runs
+    `mcp-publisher` once after PR 4; nothing in the plan waits for it.
+
+## 12. Spikes
+
+The scripts are kept outside the repository, on the machine that produced this document, in a
+`spikes/` folder. They are not committed.
+
+| Folder      | What it measures                                                                                                        | Run                                                                     |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `bundle/`   | Planner chunk size per schema library (`build-variants.sh`); JSON Schema output and validation cost (`spike/bench.ts`). | `./build-variants.sh`, `node --experimental-strip-types spike/bench.ts` |
+| `links/`    | The four sample plans (`samples.mjs`), the eight encodings (`encodings.mjs`), lengths and QR versions (`measure.mjs`).  | `node measure.mjs`                                                      |
+| `render/`   | SVG to PNG with resvg-wasm: wasm size, start-up, CPU per image, font formats (`png.mjs`).                               | `node png.mjs`                                                          |
+| `mcp/`      | A stateless Worker with the official SDK and the shared schema: bundle size, both protocol eras, CPU per call.          | `node run.mjs`                                                          |
+| `geometry/` | Convex-part SAT and room containment: nine correctness checks, cost per check, size against `polygon-clipping`.         | `node bench.mjs`                                                        |
+
+The Workers plan and the zone's bot settings were read with the `cf` CLI
+(`cf accounts subscriptions get`, `cf bot-management get`); nothing was changed.
