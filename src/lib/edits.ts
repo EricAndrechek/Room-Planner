@@ -5,7 +5,7 @@
  */
 import { insideShift, bestSpot, furnitureSpotBox, moveInside, wallSpots } from '../core/placement';
 import { GEOMETRY_EPSILON } from '../core/geometry';
-import { addItem, nextId, removeItem, removeOpening, updateItem } from '../core/ops';
+import { addItem, nextId, removeItem, removeOpening } from '../core/ops';
 import { clamp } from '../core/units';
 import type { Id, Item, Opening, Plan, Room, RoomDims, Wall } from '../types';
 import {
@@ -264,11 +264,16 @@ export function addPiece(plan: Plan, color: string): { plan: Plan; item: Item } 
 
 export const deletePiece = (plan: Plan, id: Id): Plan => removeItem(plan, id);
 
-/** Edit a piece in the editor's terms (see `patchPiece`). */
+/**
+ * Edit a piece in the editor's terms (see `patchPiece`). The patched piece replaces the old one, so
+ * a field the patch removes (`locked`, `hidden`, an L's `cut`) is gone.
+ */
 export const changePiece = (plan: Plan, id: Id, patch: PiecePatch): Plan => {
-  const item = plan.items.find((i) => i.id === id);
-  return item ? updateItem(plan, id, patchPiece(item, patch)) : plan;
-};
+  const i = plan.items.findIndex((it) => it.id === id);
+  if (i < 0) return plan;
+  const items = [...plan.items];
+  items[i] = patchPiece(plan.items[i]!, patch);
+  return { ...plan, items };
 
 export const clearPieces = (plan: Plan): Plan =>
   plan.items.length ? { ...plan, items: [] } : plan;
