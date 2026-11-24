@@ -5,14 +5,16 @@
  *
  * This file lays out the page (title, plan, dimensions, footer); the rooms with their doors and
  * windows are drawn by scene/rooms.ts and the furniture by scene/items.ts. Pieces in the
- * inventory and hidden pieces are not drawn; the inventory is listed under the plan ("Not
- * placed"), with each piece's colour and size.
+ * inventory and hidden pieces are not drawn; the inventory is listed under the plan ("Set
+ * aside"), with each piece's colour and size. A floor of several rooms draws every wall band, then
+ * every floor, then the walls the rooms share, so no room's wall paints over its neighbour.
  */
 import { getBorderColor, migrateColor } from '../colors';
 import { leafPoint, openingDoorGeometry } from '../geometry/doors';
 import { itemParts } from '../geometry/shapes';
 import { isRectangle, outlineArea, roomBounds } from '../geometry/walls';
-import type { Plan } from '../schema';
+import { neighbourOf, roomName, sharedWalls } from '../floor';
+import type { Opening, Plan, Room } from '../schema';
 import type { UnitSystem } from '../types';
 import { FEET_PER_METER, clamp, feetToDisplay, roundNum } from '../units';
 import { fitText } from './fontMetrics';
@@ -29,7 +31,15 @@ import {
   type Scene,
   type SceneNode,
 } from './scene/nodes';
-import { doorCutNode, doorNode, drawableRoom, roomNode, windowNode } from './scene/rooms';
+import {
+  doorCutNode,
+  doorNode,
+  drawableRoom,
+  roomLabelNode,
+  roomNode,
+  sharedWallNode,
+  windowNode,
+} from './scene/rooms';
 
 export type {
   GroupNode,
@@ -69,7 +79,7 @@ const FONT_SUB = 12.5;
 const FONT_DIM = 12;
 const FONT_FOOT = 10.5;
 const FONT_LIST = 11;
-/** Row height of the "Not placed" list. */
+/** Row height of the "Set aside" list. */
 const LIST_LINE = 17;
 
 // --- Annotations -------------------------------------------------------------------------
@@ -208,7 +218,7 @@ const inventoryList = (
       kind: 'text',
       x: MARGIN,
       y: r2(top + FONT_SUB * 0.8),
-      text: `Not placed (${items.length})`,
+      text: `Set aside (${items.length})`,
       size: FONT_SUB,
       bold: true,
       anchor: 'start',
@@ -287,15 +297,23 @@ export const buildPlanScene = (input: SceneInput): Scene => {
     [floor.left * s - T, floor.top * s - T],
     [floor.right * s + T, floor.bottom * s + T],
   ];
+  const several = rooms.length > 1;
+  // The room on the other side of an opening, when it is on a wall two rooms share.
+  const across = (room: Room, o: Opening): string | null =>
+    several ? (neighbourOf({ rooms }, room, o)?.id ?? null) : null;
   const doors = rooms.flatMap((room) =>
-    room.openings.filter((o) => o.kind === 'door').map((door) => ({ room, door })),
+    room.openings
+      .filter((o) => o.kind === 'door')
+      .map((door) => ({ room, door, connects: across(room, door) })),
   );
   const windows = rooms.flatMap((room) =>
-    room.openings.filter((o) => o.kind === 'window').map((win) => ({ room, win })),
+    room.openings
+      .filter((o) => o.kind === 'window')
+      .map((win) => ({ room, win, connects: across(room, win) })),
   );
-  for (const { room, door } of doors) {
+  for (const { room, door, connects } of doors) {
     // Outward swings reach outside the walls: keep them in the drawing.
-    const g = openingDoorGeometry(room, door, T / s);
+    const g = openingDoorGeometry(room, door, connects ? 0 : T / s);
     if (g.side !== 'outside') continue;
     for (const leaf of g.leaves) {
       for (let deg = 0; deg <= leaf.angle; deg += 15) {
@@ -316,13 +334,31 @@ export const buildPlanScene = (input: SceneInput): Scene => {
 
   // Floor + grid (1 ft, or 0.5 m in metric).
   const grid = isMetric(unitSystem) ? 0.5 * FEET_PER_METER * s : s;
-  for (const room of rooms) planNodes.push(roomNode(room, s, T, grid));
-  for (const { room, win } of windows) planNodes.push(windowNode(room, win, s, T));
-  for (const { room, door } of doors) planNodes.push(doorCutNode(room, door, s, T));
+  if (several) {
+    for (const room of rooms) planNodes.push(roomNode(room, s, T, grid, 'band'));
+    for (const room of rooms) planNodes.push(roomNode(room, s, T, grid, 'floor'));
+    for (const sw of sharedWalls({ rooms })) planNodes.push(sharedWallNode(sw, s, T));
+  } else {
+    for (const room of rooms) planNodes.push(roomNode(room, s, T, grid));
+  }
+  for (const { room, win, connects } of windows) {
+    planNodes.push(windowNode(room, win, s, T, connects));
+  }
+  for (const { room, door, connects } of doors) {
+    planNodes.push(doorCutNode(room, door, s, T, connects));
+  }
+  if (several) {
+    for (const room of rooms) {
+      const name = roomName({ rooms }, room);
+      planNodes.push(roomLabelNode(room, name, areaText(outlineArea(room), unitSystem), s));
+    }
+  }
   for (const item of items) planNodes.push(itemNode(item, unitSystem, s));
   // Door leaves and swings go over the furniture, so a rug or bed never hides
   // the clearance a door needs.
-  for (const { room, door } of doors) planNodes.push(doorNode(room, door, s, T));
+  for (const { room, door, connects } of doors) {
+    planNodes.push(doorNode(room, door, s, T, connects));
+  }
   planNodes.push(
     dimension(
       floor.left * s,
@@ -392,7 +428,9 @@ export const buildPlanScene = (input: SceneInput): Scene => {
         kind: 'text',
         x: MARGIN,
         y: MARGIN + FONT_TITLE + 8 + FONT_SUB * 0.8,
-        text: `${feetToDisplay(floorW, unitSystem)} × ${feetToDisplay(floorH, unitSystem)} · ${areaText(area, unitSystem)}`,
+        text: several
+          ? `${rooms.length} rooms · ${areaText(area, unitSystem)}`
+          : `${feetToDisplay(floorW, unitSystem)} × ${feetToDisplay(floorH, unitSystem)} · ${areaText(area, unitSystem)}`,
         size: FONT_SUB,
         anchor: 'start',
         fill: MUTED,
