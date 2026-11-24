@@ -11,7 +11,7 @@
  * IP. Nothing is logged: no request body, no plan.
  */
 import { SUPPORTED_PROTOCOL_VERSIONS, createMcpHandler } from '@modelcontextprotocol/server';
-import { environmentOf, report, type Activity } from './analytics';
+import { environmentOf, headerProps, report, type Activity, type HostIds } from './analytics';
 import registry from '../server.json';
 import {
   REGISTRY_NAME,
@@ -154,6 +154,7 @@ const PROTOCOL_KEY = 'io.modelcontextprotocol/protocolVersion';
 /** What analytics learns about a request as it is handled. */
 interface Trace {
   activities: Activity[];
+  hostIds: HostIds;
   protocol?: string;
   clientName?: string;
   clientVersion?: string;
@@ -170,6 +171,7 @@ export async function handleMcp(
   fetchImpl: typeof fetch = fetch,
 ): Promise<Response> {
   const trace: Trace = {
+    hostIds: { mcpSession: request.headers.get('mcp-session-id') ?? undefined },
     activities: [],
     protocol: request.headers.get('mcp-protocol-version') ?? undefined,
   };
@@ -185,7 +187,8 @@ export async function handleMcp(
     sent = response.body.pipeTo(writable).catch(() => undefined);
     out = new Response(readable, response);
   }
-  const cf = (request as Request & { cf?: { country?: string } }).cf;
+  const cf = (request as Request & { cf?: Record<string, unknown> }).cf;
+  const headers = headerProps(request.headers);
   ctx.waitUntil(
     sent.then(() =>
       report(
@@ -194,7 +197,9 @@ export async function handleMcp(
           hostname,
           ip: clientKey(request),
           userAgent: request.headers.get('user-agent'),
-          country: typeof cf?.country === 'string' ? cf.country : undefined,
+          headers,
+          cf,
+          hostIds: trace.hostIds,
           protocol: trace.protocol,
           clientName: trace.clientName,
           clientVersion: trace.clientVersion,
@@ -218,6 +223,10 @@ function observe(message: unknown, trace: Trace) {
     : isObject(meta[CLIENT_INFO_KEY])
       ? meta[CLIENT_INFO_KEY]
       : {};
+  if (typeof meta['openai/subject'] === 'string')
+    trace.hostIds.openaiSubject = meta['openai/subject'];
+  if (typeof meta['openai/session'] === 'string')
+    trace.hostIds.openaiSession = meta['openai/session'];
   if (typeof info.name === 'string') trace.clientName = info.name;
   if (typeof info.version === 'string') trace.clientVersion = info.version;
   const protocol = params.protocolVersion ?? meta[PROTOCOL_KEY];

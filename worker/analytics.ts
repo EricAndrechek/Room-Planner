@@ -4,11 +4,12 @@
  * failing PostHog never delays or breaks a call.
  *
  * What is sent: which method or tool, whether it worked and why not (a fixed vocabulary), counts
- * (rooms, pieces, issues by severity), the plan's unit, the client's self-reported name and
- * version, whether that client is a hosted service or runs locally, the protocol version, a
- * user-agent family, the environment, and the caller's IP address as `$ip`, from which PostHog
- * derives an approximate location, as for the website's own analytics. Never plan content, names,
- * labels or links. Events have no person profile; `distinct_id` is a hash of IP and client name.
+ * (rooms, pieces, issues by severity), the plan's unit, whether the editor can open it, the
+ * client's self-reported name and version, whether that client is a hosted service or runs
+ * locally, the protocol version, the request's headers except credentials (`h_*`), Cloudflare's
+ * network and location data for the request (`cf_*`), the environment, and the caller's IP as
+ * `$ip` for PostHog's GeoIP, as for the website's own analytics. Never plan content, names,
+ * labels or links. Events have no person profile.
  */
 import type { Issue, ToolStats } from './tools';
 
@@ -47,24 +48,116 @@ export function uaFamily(ua: string | null): string {
 
 const hex = (bytes: Uint8Array) => [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 
-/** A stable id for one client at one address: `mcp_` and 32 hex digits of SHA-256(ip|client). */
-export async function clientId(ip: string, client: string): Promise<string> {
-  const data = new TextEncoder().encode(`${ip}|${client}`);
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', data));
-  return `mcp_${hex(digest.slice(0, 16))}`;
+const sha = async (text: string) =>
+  hex(
+    new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))).slice(
+      0,
+      16,
+    ),
+  );
+
+/** Identifiers a host sends on its own (anonymous already; hashed again, never sent raw). */
+export interface HostIds {
+  /** ChatGPT: `_meta["openai/subject"]`, an anonymised user id. */
+  openaiSubject?: string;
+  /** ChatGPT: `_meta["openai/session"]`, an anonymised conversation id. */
+  openaiSession?: string;
+  /** Any client of a sessionful server: the `Mcp-Session-Id` header. */
+  mcpSession?: string;
 }
+
+/**
+ * `distinct_id` and where it came from. A host-provided id when there is one, so users of a
+ * hosted client (who share its egress addresses) stay apart; else a hash of IP, user agent and
+ * client name (`fallback`), which cannot tell apart users of a hosted client without host ids.
+ */
+export async function identify(
+  ids: HostIds,
+  fallback: { ip: string; userAgent: string; clientName: string },
+): Promise<{ distinctId: string; idSource: string }> {
+  if (ids.openaiSubject) {
+    return { distinctId: `chatgpt_${await sha(ids.openaiSubject)}`, idSource: 'openai/subject' };
+  }
+  if (ids.openaiSession) {
+    return {
+      distinctId: `chatgptsession_${await sha(ids.openaiSession)}`,
+      idSource: 'openai/session',
+    };
+  }
+  if (ids.mcpSession) {
+    return { distinctId: `mcpsession_${await sha(ids.mcpSession)}`, idSource: 'mcp-session-id' };
+  }
+  const { ip, userAgent, clientName } = fallback;
+  return {
+    distinctId: `mcp_${await sha(`${ip}|${userAgent}|${clientName}`)}`,
+    idSource: 'fallback',
+  };
+}
+
+/** Networks of cloud and AI providers: a call from one comes from a hosted client's servers. */
+const DATACENTRE =
+  /anthropic|openai|google|amazon|aws|microsoft|azure|oracle|cloudflare|digitalocean|hetzner|ovh|linode|akamai|fastly|vultr|alibaba|tencent/i;
 
 /**
  * `hosted` for clients that call from their vendor's servers (Claude's connectors on the web and
  * desktop, ChatGPT), where the location is the vendor's datacentre; `local` for clients on the
- * user's machine (Claude Code, Cursor, VS Code, the Inspector, others).
+ * user's machine (Claude Code, Cursor, VS Code, the Inspector, others). The network (Cloudflare's
+ * `asOrganization`) is the strongest signal; the client's name and user agent come next.
  */
-export function clientKind(clientName: string | undefined, family: string): 'hosted' | 'local' {
+export function clientKind(
+  clientName: string | undefined,
+  family: string,
+  asOrganization?: string,
+): 'hosted' | 'local' {
   if (clientName && /claude-code|cursor|vscode|visual studio|inspector|goose/i.test(clientName)) {
     return 'local';
   }
+  if (asOrganization && DATACENTRE.test(asOrganization)) return 'hosted';
   if (clientName && /claude|anthropic|openai|chatgpt/i.test(clientName)) return 'hosted';
   return family === 'claude' || family === 'openai' ? 'hosted' : 'local';
+}
+
+/** Header names never sent: credentials and anything that looks like one. */
+const DENIED_HEADER =
+  /^(authorization|proxy-authorization|cookie|set-cookie)$|token|secret|key|auth|session|signature|password/i;
+const MAX_HEADER = 512;
+
+/** The request's headers as `h_*` properties, without credentials, values cut to 512 chars. */
+export function headerProps(headers: Headers): Record<string, string> {
+  const out: Record<string, string> = {};
+  headers.forEach((value, name) => {
+    if (DENIED_HEADER.test(name)) return;
+    out[`h_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`] = value.slice(0, MAX_HEADER);
+  });
+  return out;
+}
+
+/** Cloudflare's network and location data for the request, as `cf_*` properties. */
+export function cfProps(cf: Record<string, unknown> | undefined): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (!cf) return out;
+  const keys: [string, string][] = [
+    ['city', 'cf_city'],
+    ['region', 'cf_region'],
+    ['regionCode', 'cf_region_code'],
+    ['postalCode', 'cf_postal_code'],
+    ['country', 'cf_country'],
+    ['continent', 'cf_continent'],
+    ['latitude', 'cf_latitude'],
+    ['longitude', 'cf_longitude'],
+    ['timezone', 'cf_timezone'],
+    ['asn', 'cf_asn'],
+    ['asOrganization', 'cf_as_organization'],
+    ['colo', 'cf_colo'],
+    ['httpProtocol', 'cf_http_protocol'],
+    ['tlsVersion', 'cf_tls_version'],
+  ];
+  for (const [from, to] of keys) {
+    const v = cf[from];
+    if (typeof v === 'string' || typeof v === 'number')
+      out[to] = typeof v === 'string' ? v.slice(0, MAX_HEADER) : v;
+  }
+  return out;
 }
 
 /** What a request did, as analytics sees it. */
@@ -79,7 +172,11 @@ export interface RequestContext {
   hostname: string;
   ip: string;
   userAgent: string | null;
-  country?: string;
+  /** `headerProps(request.headers)`. */
+  headers: Record<string, string>;
+  /** `request.cf`. */
+  cf?: Record<string, unknown>;
+  hostIds: HostIds;
   protocol?: string;
   clientName?: string;
   clientVersion?: string;
@@ -108,17 +205,24 @@ export async function buildEvents(
   const init = activities.find((a) => a.kind === 'initialize');
   const clientName = clip(ctx.clientName) ?? clip(init?.clientName);
   const family = uaFamily(ctx.userAgent);
-  const distinctId = await clientId(ctx.ip, clientName ?? family);
+  const cf = cfProps(ctx.cf);
+  const { distinctId, idSource } = await identify(ctx.hostIds, {
+    ip: ctx.ip,
+    userAgent: ctx.userAgent ?? '',
+    clientName: clientName ?? '',
+  });
   const base = {
+    ...ctx.headers,
+    ...cf,
     $process_person_profile: false,
     // PostHog's GeoIP reads this (the request reaching PostHog comes from Cloudflare).
     $ip: ctx.ip,
     $lib: 'room-planner-mcp',
     $lib_version: ctx.serverVersion,
     environment: environmentOf(ctx.hostname),
-    country: ctx.country,
+    id_source: idSource,
     ua_family: family,
-    client_kind: clientKind(clientName, family),
+    client_kind: clientKind(clientName, family, cf.cf_as_organization as string | undefined),
     protocol: clip(ctx.protocol) ?? clip(init?.protocol),
     client_name: clientName,
     client_version: clip(ctx.clientVersion) ?? clip(init?.clientVersion),
@@ -142,6 +246,7 @@ export async function buildEvents(
           rooms: a.stats?.rooms ?? null,
           items: a.stats?.items ?? null,
           unit: a.stats?.unit ?? null,
+          editable: a.stats?.editable ?? null,
           duration_ms: a.durationMs,
           ...severityCounts(a.stats?.issues),
         });

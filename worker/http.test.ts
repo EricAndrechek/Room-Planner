@@ -162,26 +162,23 @@ describe.each(ERAS)('MCP over $name', ({ mode }) => {
     expect(textOf(r)).toContain('plan.rooms.0.outline:');
   });
 
-  it('create_plan says what to change for a plan the app cannot open yet', async () => {
+  it('create_plan accepts a plan the editor cannot open yet, without a link', async () => {
     const client = await connect(mode);
-    const two = {
-      ...bedroom,
-      rooms: [
-        bedroom.rooms[0],
-        {
-          id: 'hall',
-          outline: [
-            { x: 144, y: 0 },
-            { x: 200, y: 0 },
-            { x: 200, y: 50 },
-            { x: 144, y: 50 },
-          ],
-        },
+    const hall = {
+      id: 'hall',
+      outline: [
+        { x: 144, y: 0 },
+        { x: 200, y: 0 },
+        { x: 200, y: 50 },
+        { x: 144, y: 50 },
       ],
     };
+    const two = { ...bedroom, rooms: [bedroom.rooms[0], hall] };
     const r = await client.callTool({ name: 'create_plan', arguments: { plan: two } });
-    expect(r.isError).toBe(true);
-    expect(textOf(r)).toContain('2 rooms');
+    expect(r.isError).toBeFalsy();
+    expect(r.structuredContent).toMatchObject({ url: null, editable: false });
+    expect((r.structuredContent as { plan: { rooms: unknown[] } }).plan.rooms).toHaveLength(2);
+    expect(textOf(r)).toContain('several rooms');
   });
 
   it('check_layout returns ok and issues, with minClearance in the plan unit', async () => {
