@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Plus, Sofa, Trash2, Unlock } from 'lucide-react';
 import { glowClass, useCardHighlight, type CardRef } from '../../hooks/useCardHighlight';
 import type { ItemWarning } from '../../core/geometry';
@@ -27,11 +27,14 @@ interface FurniturePanelProps {
   onCommit: () => void;
   onToggleLock: (id: Id) => void;
   onToggleVisibility: (id: Id) => void;
+  onMoveToInventory: (id: Id) => void;
   onDeleteItem: (id: Id) => void;
   onToggleColorPicker: (id: Id) => void;
   onCloseColorPicker: () => void;
   /** The piece just added: its card is scrolled into view and briefly highlighted. */
   highlight?: CardRef | null;
+  /** Below the list: the inventory tray (InventoryTray.tsx). */
+  inventory?: ReactNode;
 }
 
 /** Step 2 group in the sidebar: the furniture list. */
@@ -150,6 +153,7 @@ export function FurniturePanel(props: FurniturePanelProps) {
                     onCommit={props.onCommit}
                     onToggleLock={props.onToggleLock}
                     onToggleVisibility={props.onToggleVisibility}
+                    onMoveToInventory={props.onMoveToInventory}
                     onDelete={props.onDeleteItem}
                     onToggleColorPicker={props.onToggleColorPicker}
                     onCloseColorPicker={props.onCloseColorPicker}
@@ -163,6 +167,7 @@ export function FurniturePanel(props: FurniturePanelProps) {
               </div>
             )}
           </div>
+          {props.inventory}
         </div>
       )}
     </div>

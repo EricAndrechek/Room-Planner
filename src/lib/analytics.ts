@@ -32,6 +32,8 @@ export type AnalyticsEvent =
   | 'mode_changed'
   | 'item_moved'
   | 'item_rotated'
+  | 'item_to_inventory'
+  | 'item_placed_from_inventory'
   | 'opening_moved'
   | 'locked_piece_pressed'
   | 'dimension_rejected'

@@ -318,7 +318,12 @@ test('every kind of edit undoes and redoes, one step each', async ({ page }) => 
   await snap();
   await page.getByRole('button', { name: 'Lock New Item' }).click();
   await snap();
-  await page.getByRole('button', { name: 'Hide New Item' }).click();
+  await page
+    .getByTestId('furniture-card')
+    .getByRole('button', { name: 'Move New Item to inventory' })
+    .click();
+  await snap();
+  await page.getByRole('button', { name: 'Place New Item in the room' }).click();
   await snap();
   await page.getByRole('button', { name: 'Delete New Item' }).click();
   await snap();

@@ -4,7 +4,14 @@
  * walls, numbered as the outline lists them (plans.ts); each returns the plan unchanged (the same
  * object) when there is nothing to do.
  */
-import { insideShift, bestSpot, furnitureSpotBox, moveInside, wallSpots } from '../core/placement';
+import {
+  insideShift,
+  bestSpot,
+  findFurnitureSpot,
+  furnitureSpotBox,
+  moveInside,
+  wallSpots,
+} from '../core/placement';
 import { activePieces } from '../core/check';
 import { GEOMETRY_EPSILON, type Point } from '../core/geometry';
 import {
@@ -16,6 +23,7 @@ import {
   removeOpening,
   removeVertex,
   reshapeRoom,
+  toInventory,
   updateItem,
 } from '../core/ops';
 import {
@@ -386,14 +394,23 @@ export function addPiece(plan: Plan, color: string): { plan: Plan; item: Item } 
 
 export const deletePiece = (plan: Plan, id: Id): Plan => removeItem(plan, id);
 
-/** Edit a piece in the editor's terms (see `patchPiece`). */
+/**
+ * Edit a piece in the editor's terms (see `patchPiece`). The piece is replaced, not merged, so a
+ * flag the patch turns off (`locked`, `hidden`) is gone.
+ */
 export const changePiece = (plan: Plan, id: Id, patch: PiecePatch): Plan => {
-  const item = plan.items.find((i) => i.id === id);
-  return item ? updateItem(plan, id, patchPiece(item, patch)) : plan;
+  const i = plan.items.findIndex((it) => it.id === id);
+  if (i < 0) return plan;
+  const items = [...plan.items];
+  items[i] = patchPiece(plan.items[i]!, patch);
+  return { ...plan, items };
 };
 
+/** Every piece in the room removed ("Clear room"); the inventory stays. */
 export const clearPieces = (plan: Plan): Plan =>
-  plan.items.length ? { ...plan, items: [] } : plan;
+  plan.items.some((i) => i.placement)
+    ? { ...plan, items: plan.items.filter((i) => !i.placement) }
+    : plan;
 
 export const toggleLock = (plan: Plan, id: Id): Plan => {
   const item = plan.items.find((i) => i.id === id);
@@ -404,6 +421,31 @@ export const toggleHidden = (plan: Plan, id: Id): Plan => {
   const item = plan.items.find((i) => i.id === id);
   return item ? changePiece(plan, id, { hidden: !item.hidden }) : plan;
 };
+
+// --- The inventory ---------------------------------------------------------------------------
+
+/**
+ * Take a piece out of the room into the inventory (docs/design/plan-format.md, section 3: the
+ * inventory is the absence of `placement`). It keeps its name, size, colour and lock; `hidden`
+ * goes, since a piece in the inventory is not drawn anyway. Unchanged if it is already there.
+ */
+export function takeOutPiece(plan: Plan, id: Id): Plan {
+  const item = plan.items.find((i) => i.id === id);
+  if (!item?.placement) return plan;
+  const out = toInventory(plan, id);
+  return item.hidden ? changePiece(out, id, { hidden: false }) : out;
+}
+
+/**
+ * Put a piece from the inventory back in the room, unrotated, at the free spot nearest the middle
+ * of the room (as a new piece goes: `findFurnitureSpot`), shown. Unchanged if it is already placed.
+ */
+export function placePiece(plan: Plan, id: Id): Plan {
+  const item = plan.items.find((i) => i.id === id);
+  if (!item || item.placement) return plan;
+  const placed = updateItem(plan, id, { placement: findFurnitureSpot(plan, mainRoom(plan), item) });
+  return item.hidden ? changePiece(placed, id, { hidden: false }) : placed;
+}
 
 /**
  * Every shown piece that is (partly) outside the room moved the least amount that brings it in

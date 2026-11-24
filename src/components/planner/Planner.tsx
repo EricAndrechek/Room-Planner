@@ -11,6 +11,7 @@ import {
 import {
   useFurnitureEditing,
   type DragFrame,
+  type InventoryInput,
   type RotateFrame,
 } from '../../hooks/useFurnitureEditing';
 import { useHistory } from '../../hooks/useHistory';
@@ -35,9 +36,11 @@ import { piecesOutside } from '../../core/placement';
 import { movePiecesInside, narrowedOpenings, resizeRoom } from '../../lib/edits';
 import {
   doorsOf,
+  inventoryPieces,
   itemWarnings,
   mainRoom,
   openingPlace,
+  placedPieces,
   roomSize,
   snapPieces,
   theWall,
@@ -54,10 +57,12 @@ import { ExportModal } from './ExportModal';
 import { FileBrowserModal } from './FileBrowserModal';
 import { FurniturePanel } from './FurniturePanel';
 import { Header } from './Header';
+import { InventoryTray } from './InventoryTray';
 import { PwaNotices } from './PwaNotices';
 import { PopoverRootContext } from './PopoverRoot';
 import { RoomCanvas } from './RoomCanvas';
 import { RoomSetupPanel } from './RoomSetupPanel';
+import { SelectionActions } from './SelectionActions';
 import { ShareModal } from './ShareModal';
 import { ShortcutsDialog } from './ShortcutsDialog';
 import { Sidebar } from './Sidebar';
@@ -102,13 +107,25 @@ export function Planner({ store, initial }: PlannerProps) {
   const canvasCovered = isMobile && detent === 'full';
 
   const sel = useSelection();
-  const { selection, setSelection, selectItem, colorPickerItemId } = sel;
+  const { setSelection, selectItem, colorPickerItemId } = sel;
+  // A piece in the inventory is not on the plan, so it is never selected (undoing "Place" puts a
+  // selected piece back there): nothing acts on it until it is placed again.
+  const selection =
+    sel.selection?.type === 'item' &&
+    !plan.items.some((i) => i.id === sel.selection!.id && i.placement)
+      ? null
+      : sel.selection;
   const [shareOpen, setShareOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [roomSetupExpanded, setRoomSetupExpanded] = useState(false);
   const [furnitureExpanded, setFurnitureExpanded] = useState(false);
+  const [inventoryOpen, setInventoryOpen] = useState(true);
+  /** The piece last moved to the inventory: its tray row shows (and, from its card, takes focus). */
+  const [inventoryHighlight, setInventoryHighlight] = useState<
+    (CardRef & { focus?: boolean }) | null
+  >(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   // The part of the plan that shows (fitting, revealing a piece): not under the badge or the sheet.
@@ -315,6 +332,7 @@ export function Planner({ store, initial }: PlannerProps) {
     announce: live.announce,
     onLockedPress: onLockedPointerPress,
     onTap: isMobile ? onPieceTap : undefined,
+    onDroppedInInventory: (item) => showInInventory(item.id, false),
   });
   const openings = useOpenings({
     history,
@@ -506,6 +524,15 @@ export function Planner({ store, initial }: PlannerProps) {
         furniture.moveItem(selectedItem.id, dirX * step, dirY * step, size !== 'fine');
         return true;
       },
+      toInventory: () => {
+        if (isRoomSetup && selectedItem) {
+          promptLockedPiece(selectedItem, 'keyboard');
+          return true;
+        }
+        if (!selectedItem) return false;
+        moveToInventory(selectedItem.id, 'keyboard');
+        return true;
+      },
       showShortcuts: () => setShortcutsOpen(true),
       rotateSelected: (degrees) => {
         if (isRoomSetup && selectedItem) {
@@ -528,6 +555,29 @@ export function Planner({ store, initial }: PlannerProps) {
   // While a piece is moved or turned into a door's way, that door's clearance lights up.
   const movingId = dragFrame?.id ?? rotateFrame?.id;
   const highlightDoorIds = movingId !== undefined ? warnings.get(movingId)?.doorIds : undefined;
+
+  // --- The inventory ----------------------------------------------------------------------------
+  /** Open the tray on the piece just moved there. */
+  function showInInventory(id: Id, focus: boolean) {
+    setInventoryOpen(true);
+    setInventoryHighlight({ type: 'item', id, seq: nextCardSeq(), focus });
+  }
+  /** Take a piece out of the room. From its card, the focus follows it to the tray. */
+  const moveToInventory = (id: Id, input: InventoryInput) => {
+    if (!furniture.takeOutItem(id, input)) return;
+    showInInventory(id, input === 'card');
+    if (input !== 'card') requestAnimationFrame(focusCanvas);
+  };
+  /** Put a piece back at a free spot: selected and in sight, as a new piece is. */
+  const placeFromInventory = (id: Id) => {
+    furniture.placeItem(id);
+    lowerSheet();
+    if (isMobile) requestAnimationFrame(() => revealPiece(id));
+  };
+  const inventory = useMemo(() => inventoryPieces(plan), [plan]);
+  const placed = useMemo(() => placedPieces(plan), [plan]);
+  const selectionActions =
+    selectedItem && !isRoomSetup && !dragFrame && !rotateFrame ? selectedItem : undefined;
 
   // --- Render --------------------------------------------------------------------------------
   const colorPickerItem =
@@ -647,6 +697,13 @@ export function Planner({ store, initial }: PlannerProps) {
                           onZoomOut={zoomOut}
                           onFit={fitToView}
                         />
+                        {selectionActions && (
+                          <SelectionActions
+                            variant="floating"
+                            item={selectionActions}
+                            onMoveToInventory={() => moveToInventory(selectionActions.id, 'canvas')}
+                          />
+                        )}
                         <SnapToggle variant="floating" on={snapOn} onToggle={toggleSnap} />
                       </>
                     ),
@@ -690,7 +747,7 @@ export function Planner({ store, initial }: PlannerProps) {
               expanded={furnitureExpanded}
               onToggleExpanded={() => setFurnitureExpanded((v) => !v)}
               onActivate={() => changeDesignMode(DESIGN_MODES.FURNITURE)}
-              items={plan.items}
+              items={placed}
               warnings={warnings}
               selection={selection}
               isMobile={isMobile}
@@ -704,6 +761,7 @@ export function Planner({ store, initial }: PlannerProps) {
               onCommit={commit}
               onToggleLock={furniture.toggleLock}
               onToggleVisibility={furniture.toggleVisibility}
+              onMoveToInventory={(id) => moveToInventory(id, 'card')}
               onDeleteItem={furniture.deleteItem}
               onToggleColorPicker={sel.toggleColorPicker}
               onCloseColorPicker={sel.closeColorPicker}
@@ -711,60 +769,80 @@ export function Planner({ store, initial }: PlannerProps) {
                 furniture.lastAdded,
                 revealedCard?.type === 'item' ? revealedCard : null,
               )}
+              inventory={
+                <InventoryTray
+                  items={inventory}
+                  unitSystem={unitSystem}
+                  open={inventoryOpen}
+                  onToggle={() => setInventoryOpen((v) => !v)}
+                  onPlace={placeFromInventory}
+                  onDelete={furniture.deleteItem}
+                  highlight={inventoryHighlight}
+                />
+              }
             />
           </Sidebar>
           <div ref={setPopoverRoot} className="contents" data-popover-root />
 
-          <RoomCanvas
-            containerRef={containerRef}
-            plan={plan}
-            warnings={warnings}
-            selection={selection}
-            designMode={designMode}
-            unitSystem={unitSystem}
-            zoom={zoom}
-            pan={pan}
-            onSelectOpening={(type, id) => setSelection({ id, type })}
-            showModeBadge={!canvasCovered}
-            covered={canvasCovered}
-            onItemPointerDown={furniture.onItemPointerDown}
-            onRotatePointerDown={furniture.onRotatePointerDown}
-            onSelectItem={(item) => selectItem(item.id)}
-            onLockedItemPress={onLockedKeyPress}
-            onDoorPointerDown={(e, door) => openings.startOpeningDrag(e, door.id, 'doors')}
-            onWindowPointerDown={(e, win) => openings.startOpeningDrag(e, win.id, 'windows')}
-            highlightDoorIds={highlightDoorIds}
-            corners={
-              roomShape.editingCorners
-                ? {
-                    selected: roomShape.selectedCorner,
-                    highlightedWall: roomShape.highlightedWall,
-                    drag: roomShape.drag,
-                    onPointerDown: roomShape.startCornerDrag,
-                    onSelect: (i) => roomShape.selectCorner(i),
-                    onAddCorner: roomShape.addCorner,
-                    onRemoveCorner: (i) => {
-                      roomShape.removeCorner(i);
-                      requestAnimationFrame(focusCanvas);
-                    },
-                  }
-                : null
-            }
-            overlay={
-              overlayItemId !== undefined && (
-                <SnapOverlay
-                  items={pieces}
-                  room={roomDims}
-                  outline={isRectangle(room) ? undefined : room.outline}
-                  zoom={zoom}
-                  unitSystem={unitSystem}
-                  itemId={overlayItemId}
-                  drag={dragFrame}
-                  rotation={rotateFrame?.id === overlayItemId ? rotateFrame.angle : null}
-                />
-              )
-            }
-          />
+          <div className="relative flex flex-1 min-w-0">
+            <RoomCanvas
+              containerRef={containerRef}
+              plan={plan}
+              warnings={warnings}
+              selection={selection}
+              designMode={designMode}
+              unitSystem={unitSystem}
+              zoom={zoom}
+              pan={pan}
+              onSelectOpening={(type, id) => setSelection({ id, type })}
+              showModeBadge={!canvasCovered}
+              covered={canvasCovered}
+              onItemPointerDown={furniture.onItemPointerDown}
+              onRotatePointerDown={furniture.onRotatePointerDown}
+              onSelectItem={(item) => selectItem(item.id)}
+              onLockedItemPress={onLockedKeyPress}
+              onDoorPointerDown={(e, door) => openings.startOpeningDrag(e, door.id, 'doors')}
+              onWindowPointerDown={(e, win) => openings.startOpeningDrag(e, win.id, 'windows')}
+              highlightDoorIds={highlightDoorIds}
+              corners={
+                roomShape.editingCorners
+                  ? {
+                      selected: roomShape.selectedCorner,
+                      highlightedWall: roomShape.highlightedWall,
+                      drag: roomShape.drag,
+                      onPointerDown: roomShape.startCornerDrag,
+                      onSelect: (i) => roomShape.selectCorner(i),
+                      onAddCorner: roomShape.addCorner,
+                      onRemoveCorner: (i) => {
+                        roomShape.removeCorner(i);
+                        requestAnimationFrame(focusCanvas);
+                      },
+                    }
+                  : null
+              }
+              overlay={
+                overlayItemId !== undefined && (
+                  <SnapOverlay
+                    items={pieces}
+                    room={roomDims}
+                    outline={isRectangle(room) ? undefined : room.outline}
+                    zoom={zoom}
+                    unitSystem={unitSystem}
+                    itemId={overlayItemId}
+                    drag={dragFrame}
+                    rotation={rotateFrame?.id === overlayItemId ? rotateFrame.angle : null}
+                  />
+                )
+              }
+            />
+            {selectionActions && !isMobile && (
+              <SelectionActions
+                variant="overlay"
+                item={selectionActions}
+                onMoveToInventory={() => moveToInventory(selectionActions.id, 'canvas')}
+              />
+            )}
+          </div>
         </div>
 
         <ShortcutsDialog isOpen={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />

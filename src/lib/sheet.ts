@@ -90,7 +90,8 @@ const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 /**
  * The sheet's one-line summary: the selected piece, door or window, or else the active step,
- * e.g. `1. Room · 12' × 12' · 1 door · 1 window`, `2. Items · 6 pieces`, `Chair · 1'6" × 1'6"`.
+ * e.g. `1. Room · 12' × 12' · 1 door · 1 window`, `2. Items · 6 pieces · 2 in inventory`,
+ * `Chair · 1'6" × 1'6"`.
  */
 export function sheetSummary(
   plan: Pick<Plan, 'rooms' | 'items'>,
@@ -125,6 +126,12 @@ export function sheetSummary(
       .filter(Boolean)
       .join(' · ');
   }
-  const n = plan.items.length;
-  return `2. Items · ${n ? count(n, 'piece') : 'no furniture yet'}`;
+  const n = plan.items.filter((i) => i.placement).length;
+  const stored = plan.items.length - n;
+  return [
+    `2. Items · ${n ? count(n, 'piece') : stored ? 'none in the room' : 'no furniture yet'}`,
+    stored ? `${stored} in inventory` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }

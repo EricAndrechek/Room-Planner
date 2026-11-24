@@ -62,6 +62,9 @@ const plan = (): Plan => {
   return r.plan;
 };
 
+/** The list's heading sits this far (at most) above its baseline. */
+const FONT_GAP = 12;
+
 const flat = (nodes: SceneNode[]): SceneNode[] =>
   nodes.flatMap((n) => (n.kind === 'group' ? [n, ...flat(n.children)] : [n]));
 
@@ -92,6 +95,38 @@ describe('buildPlanScene on a plan', () => {
     expect(items.every((g) => g.children[0]!.kind === 'path')).toBe(true);
     const svg = sceneToSvg(scene);
     expect(svg).toContain('data-label="Sofa"');
-    expect(svg).not.toContain('Spare chair');
+    expect(svg).not.toContain('data-label="Spare chair"');
+    expect(svg).not.toContain('Lamp');
+  });
+
+  const ruleY = (sc: typeof scene) => {
+    const footer = flat(sc.nodes).find((n) => n.kind === 'group' && n.role === 'footer');
+    const rule = footer?.kind === 'group' ? footer.children[0] : undefined;
+    return rule?.kind === 'path' && rule.d[0]![0] === 'M' ? rule.d[0]![2] : NaN;
+  };
+  const withoutInventory = () => {
+    const all = plan();
+    const placed = { ...all, items: all.items.filter((i) => i.placement) };
+    return buildPlanScene({ plan: placed, date: new Date(0), locale: 'en-US' });
+  };
+
+  it('lists the inventory under the plan, above the footer', () => {
+    const [list] = groups('inventory');
+    const texts = list!.children.flatMap((n) => (n.kind === 'text' ? [n.text] : []));
+    expect(texts).toEqual(['Not placed (1)', `Spare chair · 1'6" × 1'6"`]);
+    expect(list!.children.find((n) => n.kind === 'rect')).toMatchObject({ fill: '#93c5fd' });
+    const ys = list!.children.map((n) => (n.kind === 'rect' ? n.y : n.kind === 'text' ? n.y : 0));
+    // Below where the footer would be without it (so below the plan), above the footer.
+    expect(Math.min(...ys) - FONT_GAP).toBeGreaterThan(ruleY(withoutInventory()));
+    expect(Math.max(...ys)).toBeLessThan(ruleY(scene));
+  });
+
+  it('has no list, and the same page width, when nothing is in the inventory', () => {
+    const without = withoutInventory();
+    expect(flat(without.nodes).some((n) => n.kind === 'group' && n.role === 'inventory')).toBe(
+      false,
+    );
+    expect(without.height).toBeLessThan(scene.height);
+    expect(without.width).toBe(scene.width);
   });
 });

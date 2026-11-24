@@ -25,6 +25,10 @@ export function describeLayoutChange(prev: Plan, next: Plan, unitSystem: UnitSys
       parts.push(`${item.label} added`);
       continue;
     }
+    if (!!old.placement !== !!item.placement) {
+      parts.push(`${item.label} ${item.placement ? 'placed in the room' : 'moved to inventory'}`);
+      continue;
+    }
     if (
       old.placement?.x !== item.placement?.x ||
       old.placement?.y !== item.placement?.y ||
