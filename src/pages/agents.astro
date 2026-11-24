@@ -76,7 +76,9 @@ const code = 'block bg-slate-900 text-slate-100 rounded-lg p-3 text-sm overflow-
   <article class="space-y-10 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:mb-3 [&_h3]:font-semibold [&_h3]:text-slate-800 [&_h3]:mt-5 [&_h3]:mb-1 [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_ul]:mb-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1 [&_ol]:mb-3">
     <section id="url">
       <h2>The server URL</h2>
-      <code class={code} tabindex="0">{endpoint}</code>
+      <code class={code} tabindex="0">
+        {endpoint}
+      </code>
       <p class="mt-3">
         It is a remote MCP server over Streamable HTTP, with no sign-in (choose “no authentication”
         or “none” if your app asks).
@@ -110,7 +112,9 @@ const code = 'block bg-slate-900 text-slate-100 rounded-lg p-3 text-sm overflow-
       </ol>
 
       <h3>Claude Code</h3>
-      <code class={code} tabindex="0">claude mcp add --transport http room-planner {endpoint}</code>
+      <code class={code} tabindex="0">
+        claude mcp add --transport http room-planner {endpoint}
+      </code>
 
       <h3>VS Code (GitHub Copilot agent mode)</h3>
       <p>

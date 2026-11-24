@@ -10,9 +10,9 @@
   },
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build && node scripts/csp-hashes.mjs",
+    "build": "node scripts/build-viewer.mjs && astro build && node scripts/csp-hashes.mjs",
     "preview": "astro preview",
-    "check": "astro check && tsc -p worker",
+    "check": "astro check && tsc -p worker && tsc -p worker/viewer",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -22,7 +22,7 @@
     "test:e2e:all": "playwright test",
     "assets": "node brand/generate.mjs",
     "screenshots": "node brand/screenshots.mjs",
-    "build:ci": "astro build && node scripts/csp-hashes.mjs && sh scripts/upload-sourcemaps.sh",
+    "build:ci": "node scripts/build-viewer.mjs && astro build && node scripts/csp-hashes.mjs && sh scripts/upload-sourcemaps.sh",
     "deploy": "wrangler deploy && node scripts/indexnow.mjs",
     "dev:worker": "pnpm build && wrangler dev"
   },
@@ -50,6 +50,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vite-pwa/astro": "^2.0.4",
+    "esbuild": "0.28.2",
     "eslint": "^10.15.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "fast-check": "4.10.2",

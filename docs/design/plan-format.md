@@ -629,7 +629,8 @@ Worker, with the drawing code and the viewer, is 415 KB minified (120 KB gzip). 
 As built (PR 4), the code is in `worker/`: `index.ts` (the entry: `/mcp*` to `http.ts`, anything
 else to the assets), `http.ts` (CORS, rate limit, 404/405/413/429, the server card), `mcp.ts` (the
 server factory), `tools.ts` (what each tool computes, with no SDK, so unit and e2e tests call it
-directly), `link.ts` (edit links), `descriptions.ts` and `viewer/viewer.html`. Tool input schemas
+directly), `link.ts` (edit links), `descriptions.ts`, `warm.ts` (start-up warm-up, see "CPU per
+request") and `viewer/` (the plan viewer). Tool input schemas
 are `z.toJSONSchema(Plan, { io: 'input' })`, handed to the SDK as a Standard Schema whose `validate`
 only checks for an object: the handler reads the plan with `loadPlan(..., 'strict')`, so every
 problem comes back at once, one line per path (`plan.rooms.0.openings.1.wall: ...`).
@@ -726,18 +727,24 @@ render it): the user's browser draws the plan.
 
 - **Resource:** `ui://room-planner/plan-viewer.html`, `text/html;profile=mcp-app`,
   `_meta.ui.prefersBorder: true`, no `csp` (it fetches nothing, so the host's no-network default is
-  right). One self-contained file, `worker/viewer/viewer.html` (about 17 KB of inline CSS and
-  script, bundled by Wrangler as text). It speaks the postMessage JSON-RPC by hand
-  (`ui/initialize`, `ui/notifications/initialized`, `tool-input`, `tool-result`,
-  `host-context-changed`, `size-changed`, `ui/open-link`, and replies to `ui/resource-teardown` and
-  `ping`) instead of using the ext-apps `App` class, whose browser bundle is 129 KB gzip.
+  right). One self-contained file of about 32 KB: the template `worker/viewer/viewer.html` (markup
+  and CSS) with `worker/viewer/app.ts` bundled in by `scripts/build-viewer.mjs` (esbuild; run by
+  `pnpm build`, by Wrangler's custom build before `dev`, `deploy` and `preview`, and by Vitest).
+  The output, `worker/viewer/dist/viewer.html`, is not committed. The script speaks the
+  postMessage JSON-RPC by hand (`ui/initialize`, `ui/notifications/initialized`, `tool-input`,
+  `tool-result`, `host-context-changed`, `size-changed`, `ui/open-link`, and replies to
+  `ui/resource-teardown` and `ping`) instead of using the ext-apps `App` class, whose browser
+  bundle is 129 KB gzip.
 - **Linked from** `create_plan` and `read_plan` by `_meta.ui.resourceUri` (plus the deprecated
   flat `ui/resourceUri` key that the SDK's own helper also writes). `check_layout` has no view: it
   is the agent's inner loop.
-- **Data:** the tool result's `_meta["com.andrechek.room-planner/view"]`:
-  `{ title, summary, svg, issues, url }`. `_meta` reaches the view but not the model, so the SVG
-  (about 10 KB) costs no tokens. The SVG is the export's drawing (`buildPlanScene`) with the opt-in
-  `data-id` attribute on rooms, openings and pieces.
+- **The view draws the plan.** It reads `structuredContent` (`plan`, `issues`, `summary`, `url`)
+  and draws `plan` with the export's own code (`toFeet`, `buildPlanScene` with the opt-in `data-id`
+  attribute on rooms, openings and pieces, `sceneToSvg`: 20 KB minified, 8 KB gzip). The first
+  version made the SVG on the server and sent it in the result's `_meta`; on the preview that put
+  `create_plan` at a median of 12 ms of CPU (7 to 42), over Free's 10 ms, against about 6 ms for a
+  `tools/list`. Drawing in the browser takes that work off the server and keeps any markup out of
+  the model's context.
 - **What it shows:** the drawing with its dimensions, area and scale bar, as a white sheet in
   either theme; pieces with errors outlined red, pieces and doors with warnings amber; the errors
   and warnings as a list (choosing one points at its entities and dims the rest), tight gaps under
@@ -745,11 +752,11 @@ render it): the user's browser draws the plan.
   (`ui/open-link`; the sandbox blocks `window.open`). Light and dark follow `hostContext.theme` and
   the host's CSS variables, with fallbacks for every one; safe-area insets are honoured. Axe finds
   no serious issue in either theme.
-- **Without MCP Apps:** clients ignore `_meta`, and the text content carries the summary, the
-  issues and the link, last and alone on its line; `structuredContent` has the data. If a host
-  drops the result's `_meta`, the view still shows the summary, the issues and the button, and says
-  the drawing was not passed. An SVG as an embedded resource was considered for plain clients and
-  left out: it would put about 10 KB of markup in the model's context on every call.
+- **Without MCP Apps:** clients ignore the view, and the text content carries the summary, the
+  issues and the link, last and alone on its line; `structuredContent` has the data. A host that
+  passes no `structuredContent` to the view gets the text shown in it. An SVG as an embedded
+  resource was considered for plain clients and left out: it would cost server CPU and put about
+  10 KB of markup in the model's context on every call.
 
 A PNG stays possible: `@resvg/resvg-wasm` 2.6.2 was measured on the export's SVG (the 4-room drawing
 is four of today's room drawings in a grid, 104 text labels):

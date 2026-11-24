@@ -3,15 +3,15 @@
  *
  * Workers Free allows 10 ms of CPU per request. A warm call costs 1 to 3 ms, but the first request
  * an isolate serves also pays for everything done lazily the first time: Zod building its parsers
- * for the SDK's message schemas, the JSON Schema of the plan, the font metrics and date formatting
- * of the drawing, and V8 compiling each function on its first call. Global scope runs once per
+ * for the SDK's message schemas, the JSON Schema of the plan, and V8 compiling each function on its
+ * first call. Global scope runs once per
  * isolate, before any request, under its own start-up limit, so this module runs one of each
  * piece there, synchronously (asynchronous work is not allowed in global scope). It never throws.
  */
 import { specTypeSchemas } from '@modelcontextprotocol/server';
 import { checkLayout } from '../src/core/check';
 import { createServer } from './mcp';
-import { planDrawing, planSchema, readPlanInput, summarize, unknownFields } from './tools';
+import { planSchema, readPlanInput, summarize, unknownFields } from './tools';
 
 const SAMPLE = {
   version: 4,
@@ -51,7 +51,6 @@ export function warmUp(): void {
       unknownFields(SAMPLE);
       const issues = checkLayout(input.plan, { unitSystem: input.unitSystem });
       const summary = summarize(input.plan, input.unitSystem);
-      planDrawing(input.plan, input.unitSystem);
       createServer('https://room-planner.andrechek.com');
       const call = { name: 'check_layout', arguments: { plan: SAMPLE } };
       validate('JSONRPCRequest', { jsonrpc: '2.0', id: 1, method: 'tools/call', params: call });
@@ -70,7 +69,6 @@ export function warmUp(): void {
       const result = {
         content: [{ type: 'text', text: summary }],
         structuredContent: { ok: false, issues, summary },
-        _meta: { 'com.andrechek.room-planner/view': { title: 'x' } },
       };
       validate('CallToolResult', result);
       validate('JSONRPCResultResponse', { jsonrpc: '2.0', id: 1, result });

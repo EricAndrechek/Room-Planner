@@ -11,8 +11,6 @@ import * as z from 'zod/mini';
 import { checkLayout, type Issue, type IssueCode } from '../src/core/check';
 import { isRectangle, outlineArea, roomBounds } from '../src/core/geometry/walls';
 import { formatIssues, loadPlan, type LoadIssue } from '../src/core/load';
-import { buildPlanScene } from '../src/core/render/scene';
-import { sceneToSvg } from '../src/core/render/svg';
 import { PLAN_VERSION, Plan, UNITS, type Unit, type UNIT_SYSTEMS } from '../src/core/schema';
 import { readPlanLink } from '../src/core/share/plan';
 import {
@@ -29,30 +27,17 @@ type UnitSystem = (typeof UNIT_SYSTEMS)[number];
 
 export { type Issue, type IssueCode };
 
-/** What a tool returns: text for the model and plain clients, data for the rest. */
+/**
+ * What a tool returns: text for the model and plain clients, data for the rest. The plan viewer
+ * (viewer/app.ts) draws `structured.plan` and marks `structured.issues` itself, so no drawing is
+ * made here.
+ */
 export interface ToolOutcome {
   /** The text content. A link, when there is one, is its last line, alone. */
   text: string;
   /** `structuredContent`. */
   structured?: Record<string, unknown>;
   isError?: boolean;
-  /** What the plan viewer draws (sent in the result's `_meta`, never to the model). */
-  view?: ViewData;
-}
-
-/** Where a tool result carries the viewer's data, `ViewData` (result `_meta`, not for the model). */
-export const VIEW_META_KEY = 'com.andrechek.room-planner/view';
-
-/** The plan viewer's input (see viewer/viewer.html). */
-export interface ViewData {
-  title: string;
-  summary: string;
-  /** The drawing, with `data-id` on every room, opening and piece. */
-  svg: string;
-  issues: Issue[];
-  url: string | null;
-  /** Why there is no link, when there is none. */
-  noLink?: string;
 }
 
 // --- Input schemas -----------------------------------------------------------------------------
@@ -212,10 +197,6 @@ const issueLines = (issues: Issue[]): string[] =>
 /** Distances in the agent's unit converted to feet. */
 const toFeet = (value: number, unit: Unit) => value * FEET_PER_UNIT[unit];
 
-/** The drawing the viewer shows, in the display unit. */
-export const planDrawing = (plan: Plan, unitSystem: UnitSystem): string =>
-  sceneToSvg(buildPlanScene({ plan, unitSystem, ids: true, date: new Date() }));
-
 // --- Tools ---------------------------------------------------------------------------------------
 
 /** `create_plan`: check a plan and make its edit link. */
@@ -246,13 +227,6 @@ export async function createPlan(args: { plan?: unknown }, origin: string): Prom
   return {
     text,
     structured: { plan: fromFeet(plan, unit), issues, summary, url: link.url },
-    view: {
-      title: plan.name,
-      summary: summarize(plan, unitSystem, { name: false }),
-      svg: planDrawing(plan, unitSystem),
-      issues,
-      url: link.url,
-    },
   };
 }
 
@@ -311,18 +285,11 @@ export async function readPlan(args: { url?: unknown }, origin: string): Promise
   const unitSystem = displayUnitOf(plan);
   const issues = checkLayout(plan, { unitSystem });
   const summary = summarize(plan, unitSystem);
-  // The same payload on this site, so the button never leads to whatever host the link named.
+  // The same payload on this site (for the viewer's button), never whatever host the link named.
   const parsed = new URL(href);
   const own = new URL(`/${parsed.search}${parsed.hash}`, origin).toString();
   return {
     text: [summary, ...issueLines(issues)].join('\n'),
-    structured: { plan: fromFeet(plan, unitOfDisplay(unitSystem)), issues, summary },
-    view: {
-      title: plan.name,
-      summary: summarize(plan, unitSystem, { name: false }),
-      svg: planDrawing(plan, unitSystem),
-      issues,
-      url: own,
-    },
+    structured: { plan: fromFeet(plan, unitOfDisplay(unitSystem)), issues, summary, url: own },
   };
 }

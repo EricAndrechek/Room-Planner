@@ -10,7 +10,7 @@ import worker from './index';
 import { MAX_BODY, type Env } from './http';
 import catalog from '../public/.well-known/ai-catalog.json';
 import server from '../server.json';
-import { VIEW_META_KEY, VIEWER_MIME_TYPE, VIEWER_URI } from './viewer';
+import { VIEWER_MIME_TYPE, VIEWER_URI } from './viewer';
 
 const ORIGIN = 'https://room-planner.andrechek.com';
 
@@ -145,10 +145,8 @@ describe.each(ERAS)('MCP over $name', ({ mode }) => {
     expect(s.url.startsWith(`${ORIGIN}/#s=`)).toBe(true);
     // The link is alone on the last line of the text.
     expect(textOf(r).split('\n').at(-1)).toBe(s.url);
-    // The drawing goes to the viewer only.
-    const view = (r._meta as Record<string, { svg: string; url: string }>)[VIEW_META_KEY]!;
-    expect(view.svg).toContain('data-id="desk"');
-    expect(view.url).toBe(s.url);
+    // No drawing is made on the server: the viewer draws the plan.
+    expect(JSON.stringify(r)).not.toContain('<svg');
     const opened = await readPlanLink(s.url);
     expect(opened.ok && opened.plan.items.length).toBe(2);
   });
@@ -193,7 +191,6 @@ describe.each(ERAS)('MCP over $name', ({ mode }) => {
     const s = r.structuredContent as { ok: boolean; issues: { code: string }[] };
     expect(s.ok).toBe(false);
     expect(s.issues.some((i) => i.code === 'tight_clearance')).toBe(false);
-    expect(r._meta?.[VIEW_META_KEY]).toBeUndefined();
     const bad = await client.callTool({
       name: 'check_layout',
       arguments: { plan: { version: 9 } },
@@ -223,6 +220,9 @@ describe.each(ERAS)('MCP over $name', ({ mode }) => {
     const c = r.contents[0] as { mimeType: string; text: string };
     expect(c.mimeType).toBe(VIEWER_MIME_TYPE);
     expect(c.text).toContain('ui/initialize');
+    // The bundled drawing code is in, and the template's placeholder is gone.
+    expect(c.text).toContain('data-role');
+    expect(c.text).not.toContain('VIEWER_SCRIPT */');
     expect(c.text).not.toMatch(/<script[^>]+src=|<link[^>]+href=|https?:\/\/(?!www\.w3\.org)/);
   });
 });

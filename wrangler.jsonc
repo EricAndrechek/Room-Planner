@@ -6,6 +6,8 @@
   // The Worker (worker/index.ts) serves only the MCP server. Everything else is static assets,
   // served by the assets layer without invoking the Worker (Workers Free counts invocations).
   "main": "worker/index.ts",
+  // Bundles the MCP plan viewer (worker/viewer/) before every dev, deploy and preview build.
+  "build": { "command": "node scripts/build-viewer.mjs" },
   // Smaller bundle, faster isolate start-up; source maps keep stack traces readable.
   "minify": true,
   "upload_source_maps": true,

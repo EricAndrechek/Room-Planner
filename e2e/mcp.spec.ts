@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import fs from 'node:fs';
-import { VIEW_META_KEY, createPlan, readPlan, type ToolOutcome } from '../worker/tools';
+import { viewerHtml } from '../scripts/build-viewer.mjs';
+import { createPlan, readPlan, type ToolOutcome } from '../worker/tools';
 
 // The MCP server (docs/design/plan-format.md, section 7) as users meet it:
 // - a link the server makes opens in the real app as the same plan;
@@ -9,7 +9,9 @@ import { VIEW_META_KEY, createPlan, readPlan, type ToolOutcome } from '../worker
 // - the /mcp endpoint over HTTP, when the target serves it (`wrangler dev` or a preview, through
 //   E2E_BASE_URL; `astro preview` has no Worker).
 
-const VIEWER = fs.readFileSync(new URL('../worker/viewer/viewer.html', import.meta.url), 'utf8');
+/** The viewer as the server serves it, built from source (as the Worker's build does). */
+let viewer: Promise<string> | undefined;
+const VIEWER = () => (viewer ??= viewerHtml());
 /** Where to save viewer screenshots for review (optional). */
 const SHOTS = process.env.MCP_SHOTS_DIR;
 
@@ -169,7 +171,6 @@ const toResult = (o: ToolOutcome) => ({
   content: [{ type: 'text', text: o.text }],
   ...(o.structured ? { structuredContent: o.structured } : {}),
   ...(o.isError ? { isError: true } : {}),
-  ...(o.view ? { _meta: { [VIEW_META_KEY]: o.view } } : {}),
 });
 
 /**
@@ -227,7 +228,7 @@ async function host(
       });
       frame.srcdoc = html;
     },
-    { html: VIEWER, result, theme },
+    { html: await VIEWER(), result, theme },
   );
   const view = page.frameLocator('#view');
   await expect(view.locator('#summary')).not.toHaveText(/Loading|Checking/);
@@ -288,17 +289,16 @@ test.describe('plan viewer', () => {
     }
   });
 
-  test('shows the text result when the host passes no drawing, and errors as text', async ({
+  test('shows the text when the host passes no structured result, and errors as text', async ({
     page,
     baseURL,
   }) => {
     const outcome = await createPlan({ plan: bedroom }, new URL(baseURL!).origin);
-    const { _meta: _, ...bare } = toResult(outcome);
+    const { structuredContent: _, ...bare } = toResult(outcome);
     const view = await host(page, bare);
     await expect(view.locator('#sheet')).toBeHidden();
     await expect(view.locator('#summary')).toContainText('132 in × 144 in');
-    await expect(view.locator('#note')).toContainText('did not pass the drawing');
-    await expect(view.getByRole('button', { name: 'Open in Room Planner' })).toBeVisible();
+    await expect(view.locator('#summary')).toContainText('#s=');
 
     const bad = await createPlan({ plan: { version: 4, unit: 'yd' } }, 'https://x.test');
     const errorView = await host(page, toResult(bad));

@@ -11,7 +11,7 @@ import {
 import { version } from '../package.json';
 import { CHECK_LAYOUT, CREATE_PLAN, INSTRUCTIONS, READ_PLAN } from './descriptions';
 import { checkPlan, createPlan, planSchema, readPlan, type ToolOutcome } from './tools';
-import { VIEW_META_KEY, VIEWER_MIME_TYPE, VIEWER_URI, viewerHtml } from './viewer';
+import { VIEWER_MIME_TYPE, VIEWER_URI, viewerHtml } from './viewer';
 
 export const SERVER_NAME = 'room-planner';
 export const SERVER_TITLE = 'Room Planner';
@@ -61,12 +61,11 @@ const urlArgs = object(
   ['url'],
 );
 
-/** The tool result: text for every client, the drawing in `_meta` for the viewer only. */
+/** The tool result: text for every client, structured data for agents and the viewer. */
 const toResult = (o: ToolOutcome): CallToolResult => ({
   content: [{ type: 'text', text: o.text }],
   ...(o.structured ? { structuredContent: o.structured } : {}),
   ...(o.isError ? { isError: true } : {}),
-  ...(o.view ? { _meta: { [VIEW_META_KEY]: o.view } } : {}),
 });
 
 /** `_meta` linking a tool to the viewer (the flat key is the deprecated form older hosts read). */
