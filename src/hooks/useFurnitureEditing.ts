@@ -10,7 +10,7 @@ import { track } from '../lib/analytics';
 import { randomPresetColor } from '../core/colors';
 import { PIXELS_PER_UNIT } from '../lib/constants';
 import type { AngleSnap } from '../core/geometry';
-import { findFurnitureSpot } from '../core/placement';
+import { findFurnitureSpot } from '../core/adapter';
 import {
   SNAP_THRESHOLD_PX,
   SNAP_THRESHOLD_TOUCH_PX,

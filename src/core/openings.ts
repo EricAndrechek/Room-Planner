@@ -1,168 +1,42 @@
 /**
- * Door and window geometry. `doorGeometry` is the single source of truth for
- * every door type's shape (leaves and arcs, bi-fold and sliding panels, the
- * pocket), the clearance it needs and its doorway; the canvas, the export
- * (render/scene) and the "Blocks door" checks all use it. The canvas's inline styles are in
+ * Doors and windows in v3 terms (a wall named top/right/bottom/left, `position` from its left or
+ * top end, `hinge` left or right), for the app, which still holds v3 layouts. The shapes come
+ * from core/geometry/doors.ts in the v3 wall frames, and the checks and spot finding from the
+ * plan-based core through core/adapter.ts. The canvas's inline styles are in
  * components/planner/openingStyles.ts.
  */
-import type {
-  Door,
-  DoorType,
-  FurnitureItem,
-  Id,
-  Layout,
-  RoomDims,
-  SwingAngle,
-  Wall,
-} from './types';
-import { WALL_OPTIONS } from './constants';
+import { wallLength, type Point } from './geometry';
 import {
-  GEOMETRY_EPSILON,
-  computeItemWarnings,
-  type ItemWarning,
-  getRotatedCorners,
-  polygonsOverlap,
-  shrinkPolygon,
-  wallLength,
-  type Point,
-} from './geometry';
+  doorGeometry as doorShape,
+  sweptArea,
+  type DoorGeometry as DoorShape,
+} from './geometry/doors';
+import type { Door, RoomDims, Wall } from './types';
 import { clamp } from './units';
+
+export {
+  DOORWAY_DEPTH,
+  SLIDING_DEPTH,
+  doorSwingAngle,
+  hasHingeSide,
+  isSwingDoor,
+  leafPoint,
+  type DoorLeaf,
+} from './geometry/doors';
+export { CORNER_MARGIN, OPENING_GAP, PLACEMENT_STEP } from './placement';
+export {
+  computeDoorBlocks,
+  computeLayoutWarnings,
+  doorBlockText,
+  findOpeningSpot,
+  findOpeningSpotOnWall,
+  type DoorBlock,
+  type OpeningSpotOptions,
+} from './adapter';
 
 /** Position along the wall, kept on the wall even if the room shrank since. */
 export const onWall = (o: { position: number; width: number }, room: RoomDims, wall: Wall) =>
   clamp(o.position, 0, Math.max(0, wallLength(room, wall) - o.width));
-
-// --- Placing a new opening ------------------------------------------------------
-
-/** Clear space (feet) kept between a new door/window and the openings next to it. */
-export const OPENING_GAP = 0.5;
-/** Distance (feet) a new opening keeps from the wall's ends (the room's corners), when it can. */
-export const CORNER_MARGIN = 0.5;
-/** Spacing (feet) of the positions tried along each wall. */
-export const PLACEMENT_STEP = 0.5;
-
-export interface OpeningSpotOptions {
-  /** For a door: its type, hinge and angle, so its swing and doorway can be kept clear of furniture. */
-  swing?: Pick<Door, 'type' | 'hinge' | 'swingAngle'>;
-  gap?: number;
-  margin?: number;
-  step?: number;
-}
-
-/**
- * Where a new door/window of `width` goes. Walls are tried in order:
- * `preferred.wall` first, then the rest in `WALL_OPTIONS` order (top, right,
- * bottom, left); along a wall, `preferred.position` first, then from the start
- * of the wall in `step` increments (plus the spots just past each opening).
- * A spot must not overlap another door or window (`gap` feet apart). Of those,
- * the first spot that also keeps `margin` from the corners and, for a door,
- * whose swing (or track) and doorway miss every visible furniture piece wins; failing that, the
- * first that keeps the corner margin; then any free spot. If nothing fits
- * anywhere, the preferred spot is returned unchanged.
- */
-export function findOpeningSpot(
-  layout: SpotLayout,
-  width: number,
-  preferred: { wall: Wall; position: number },
-  options: OpeningSpotOptions = {},
-): { wall: Wall; position: number } {
-  const walls = [preferred.wall, ...WALL_OPTIONS.filter((w) => w !== preferred.wall)];
-  const spots = openingSpots(layout, width, preferred, walls, options);
-  const best =
-    spots.find((s) => s.inMargin && s.clear) ?? spots.find((s) => s.inMargin) ?? spots[0];
-  return best ? { wall: best.wall, position: best.position } : preferred;
-}
-
-/**
- * Where an existing door/window goes when it moves to `wall`: the same choice as
- * {@link findOpeningSpot} (its current `position` first), but on that wall only. `layout` must not
- * contain the opening itself. Null if it fits nowhere on that wall without overlapping another
- * opening (or the wall is shorter than it).
- */
-export function findOpeningSpotOnWall(
-  layout: SpotLayout,
-  width: number,
-  wall: Wall,
-  position: number,
-  options: OpeningSpotOptions = {},
-): number | null {
-  const spots = openingSpots(layout, width, { wall, position }, [wall], options);
-  const best =
-    spots.find((s) => s.inMargin && s.clear) ?? spots.find((s) => s.inMargin) ?? spots[0];
-  return best ? best.position : null;
-}
-
-type SpotLayout = Pick<Layout, 'roomDims' | 'doors' | 'windows'> & Partial<Pick<Layout, 'items'>>;
-
-/** Every free spot on `walls`, in preference order, with what it is good for. */
-function openingSpots(
-  layout: SpotLayout,
-  width: number,
-  preferred: { wall: Wall; position: number },
-  walls: Wall[],
-  { swing, gap = OPENING_GAP, margin = CORNER_MARGIN, step = PLACEMENT_STEP }: OpeningSpotOptions,
-): { wall: Wall; position: number; inMargin: boolean; clear: boolean }[] {
-  const eps = 1e-9;
-  const room = layout.roomDims;
-  const items = (layout.items ?? []).filter((i) => i.visible !== false);
-
-  // Every free spot, in preference order, with what it is good for.
-  const spots: { wall: Wall; position: number; inMargin: boolean; clear: boolean }[] = [];
-  for (const wall of walls) {
-    const len = wallLength(room, wall);
-    if (width > len + eps) continue;
-    const taken = [...layout.doors, ...layout.windows]
-      .filter((o) => o.wall === wall)
-      .map((o) => {
-        const start = onWall(o, room, wall);
-        return [start, start + Math.min(o.width, len)] as const;
-      });
-    const free = (p: number) =>
-      p >= -eps &&
-      p + width <= len + eps &&
-      taken.every(([a, b]) => p + width + gap <= a + eps || p >= b + gap - eps);
-    const scan: number[] = [len - width, len - width - margin, margin];
-    for (let p = 0; p <= len - width + eps; p += step) scan.push(p);
-    for (const [, b] of taken) scan.push(b + gap);
-    const candidates = [
-      clamp(preferred.position, 0, Math.max(0, len - width)),
-      ...scan.map((p) => Math.round(p * 1e6) / 1e6).sort((x, y) => x - y),
-    ];
-    const seen = new Set<number>();
-    for (const position of candidates) {
-      if (seen.has(position) || !free(position)) continue;
-      seen.add(position);
-      // A door's own swing/track and its doorway must be clear of furniture to count as clear.
-      const zones = swing
-        ? (() => {
-            const g = doorGeometry(
-              {
-                id: 0,
-                width,
-                position,
-                wall,
-                type: swing.type,
-                hinge: swing.hinge,
-                swingAngle: swing.swingAngle,
-              },
-              room,
-            );
-            return [...g.clearance, g.doorway];
-          })()
-        : [];
-      const shapes = items.map((i) => shrinkPolygon(getRotatedCorners(i), GEOMETRY_EPSILON));
-      spots.push({
-        wall,
-        position,
-        inMargin: position >= margin - eps && position + width <= len - margin + eps,
-        clear: !zones.some((z) => shapes.some((sh) => polygonsOverlap(sh, z))),
-      });
-    }
-  }
-  return spots;
-}
-
-// --- Door swing geometry (shared by the canvas and the export) -----------------
 
 /**
  * A wall's frame in room feet: `origin` is the wall's start (left end of
@@ -183,235 +57,31 @@ export const WALL_FRAMES: Record<
   right: (r) => ({ origin: { x: r.width, y: 0 }, along: { x: 0, y: 1 }, inward: { x: -1, y: 0 } }),
 };
 
-// --- Door types ------------------------------------------------------------------------
-
-/** Hinged doors with a swing (one leaf, or two for double/French doors). */
-export const isSwingDoor = (type: DoorType | undefined): boolean =>
-  type === undefined ||
-  type === 'swing-in' ||
-  type === 'swing-out' ||
-  type === 'double-in' ||
-  type === 'double-out';
-
-/** Doors whose `hinge` means something: the hinge side, the side a bi-fold folds to, the pocket. */
-export const hasHingeSide = (type: DoorType | undefined): boolean =>
-  type === undefined ||
-  type === 'swing-in' ||
-  type === 'swing-out' ||
-  type === 'bifold' ||
-  type === 'pocket';
-
-/** How far a swing door opens: 90 degrees (default), or 180 (flat against the wall). */
-export const doorSwingAngle = (door: Pick<Door, 'type' | 'swingAngle'>): SwingAngle =>
-  isSwingDoor(door.type) && door.swingAngle === 180 ? 180 : 90;
-
-/** Depth (feet) of the passage kept clear inside the room in front of every door. */
-export const DOORWAY_DEPTH = 1.5;
-/** Depth (feet) of the strip a sliding (bypass/barn) door's panels run in, inside the room. */
-export const SLIDING_DEPTH = 0.33;
-/** Opening angle at which a bi-fold is drawn (half folded). */
-const BIFOLD_DRAWN_ANGLE = 55;
-
-// --- Door geometry (shared by the canvas, the export and the clearance checks) -----------
-
-export interface DoorLeaf {
-  /** Pivot of the leaf. */
-  hinge: Point;
-  /** Where the closed leaf ends (the strike side). The arc starts here. */
-  closedEnd: Point;
-  /** Tip of the fully open leaf (90deg: perpendicular to the wall; 180deg: back along it). */
-  openEnd: Point;
-  /** Leaf length = arc radius. */
-  radius: number;
-  angle: SwingAngle;
-  /** Unit vectors: `u` along the closed leaf (hinge -> strike), `v` towards the swing side. */
-  u: Point;
-  v: Point;
-  /** SVG `sweep-flag` for an arc from `closedEnd` towards the swing side (1 = clockwise, y down). */
-  sweep: 0 | 1;
-}
-
-export interface DoorGeometry {
+export interface DoorGeometry extends DoorShape {
   wall: Wall;
-  type: DoorType;
-  /** Opening width (capped to the wall) and position along it (kept on the wall). */
-  width: number;
-  position: number;
-  /** Where the door swings: into the room, out of it, or not at all. */
-  side: 'inside' | 'outside' | 'none';
-  /** Swing leaves: one, two (double), or none. */
-  leaves: DoorLeaf[];
-  /** Bi-fold: the two panels, drawn half folded (hinge jamb -> fold -> the end on the track). */
-  bifold: { hinge: Point; fold: Point; end: Point } | null;
-  /** Sliding: the two bypass panels along the inside face (polygons). */
-  slidingPanels: Point[][];
-  /** Pocket: the cavity in the wall the door slides into (a line along the wall). */
-  pocket: { from: Point; to: Point } | null;
-  /** Areas inside the room the door itself sweeps or runs in (polygons; outward swings: none). */
-  clearance: Point[][];
-  /** The passage in front of the opening, `DOORWAY_DEPTH` into the room (every type). */
-  doorway: Point[];
 }
 
-/** Point on a leaf's arc, `deg` degrees from closed towards open. */
-export const leafPoint = (leaf: DoorLeaf, deg: number): Point => {
-  const a = (deg * Math.PI) / 180;
-  const c = Math.cos(a);
-  const sn = Math.sin(a);
-  return {
-    x: leaf.hinge.x + leaf.radius * (c * leaf.u.x + sn * leaf.v.x) + 0,
-    y: leaf.hinge.y + leaf.radius * (c * leaf.u.y + sn * leaf.v.y) + 0,
-  };
-};
-
-/** The area a leaf sweeps (a quarter or half disc), as a polygon. */
-const sweptArea = (leaf: DoorLeaf, step = 7.5): Point[] => {
-  const pts: Point[] = [leaf.hinge];
-  for (let d = 0; d < leaf.angle; d += step) pts.push(leafPoint(leaf, d));
-  pts.push(leaf.openEnd);
-  return pts;
-};
-
 /**
- * The region a bi-fold's two panels (each half the opening) sweep while folding towards the hinge
- * jamb: under the fold's arc near the jamb and under the second panel further along. In the wall
- * frame (a from the jamb towards the strike, d into the room).
- */
-const bifoldEnvelope = (half: number): [number, number][] => {
-  const n = 24;
-  const out: [number, number][] = [];
-  for (let i = n; i >= 0; i--) {
-    const a = (2 * half * i) / n;
-    let d = a <= half ? Math.sqrt(Math.max(0, half * half - a * a)) : 0;
-    for (let deg = 1; deg < 90; deg += 1) {
-      const c = Math.cos((deg * Math.PI) / 180);
-      const t = Math.tan((deg * Math.PI) / 180);
-      if (half * c <= a && a <= 2 * half * c) d = Math.max(d, (2 * half * c - a) * t);
-    }
-    out.push([a, d]);
-  }
-  return out;
-};
-
-/**
- * Everything about a door's shape, in room feet (interior top-left is 0,0): swing leaves (with
- * their opening angle), bi-fold panels, sliding panels, the pocket, the clearance it needs inside
- * the room, and the doorway in front of it. `faceOffset` is the wall thickness in feet: outward
- * swings hinge on the exterior face (the canvas draws walls as a line and passes 0).
+ * Everything about a door's shape, in room feet (interior top-left is 0,0): `doorGeometry` of
+ * core/geometry/doors.ts in the door's v3 wall frame.
  */
 export function doorGeometry(door: Door, room: RoomDims, faceOffset = 0): DoorGeometry {
-  const type: DoorType = door.type || 'swing-in';
   const wall = door.wall || 'bottom';
-  const len = wallLength(room, wall);
-  const width = Math.min(door.width, len);
-  const position = onWall({ position: door.position, width }, room, wall);
-  const hingeRight = door.hinge === 'right';
-  const { origin, along, inward } = WALL_FRAMES[wall](room);
-  // `+ 0` turns -0 into 0 so results compare cleanly.
-  const at = (a: number, d: number): Point => ({
-    x: origin.x + along.x * a + inward.x * d + 0,
-    y: origin.y + along.y * a + inward.y * d + 0,
-  });
-  const quad = (a0: number, a1: number, d0: number, d1: number): Point[] => [
-    at(a0, d0),
-    at(a1, d0),
-    at(a1, d1),
-    at(a0, d1),
-  ];
-  const angle = doorSwingAngle(door);
-  const outward = type === 'swing-out' || type === 'double-out';
-
-  const leaf = (hingeAt: number, toStrike: 1 | -1, radius: number): DoorLeaf => {
-    const face = outward ? -faceOffset : 0;
-    const out = outward ? -1 : 1;
-    const hinge = at(hingeAt, face);
-    const closedEnd = at(hingeAt + toStrike * radius, face);
-    const perp = at(hingeAt, face + out * radius);
-    const unit = (p: Point): Point => ({
-      x: (p.x - hinge.x) / (radius || 1) + 0,
-      y: (p.y - hinge.y) / (radius || 1) + 0,
-    });
-    const u = unit(closedEnd);
-    const v = unit(perp);
-    const openEnd = angle === 90 ? perp : at(hingeAt - toStrike * radius, face);
-    return {
-      hinge,
-      closedEnd,
-      openEnd,
-      radius,
-      angle,
-      u,
-      v,
-      sweep: u.x * v.y - u.y * v.x > 0 ? 1 : 0,
-    };
-  };
-
-  const geo: DoorGeometry = {
+  const frame = { ...WALL_FRAMES[wall](room), length: wallLength(room, wall) };
+  return {
     wall,
-    type,
-    width,
-    position,
-    side: 'none',
-    leaves: [],
-    bifold: null,
-    slidingPanels: [],
-    pocket: null,
-    clearance: [],
-    doorway: quad(position, position + width, 0, DOORWAY_DEPTH),
+    ...doorShape(
+      {
+        type: door.type,
+        width: door.width,
+        position: door.position,
+        hingeAtEnd: door.hinge === 'right',
+        swingAngle: door.swingAngle,
+      },
+      frame,
+      faceOffset,
+    ),
   };
-
-  switch (type) {
-    case 'swing-in':
-    case 'swing-out':
-    case 'double-in':
-    case 'double-out': {
-      geo.side = outward ? 'outside' : 'inside';
-      geo.leaves =
-        type === 'double-in' || type === 'double-out'
-          ? [leaf(position, 1, width / 2), leaf(position + width, -1, width / 2)]
-          : [hingeRight ? leaf(position + width, -1, width) : leaf(position, 1, width)];
-      if (!outward) geo.clearance = geo.leaves.map((l) => sweptArea(l));
-      break;
-    }
-    case 'bifold': {
-      geo.side = 'inside';
-      const half = width / 2;
-      const jamb = hingeRight ? position + width : position;
-      const dir = hingeRight ? -1 : 1;
-      const c = Math.cos((BIFOLD_DRAWN_ANGLE * Math.PI) / 180);
-      const sn = Math.sin((BIFOLD_DRAWN_ANGLE * Math.PI) / 180);
-      geo.bifold = {
-        hinge: at(jamb, 0),
-        fold: at(jamb + dir * half * c, half * sn),
-        end: at(jamb + dir * 2 * half * c, 0),
-      };
-      geo.clearance = [
-        [at(jamb, 0), ...bifoldEnvelope(half).map(([a, d]) => at(jamb + dir * a, d))],
-      ];
-      break;
-    }
-    case 'sliding': {
-      // Two bypass panels on tracks along the inside face, overlapping in the middle.
-      const t = 0.1;
-      geo.slidingPanels = [
-        quad(position, position + width * 0.55, 0.03, 0.03 + t),
-        quad(position + width * 0.45, position + width, 0.06 + t, 0.06 + 2 * t),
-      ];
-      geo.clearance = [quad(position, position + width, 0, SLIDING_DEPTH)];
-      break;
-    }
-    case 'pocket': {
-      // The cavity in the wall on the hinge side, as long as the door (as far as the wall allows).
-      const d = -faceOffset / 2;
-      geo.pocket = hingeRight
-        ? { from: at(position + width, d), to: at(Math.min(len, position + 2 * width), d) }
-        : { from: at(Math.max(0, position - width), d), to: at(position, d) };
-      break;
-    }
-    case 'opening':
-      break;
-  }
-  return geo;
 }
 
 /** Swing door geometry in the editor's terms (one leaf): see `doorGeometry`. */
@@ -461,67 +131,3 @@ export function doorSwingGeometry(door: Door, room: RoomDims, faceOffset = 0): D
     box: { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y },
   };
 }
-
-// --- Furniture blocking doors ------------------------------------------------------------
-
-export interface DoorBlock {
-  /** The piece is in a door's swing / fold / sliding track (inside the room). */
-  door: boolean;
-  /** The piece stands in a doorway (the passage in front of an opening), any door type. */
-  doorway: boolean;
-  /** Ids of the doors concerned. */
-  doorIds: Id[];
-}
-
-/**
- * Which visible pieces block a door: in its clearance (inward swings incl. both leaves of a
- * double, a bi-fold's fold, a sliding door's track) or in its doorway (every type, also openings,
- * pockets and outward swings, whose swing itself is outside). Touching an edge does not count.
- * Hidden pieces never block.
- */
-export function computeDoorBlocks(
-  items: readonly FurnitureItem[],
-  doors: readonly Door[],
-  room: RoomDims,
-): Map<Id, DoorBlock> {
-  const result = new Map<Id, DoorBlock>();
-  if (doors.length === 0) return result;
-  const geos = doors.map((d) => ({ id: d.id, g: doorGeometry(d, room) }));
-  for (const item of items) {
-    if (item.visible === false) continue;
-    const shape = shrinkPolygon(getRotatedCorners(item), GEOMETRY_EPSILON);
-    let block: DoorBlock | null = null;
-    for (const { id, g } of geos) {
-      const inSwing = g.clearance.some((zone) => polygonsOverlap(shape, zone));
-      const inDoorway = !inSwing && polygonsOverlap(shape, g.doorway);
-      if (!inSwing && !inDoorway) continue;
-      block ??= { door: false, doorway: false, doorIds: [] };
-      block.door ||= inSwing;
-      block.doorway ||= inDoorway;
-      block.doorIds.push(id);
-    }
-    if (block) result.set(item.id, block);
-  }
-  return result;
-}
-
-/**
- * Every visible piece's warnings: out of the room and overlapping furniture (red, see
- * `computeItemWarnings`), plus blocking a door or doorway (amber).
- */
-export function computeLayoutWarnings(
-  layout: Pick<Layout, 'items' | 'doors' | 'roomDims'>,
-): Map<Id, ItemWarning> {
-  const warnings = computeItemWarnings(layout.items, layout.roomDims);
-  for (const [id, b] of computeDoorBlocks(layout.items, layout.doors, layout.roomDims)) {
-    const w = warnings.get(id);
-    if (w) {
-      warnings.set(id, { ...w, blocksDoor: b.door, blocksDoorway: b.doorway, doorIds: b.doorIds });
-    }
-  }
-  return warnings;
-}
-
-/** Short warning for a piece that blocks a door ("Blocks door" wins over "Blocks doorway"). */
-export const doorBlockText = (b: Pick<DoorBlock, 'door' | 'doorway'>): string =>
-  b.door ? 'Blocks door' : 'Blocks doorway';

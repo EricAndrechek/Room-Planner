@@ -6,7 +6,7 @@
 import {
   buildPlanScene,
   type PathCommand,
-  type PlanInput,
+  type SceneInput,
   type Rotation,
   type Scene,
   type SceneNode,
@@ -133,4 +133,4 @@ export const sceneToSvg = (scene: Scene): string => {
 };
 
 /** The floor plan as a standalone SVG string. */
-export const planSvg = (input: PlanInput): string => sceneToSvg(buildPlanScene(input));
+export const planSvg = (input: SceneInput): string => sceneToSvg(buildPlanScene(input));

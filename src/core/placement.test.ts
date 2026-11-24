@@ -3,7 +3,7 @@ import type { Door, FurnitureItem, Layout } from './types';
 import { isItemInBounds } from './geometry';
 import { defaultLayout } from './layout';
 import { computeDoorBlocks, computeLayoutWarnings } from './openings';
-import { findFurnitureSpot, moveInside, piecesOutside } from './placement';
+import { findFurnitureSpot, moveInside, piecesOutside } from './adapter';
 
 const piece = (over: Partial<FurnitureItem>): FurnitureItem => ({
   id: 'p',

@@ -11,7 +11,8 @@ import tseslint from 'typescript-eslint';
  * `zod/mini`, nothing else: no React, Astro or icons, nothing from the app (`../components`,
  * `../hooks`, `../lib`, `../types`), and no browser-only globals. Tests are exempt (they may
  * import fixtures, Vitest and the app's code under test). One block per folder depth, because a
- * relative import leaves `src/core` at a depth-dependent number of `../`.
+ * relative import leaves `src/core` at a depth-dependent number of `../`. Test helpers in
+ * `src/core/testing/` are exempt too.
  */
 const CORE_GLOBALS = [
   'window',
@@ -24,7 +25,7 @@ const CORE_GLOBALS = [
 /** @type {import("eslint").Linter.Config[]} */
 const coreBoundary = [1, 2, 3, 4].map((depth) => ({
   files: [`src/core/${'*/'.repeat(depth - 1)}*.ts`],
-  ignores: ['src/core/**/*.test.ts'],
+  ignores: ['src/core/**/*.test.ts', 'src/core/testing/**'],
   rules: {
     'no-restricted-imports': [
       'error',
@@ -69,6 +70,17 @@ export default defineConfig(
     extends: [reactHooks.configs.flat.recommended],
     languageOptions: { globals: { ...globals.browser } },
     rules: {
+      // Zod's classic API costs three times as much as `zod/mini` for the same schema
+      // (docs/design/plan-format.md, section 2). src/core's own rule below also enforces this.
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: ['zod', 'zod/v4', 'zod/v3', 'zod/v4/classic'].map((name) => ({
+            name,
+            message: 'Import Zod as `zod/mini` (the classic API is three times the size).',
+          })),
+        },
+      ],
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_', destructuredArrayIgnorePattern: '^_' },
