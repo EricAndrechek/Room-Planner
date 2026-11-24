@@ -86,7 +86,7 @@ describe('buildPlanScene on a plan', () => {
     expect(groups('window')[0]!.attrs).toEqual({ wall: 'right' });
     const texts = nodes.flatMap((n) => (n.kind === 'text' ? [n.text] : []));
     expect(texts).toContain('Flat');
-    expect(texts).toContain(`16' × 10' · 120 sq ft`);
+    expect(texts).toContain('2 rooms · 120 sq ft');
   });
 
   it('draws an L and an ellipse as paths, and leaves out hidden pieces and the inventory', () => {
@@ -113,7 +113,7 @@ describe('buildPlanScene on a plan', () => {
   it('lists the inventory under the plan, above the footer', () => {
     const [list] = groups('inventory');
     const texts = list!.children.flatMap((n) => (n.kind === 'text' ? [n.text] : []));
-    expect(texts).toEqual(['Not placed (1)', `Spare chair · 1'6" × 1'6"`]);
+    expect(texts).toEqual(['Set aside (1)', `Spare chair · 1'6" × 1'6"`]);
     expect(list!.children.find((n) => n.kind === 'rect')).toMatchObject({ fill: '#93c5fd' });
     const ys = list!.children.map((n) => (n.kind === 'rect' ? n.y : n.kind === 'text' ? n.y : 0));
     // Below where the footer would be without it (so below the plan), above the footer.
