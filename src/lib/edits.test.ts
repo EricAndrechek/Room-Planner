@@ -2,21 +2,32 @@ import { describe, expect, it } from 'vitest';
 import { checkItemsCollision } from '../core/geometry';
 import { sweptArea, openingDoorGeometry } from '../core/geometry/doors';
 import { loadPlan } from '../core/load';
-import { OPENING_GAP } from '../core/placement';
+import { OPENING_GAP, findFurnitureSpot } from '../core/placement';
 import { defaultLayout } from '../core/testing/v3/layout';
 import type { Door, FurnitureItem, Layout, RoomWindow, Wall } from '../core/testing/v3/types';
 import {
   addDoor,
   addPiece,
   changePiece,
+  clearPieces,
   moveOpeningToWall,
   movePiecesInside,
   openingSpot,
+  placePiece,
+  takeOutPiece,
   toggleHidden,
   toggleLock,
   updateOpening,
 } from './edits';
-import { boxOf, itemWarnings, mainRoom, openingPlace } from './plans';
+import {
+  boxOf,
+  editablePlan,
+  inventoryPieces,
+  itemWarnings,
+  mainRoom,
+  openingPlace,
+  placedPieces,
+} from './plans';
 
 const toPlan = (layout: Layout) => {
   const r = loadPlan(layout, 'strict', { lengthsInFeet: true });
@@ -317,5 +328,101 @@ describe('toggleLock and toggleHidden', () => {
     const hidden = toggleHidden(plan, 'item-1');
     expect(hidden.items[0]!.hidden).toBe(true);
     expect(toggleHidden(hidden, 'item-1').items[0]).toEqual(plan.items[0]);
+  });
+});
+
+describe('the inventory', () => {
+  const sample = () => toPlan(defaultLayout());
+
+  it('takes a piece out of the room: it keeps its name, size, colour and lock', () => {
+    const plan = toggleLock(sample(), 'item-1');
+    const out = takeOutPiece(plan, 'item-1');
+    const bed = out.items.find((i) => i.id === 'item-1')!;
+    expect(bed.placement).toBeUndefined();
+    const { placement: _placement, ...rest } = plan.items[0]!;
+    expect(bed).toEqual(rest);
+    expect(out.items.slice(1)).toEqual(plan.items.slice(1));
+    expect(inventoryPieces(out).map((i) => i.id)).toEqual(['item-1']);
+    expect(placedPieces(out)).toHaveLength(5);
+  });
+
+  it('drops `hidden`: a piece in the inventory is not drawn anyway', () => {
+    const out = takeOutPiece(toggleHidden(sample(), 'item-2'), 'item-2');
+    expect(out.items[1]).not.toHaveProperty('hidden');
+  });
+
+  it('leaves the plan as it is for a piece already out, or an unknown id', () => {
+    const out = takeOutPiece(sample(), 'item-1');
+    expect(takeOutPiece(out, 'item-1')).toBe(out);
+    expect(takeOutPiece(out, 'item-99')).toBe(out);
+    expect(placePiece(out, 'item-2')).toBe(out);
+    expect(placePiece(out, 'item-99')).toBe(out);
+  });
+
+  it('places a piece back unrotated at the free spot nearest the middle of the room', () => {
+    const plan = sample();
+    const turned = changePiece(plan, 'item-5', { rotation: 90 });
+    const back = placePiece(takeOutPiece(turned, 'item-5'), 'item-5');
+    const desk = back.items.find((i) => i.id === 'item-5')!;
+    expect(desk.placement?.rotation).toBe(0);
+    // Inside, clear of every piece and of the door's swing and doorway.
+    expect(itemWarnings(back).get('item-5')).toEqual({ outOfBounds: false, collision: false });
+    // Where a new piece of its size would go.
+    const out = takeOutPiece(turned, 'item-5');
+    expect(desk.placement).toEqual(findFurnitureSpot(out, mainRoom(out), desk));
+    expect(boxOf(desk)).toMatchObject({ width: 2, height: 4 });
+  });
+
+  it('places a piece that was hidden before as a shown one', () => {
+    const out = takeOutPiece(toggleHidden(sample(), 'item-2'), 'item-2');
+    const hiddenAgain = { ...out, items: out.items.map((i) => ({ ...i, hidden: true })) };
+    const back = placePiece(hiddenAgain, 'item-2');
+    expect(back.items[1]!.placement).toBeDefined();
+    expect(back.items[1]).not.toHaveProperty('hidden');
+  });
+
+  it('places into an empty room at its middle', () => {
+    const plan = toPlan({ roomDims: { width: 12, height: 12 }, doors: [], windows: [], items: [] });
+    const { plan: withOne } = addPiece(plan, '#93c5fd');
+    const back = placePiece(takeOutPiece(withOne, 'item-1'), 'item-1');
+    expect(back).toEqual(withOne);
+  });
+
+  it('is ignored by the warnings: a piece out of the room never overlaps or blocks', () => {
+    const plan = sample();
+    // The bed moved onto the dresser overlaps it; out of the room, neither warns.
+    const clash = changePiece(plan, 'item-1', { x: 0, y: 7 });
+    expect(itemWarnings(clash).get('item-4')?.collision).toBe(true);
+    const out = takeOutPiece(clash, 'item-1');
+    const warnings = itemWarnings(out);
+    expect(warnings.has('item-1')).toBe(false);
+    expect(warnings.get('item-4')).toEqual({ outOfBounds: false, collision: false });
+  });
+
+  it('"Clear room" removes the pieces in the room and keeps the inventory', () => {
+    const out = takeOutPiece(sample(), 'item-3');
+    const cleared = clearPieces(out);
+    expect(cleared.items.map((i) => i.id)).toEqual(['item-3']);
+    expect(clearPieces(cleared)).toBe(cleared);
+  });
+
+  it('a plan with pieces in the inventory opens in the editor, and they stay there', () => {
+    const out = takeOutPiece(sample(), 'item-1');
+    expect(editablePlan(out)).toEqual({ ok: true, plan: out });
+    // A room away from the origin is moved there with its pieces; the inventory has no position.
+    const moved = {
+      ...out,
+      rooms: out.rooms.map((r) => ({
+        ...r,
+        outline: r.outline.map((p) => ({ x: p.x + 5, y: p.y + 2 })),
+      })),
+      items: out.items.map((i) =>
+        i.placement
+          ? { ...i, placement: { ...i.placement, x: i.placement.x + 5, y: i.placement.y + 2 } }
+          : i,
+      ),
+    };
+    const e = editablePlan(moved);
+    expect(e.ok && e.plan.items).toEqual(out.items);
   });
 });
