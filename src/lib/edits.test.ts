@@ -5,11 +5,20 @@ import { loadPlan } from '../core/load';
 import { OPENING_GAP, findFurnitureSpot } from '../core/placement';
 import { defaultLayout } from '../core/testing/v3/layout';
 import type { Door, FurnitureItem, Layout, RoomWindow, Wall } from '../core/testing/v3/types';
-import { lOutline, lShapeOf, wallFrame } from '../core/geometry/walls';
+import { lOutline, lShapeOf, roomBounds, wallFrame } from '../core/geometry/walls';
+import { overlappedRooms, sharedWalls } from '../core/floor';
+import { checkIntegrity } from '../core/load';
 import type { Plan } from '../core/schema';
 import {
   addCorner,
   addDoor,
+  addRoomBeside,
+  deleteRoom,
+  duplicatePiece,
+  duplicateRoom,
+  moveRoomBy,
+  placePieceAt,
+  setRoomPosition,
   addPiece,
   addWindow,
   changePiece,
@@ -471,7 +480,7 @@ describe('editablePlan', () => {
     expect(b.origin).toEqual({ x: a.origin.x - 5, y: a.origin.y - 5 });
   });
 
-  it('still refuses several rooms', () => {
+  it('opens several rooms: each listed from its top-left corner, the floor moved to the origin', () => {
     const r = loadPlan(
       {
         version: 4,
@@ -479,23 +488,40 @@ describe('editablePlan', () => {
         rooms: [
           {
             id: 'a',
-            outline: lOutline({ width: 4, height: 4, corner: 'tr', cutWidth: 1, cutHeight: 1 }),
+            outline: lOutline(
+              { width: 4, height: 4, corner: 'tr', cutWidth: 1, cutHeight: 1 },
+              { x: 2, y: 3 },
+            ),
           },
           {
             id: 'b',
+            // Listed from its bottom-right corner.
             outline: [
-              { x: 10, y: 0 },
-              { x: 12, y: 0 },
-              { x: 12, y: 2 },
-              { x: 10, y: 2 },
+              { x: 12, y: 5 },
+              { x: 10, y: 5 },
+              { x: 10, y: 3 },
+              { x: 12, y: 3 },
             ],
+            openings: [{ id: 'door-1', kind: 'door', wall: 1, offset: 0.5, width: 1 }],
           },
         ],
+        items: [{ id: 'item-1', label: 'Stool', width: 1, depth: 1, placement: { x: 11, y: 4 } }],
       },
       'strict',
     );
     if (!r.ok) throw new Error('invalid');
-    expect(editablePlan(r.plan)).toEqual({ ok: false, why: ['several rooms'] });
+    const e = editablePlan(r.plan);
+    if (!e.ok) throw new Error(e.why.join());
+    expect(e.plan.rooms[0]!.outline[0]).toEqual({ x: 0, y: 0 });
+    expect(e.plan.rooms[1]!.outline).toEqual([
+      { x: 8, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 2 },
+      { x: 8, y: 2 },
+    ]);
+    // The door stays on the same stretch of wall (now wall 3, the left one).
+    expect(e.plan.rooms[1]!.openings[0]!.wall).toBe(3);
+    expect(e.plan.items[0]!.placement).toMatchObject({ x: 9, y: 1 });
   });
 });
 
@@ -604,5 +630,107 @@ describe('the inventory', () => {
     };
     const e = editablePlan(moved);
     expect(e.ok && e.plan.items).toEqual(out.items);
+  });
+});
+
+describe('a floor of several rooms', () => {
+  const sample = () => toPlan(defaultLayout());
+  const two = () => addRoomBeside(sample(), 'room-1').plan;
+
+  it('adds a room flush against a free side, named, sharing a wall', () => {
+    const { plan, room } = addRoomBeside(sample(), 'room-1');
+    expect(room).toMatchObject({ id: 'room-2', name: 'Room 2' });
+    expect(room.outline).toEqual([
+      { x: 12, y: 0 },
+      { x: 22, y: 0 },
+      { x: 22, y: 10 },
+      { x: 12, y: 10 },
+    ]);
+    expect(sharedWalls(plan)).toHaveLength(1);
+    const third = addRoomBeside(plan, 'room-2');
+    expect(third.room.name).toBe('Room 3');
+    expect(overlappedRooms(third.plan, third.room, third.room.id)).toEqual([]);
+    expect(checkIntegrity(third.plan)).toEqual([]);
+  });
+
+  it('duplicates a room with its doors and windows (new ids), not its furniture', () => {
+    const plan = sample();
+    const d = duplicateRoom(plan, 'room-1')!;
+    expect(d.room.name).toBe('Room 1 copy');
+    expect(d.room.openings.map((o) => o.id)).toEqual(['door-2', 'window-2']);
+    expect(d.plan.items).toEqual(plan.items);
+    expect(checkIntegrity(d.plan)).toEqual([]);
+    expect(overlappedRooms(d.plan, d.room, d.room.id)).toEqual([]);
+  });
+
+  it('moves a room with its pieces; refuses a move onto another room', () => {
+    const plan = two();
+    const moved = moveRoomBy(plan, 'room-2', 0, 4);
+    expect(roomBounds(moved.rooms[1]!)).toMatchObject({ left: 12, top: 4 });
+    expect(moveRoomBy(plan, 'room-2', -3, 0)).toBe(plan);
+    expect(setRoomPosition(plan, 'room-2', { x: 13 }).rooms[1]!.outline[0]).toEqual({
+      x: 13,
+      y: 0,
+    });
+    // The bed moves with the first room.
+    const bed = plan.items[0]!.placement!;
+    const left = moveRoomBy(plan, 'room-1', -2, 0);
+    expect(left.items[0]!.placement).toMatchObject({ x: bed.x - 2, y: bed.y });
+  });
+
+  it('deleting a room sets its pieces aside', () => {
+    const plan = deleteRoom(two(), 'room-1');
+    expect(plan.rooms.map((r) => r.id)).toEqual(['room-2']);
+    expect(placedPieces(plan)).toEqual([]);
+    expect(inventoryPieces(plan)).toHaveLength(6);
+  });
+
+  it('adds doors, windows and pieces to the room asked for', () => {
+    const plan = two();
+    const door = addDoor(plan, 'room-2');
+    expect(door.plan.rooms[1]!.openings.map((o) => o.id)).toEqual([door.door.id]);
+    expect(addWindow(plan, 'room-2').plan.rooms[1]!.openings).toHaveLength(1);
+    const { plan: withPiece, item } = addPiece(plan, '#93c5fd', 'new', 'room-2');
+    expect(item.placement!.x).toBeGreaterThan(12);
+    expect(itemWarnings(withPiece).get(item.id)).toEqual({ outOfBounds: false, collision: false });
+  });
+
+  it('places a set-aside piece where it is dropped, in the room under that point, inside it', () => {
+    const plan = takeOutPiece(two(), 'item-1');
+    const at = placePieceAt(plan, 'item-1', { x: 17, y: 5 });
+    expect(at.items[0]!.placement).toEqual({ x: 17, y: 5, rotation: 0 });
+    // Dropped against the wall: pushed in so it is inside the room.
+    const edge = placePieceAt(plan, 'item-1', { x: 21.5, y: 9.5 });
+    const box = boxOf(edge.items[0]!);
+    expect(box.x + box.width).toBeLessThanOrEqual(22 + 1e-9);
+    expect(box.y + box.height).toBeLessThanOrEqual(10 + 1e-9);
+    // Nowhere (outside every room), or a piece already placed: nothing changes.
+    expect(placePieceAt(plan, 'item-1', { x: 40, y: 5 })).toBe(plan);
+    expect(placePieceAt(plan, 'item-2', { x: 17, y: 5 })).toBe(plan);
+  });
+
+  it('places with the free-spot finder in the room asked for', () => {
+    const plan = takeOutPiece(two(), 'item-2');
+    const placed = placePiece(plan, 'item-2', 'room-2');
+    expect(placed.items[1]!.placement!.x).toBeGreaterThan(12);
+  });
+
+  it('duplicates a piece beside it, inside its room, overlapping nothing', () => {
+    const plan = two();
+    const d = duplicatePiece(plan, 'item-6')!; // the chair
+    expect(d.item).toMatchObject({ label: 'Chair', width: 1.5, depth: 1.5 });
+    expect(d.item.id).toBe('item-7');
+    const w = itemWarnings(d.plan).get(d.item.id);
+    expect(w).toMatchObject({ outOfBounds: false, collision: false });
+    expect(duplicatePiece(takeOutPiece(plan, 'item-6'), 'item-6')).toBeNull();
+  });
+
+  it('brings pieces outside every room into their own room', () => {
+    const plan = two();
+    const out = changePiece(plan, 'item-1', { x: 20, y: -3 });
+    const back = movePiecesInside(out);
+    expect(itemWarnings(back).get('item-1')?.outOfBounds).toBe(false);
+    // Into the room it was nearest (the second one), not back to its old spot.
+    expect(back.items[0]!.placement!.x).toBeGreaterThan(12);
   });
 });

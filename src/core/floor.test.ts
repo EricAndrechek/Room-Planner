@@ -25,7 +25,7 @@ const rect = (w: number, h: number, x = 0, y = 0) => [
   { x, y: y + h },
 ];
 
-const load = (doc: Partial<Plan> & { rooms: unknown[] }): Plan => {
+const load = (doc: { rooms: unknown[]; items?: unknown[] }): Plan => {
   const r = loadPlan({ version: 4, unit: 'ft', items: [], ...doc }, 'strict');
   if (!r.ok) throw new Error(JSON.stringify(r));
   return r.plan;

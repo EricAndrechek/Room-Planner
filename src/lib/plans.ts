@@ -1,6 +1,6 @@
 /**
- * The editor's view of a plan. The app holds a v4 `Plan` (core/schema.ts) in feet; its editor
- * shows one room of any outline, listed from its top-left corner, with doors and windows on its
+ * The editor's view of a plan. The app holds a v4 `Plan` (core/schema.ts) in feet: a floor of one
+ * or more rooms of any outline, each listed from its top-left corner, with doors and windows on its
  * walls (on a rectangle named top, right, bottom and left, otherwise "Wall 1" to "Wall N"), and
  * pieces by the top-left corner of their unrotated box (docs/design/plan-format.md, section 9:
  * "Rectangles keep the four names"). These helpers translate between the two; nothing here
@@ -20,7 +20,9 @@ import {
 } from '../core/geometry/walls';
 import type { Unit } from '../core/schema';
 import { compact } from '../core/share/compact';
-import type { SnapPiece } from '../core/snapping';
+import type { SnapCandidates, SnapPiece } from '../core/snapping';
+import { roomSnapLines } from '../core/geometry/corners';
+import { floorBounds, roomAt } from '../core/floor';
 import type { Id, Item, Opening, Plan, Room, RoomDims, UnitSystem, Wall } from '../types';
 
 export const WALLS: readonly Wall[] = ['top', 'right', 'bottom', 'left'];
@@ -112,8 +114,64 @@ export const blankPlan = (): Plan => ({
 
 // --- Rooms ------------------------------------------------------------------------------------
 
-/** The room the editor shows (a plan always has at least one). */
+/** The first room (a plan always has at least one). */
 export const mainRoom = (plan: Pick<Plan, 'rooms'>): Room => plan.rooms[0]!;
+
+/** The room with this id, or the first room (the id is gone, or none was given). */
+export const roomById = (plan: Pick<Plan, 'rooms'>, id?: Id | null): Room =>
+  (id != null ? plan.rooms.find((r) => r.id === id) : undefined) ?? plan.rooms[0]!;
+
+/** The room a door or window is in, or undefined. */
+export const roomOfOpening = (plan: Pick<Plan, 'rooms'>, id: Id): Room | undefined =>
+  plan.rooms.find((r) => r.openings.some((o) => o.id === id));
+
+/** The room a placed piece's centre is in, or null (set aside, or outside every room). */
+export const pieceRoom = (plan: Pick<Plan, 'rooms'>, item: Item): Room | null =>
+  item.placement ? roomAt(plan, item.placement) : null;
+
+/** A box (feet): its top-left corner and size. */
+export interface Frame {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+const frameOf = (b: { left: number; top: number; right: number; bottom: number }): Frame => ({
+  left: b.left,
+  top: b.top,
+  width: b.right - b.left,
+  height: b.bottom - b.top,
+});
+
+/** The box a piece's position fields measure from: its room's, else the whole floor's. */
+export const pieceFrame = (plan: Pick<Plan, 'rooms'>, item: Item): Frame => {
+  const room = pieceRoom(plan, item);
+  return frameOf(room ? roomBounds(room) : floorBounds(plan));
+};
+
+/** The floor's box: every room together. */
+export const floorFrame = (plan: Pick<Plan, 'rooms'>): Frame => frameOf(floorBounds(plan));
+
+/**
+ * The wall lines furniture snaps to when that is not just one rectangle at the origin (which
+ * snapping knows by its size): every room's walls and centre lines.
+ */
+export const snapLines = (plan: Pick<Plan, 'rooms'>): SnapCandidates | undefined => {
+  const only = plan.rooms.length === 1 ? plan.rooms[0]! : null;
+  if (only && isRectangle(only)) {
+    const b = roomBounds(only);
+    if (b.left === 0 && b.top === 0) return undefined;
+  }
+  const x: SnapCandidates['x'] = [];
+  const y: SnapCandidates['y'] = [];
+  for (const r of plan.rooms) {
+    const lines = roomSnapLines(r);
+    x.push(...lines.x);
+    y.push(...lines.y);
+  }
+  return { x, y };
+};
 
 /** A room's width and length (its bounding box). */
 export const roomSize = (room: Pick<Room, 'outline'>): RoomDims => {
@@ -287,7 +345,7 @@ export const shownPieces = (plan: Pick<Plan, 'items'>): Item[] =>
 export const placedPieces = (plan: Pick<Plan, 'items'>): Item[] =>
   plan.items.filter((i) => i.placement);
 
-/** Pieces in the inventory (no `placement`): the Inventory tray, in plan order. */
+/** Pieces set aside (no `placement`, "the inventory" in the format), in plan order. */
 export const inventoryPieces = (plan: Pick<Plan, 'items'>): Item[] =>
   plan.items.filter((i) => !i.placement);
 
@@ -358,30 +416,24 @@ export const samePlan = (a: Plan, b: Plan): boolean => planContent(a) === planCo
 // --- What this editor can show ---------------------------------------------------------------
 
 /**
- * `plan` in the form the editor works on, or what keeps it from showing the plan. A single room
- * of any outline (the load has made it simple and clockwise) is listed from its top-left corner
- * (`firstCorner`: a rectangle's walls are then top, right, bottom, left) and moved so its
- * bounding box starts at the origin, with everything in it, which changes no drawing; pieces in
- * the inventory (no `placement`) come along untouched. Pieces of every shape (rectangles, Ls and
- * ellipses) are editable. Several rooms are in the format (section 3) but not yet in the editor
- * (PR 9): such a plan is not opened, so that no edit made here can damage it.
+ * `plan` in the form the editor works on, or what keeps it from showing the plan. Every room of
+ * any outline (the load has made each simple and clockwise) is listed from its top-left corner
+ * (`firstCorner`: a rectangle's walls are then top, right, bottom, left), and the whole floor is
+ * moved so its bounding box starts at the origin, with everything on it, which changes no drawing;
+ * pieces set aside (no `placement`) come along untouched. Pieces of every shape are editable, and
+ * so are floors of several rooms (section 3; PR 9).
  */
 export function editablePlan(plan: Plan): { ok: true; plan: Plan } | { ok: false; why: string[] } {
   const why: string[] = [];
-  if (plan.rooms.length !== 1) why.push('several rooms');
-  const room = plan.rooms[0];
-  if (!room) return { ok: false, why };
-  const outline = room.outline;
-  if (outline.length < 3) why.push('a room with fewer than 3 corners');
+  if (plan.rooms.length === 0) return { ok: false, why: ['no rooms'] };
+  if (plan.rooms.some((r) => r.outline.length < 3)) why.push('a room with fewer than 3 corners');
   if (why.length) return { ok: false, why };
 
-  const n = outline.length;
-  const start = firstCorner(outline);
-  const b = roomBounds(room);
-  if (start === 0 && b.left === 0 && b.top === 0) return { ok: true, plan };
+  const f = floorBounds(plan);
+  const starts = plan.rooms.map((r) => firstCorner(r.outline));
+  if (starts.every((s) => s === 0) && f.left === 0 && f.top === 0) return { ok: true, plan };
 
-  const turned = [...outline.slice(start), ...outline.slice(0, start)];
-  const { left: dx, top: dy } = b;
+  const { left: dx, top: dy } = f;
   const shift = <T extends { x: number; y: number }>(p: T): T => ({
     ...p,
     x: p.x - dx + 0,
@@ -391,13 +443,16 @@ export function editablePlan(plan: Plan): { ok: true; plan: Plan } | { ok: false
     ok: true,
     plan: {
       ...plan,
-      rooms: [
-        {
+      rooms: plan.rooms.map((room, k) => {
+        const start = starts[k]!;
+        const n = room.outline.length;
+        const turned = [...room.outline.slice(start), ...room.outline.slice(0, start)];
+        return {
           ...room,
           outline: turned.map(shift),
           openings: room.openings.map((o) => ({ ...o, wall: (o.wall - start + n) % n })),
-        },
-      ],
+        };
+      }),
       items: plan.items.map((i) => (i.placement ? { ...i, placement: shift(i.placement) } : i)),
     },
   };
