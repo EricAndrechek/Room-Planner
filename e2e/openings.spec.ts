@@ -31,10 +31,13 @@ async function addThreeThenDelete(page: Page, { kind, label, key }: (typeof KIND
   const cards = page.getByTestId(`${kind}-card`);
   const before = await cards.count();
   const add = page.getByRole('button', { name: `Add ${label}` });
-  await add.click();
-  await add.click();
-  await add.click();
-  await expect(cards).toHaveCount(before + 3);
+  for (let i = 1; i <= 3; i++) {
+    await add.click();
+    await expect(cards).toHaveCount(before + i);
+    // Each new card is smooth-scrolled into view (the cards are taller with the wall control):
+    // let it arrive before the next click, which would otherwise hit a moving button.
+    await expect(cards.last()).toBeInViewport();
+  }
 
   // The newest card is in view and highlighted; the highlight fades.
   const newest = cards.last();
