@@ -54,6 +54,12 @@ export interface SceneInput {
   locale?: string;
   /** Footer attribution. */
   site?: string;
+  /**
+   * Tag each room, door, window and piece with `data-id` (its id in the plan), so a viewer can
+   * point at the entities an issue names (the MCP plan viewer). Off by default: the export and
+   * the golden drawings carry no ids.
+   */
+  ids?: boolean;
 }
 
 export const DEFAULT_SITE = 'room-planner.andrechek.com';
@@ -247,13 +253,15 @@ export const buildPlanScene = (input: SceneInput): Scene => {
 
   // Floor + grid (1 ft, or 0.5 m in metric).
   const grid = isMetric(unitSystem) ? 0.5 * FEET_PER_METER * s : s;
-  for (const room of rooms) planNodes.push(roomNode(room, s, T, grid));
-  for (const { room, win } of windows) planNodes.push(windowNode(room, win, s, T));
+  const tag = (node: GroupNode, id: string): GroupNode =>
+    input.ids ? { ...node, attrs: { ...node.attrs, id } } : node;
+  for (const room of rooms) planNodes.push(tag(roomNode(room, s, T, grid), room.id));
+  for (const { room, win } of windows) planNodes.push(tag(windowNode(room, win, s, T), win.id));
   for (const { room, door } of doors) planNodes.push(doorCutNode(room, door, s, T));
-  for (const item of items) planNodes.push(itemNode(item, unitSystem, s));
+  for (const item of items) planNodes.push(tag(itemNode(item, unitSystem, s), item.id));
   // Door leaves and swings go over the furniture, so a rug or bed never hides
   // the clearance a door needs.
-  for (const { room, door } of doors) planNodes.push(doorNode(room, door, s, T));
+  for (const { room, door } of doors) planNodes.push(tag(doorNode(room, door, s, T), door.id));
   planNodes.push(
     dimension(
       floor.left * s,
