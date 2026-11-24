@@ -18,8 +18,8 @@ import {
   updateOpening,
   type OpeningPatch,
 } from '../lib/edits';
-import { doorsOf, mainRoom, openingPlace, roomSize, windowsOf } from '../lib/plans';
-import type { Id, Plan, RoomDims, Selection, Wall } from '../types';
+import { doorsOf, mainRoom, openingPlace, roomSize, theWall, windowsOf } from '../lib/plans';
+import type { Id, Plan, RoomDims, Selection } from '../types';
 import type { History } from './useHistory';
 import { nextCardSeq, type CardRef } from './useCardHighlight';
 import type { usePointerDrag } from './usePointerDrag';
@@ -64,10 +64,10 @@ export function useOpenings({
   const windows = windowsOf(room);
 
   /** Select a new opening, point the sidebar at it and say where it went. */
-  const added = (type: 'door' | 'window', id: Id, number: number, wall: Wall) => {
+  const added = (type: 'door' | 'window', id: Id, number: number, wall: number) => {
     setSelection({ id, type });
     setLastAdded({ type, id, seq: nextCardSeq() });
-    announce(`${type === 'door' ? 'Door' : 'Window'} ${number} added on the ${wall} wall`);
+    announce(`${type === 'door' ? 'Door' : 'Window'} ${number} added on ${theWall(room, wall)}`);
   };
   /** Forget the selection if it points at this (removed) opening. */
   const deselect = (type: 'door' | 'window', id: Id) =>
@@ -117,7 +117,7 @@ export function useOpenings({
    * never on top of another opening). One undo step; the opening is selected and the move
    * announced. False, and nothing changes, if it fits nowhere on that wall.
    */
-  const moveOpeningToWall = (type: 'door' | 'window', id: Id, wall: Wall): boolean => {
+  const moveOpeningToWall = (type: 'door' | 'window', id: Id, wall: number): boolean => {
     const list = type === 'door' ? doors : windows;
     const index = list.findIndex((o) => o.id === id);
     const opening = list[index];
@@ -127,7 +127,7 @@ export function useOpenings({
     if (next === null) return false;
     applyPlan((p) => moveToWall(p, id, wall) ?? p);
     setSelection({ id, type });
-    announce(`${type === 'door' ? 'Door' : 'Window'} ${index + 1} moved to the ${wall} wall`);
+    announce(`${type === 'door' ? 'Door' : 'Window'} ${index + 1} moved to ${theWall(room, wall)}`);
     return true;
   };
 

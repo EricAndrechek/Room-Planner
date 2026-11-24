@@ -9,6 +9,8 @@
  * Cost: {@link buildSnapCandidates} is O(n) once per drag; {@link snapBounds} and
  * {@link measureClearances} are O(n) per pointer move, with no allocation beyond the result.
  */
+import { pointInPolygon, type Point } from './geometry';
+import { distanceToWall } from './geometry/corners';
 import type { Id, RoomDims } from './types';
 import { feetToDisplay } from './units';
 
@@ -83,16 +85,8 @@ export interface SnapCandidates {
   y: SnapLine[];
 }
 
-/**
- * Every line a moving piece can snap to: the inner faces of the four walls, the room's center
- * lines, and the edges and centers of every other *visible* piece. Built once when a drag starts
- * (the other pieces do not move meanwhile).
- */
-export function buildSnapCandidates(
-  items: readonly SnapPiece[],
-  room: RoomDims,
-  movingId: Id,
-): SnapCandidates {
+/** The four walls of a rectangular room from the origin, and its centre lines. */
+const rectangleLines = (room: RoomDims): SnapCandidates => {
   const x: SnapLine[] = [
     { pos: 0, edge: 'start', source: { kind: 'wall', wall: 'left' }, span: [0, room.height] },
     {
@@ -123,6 +117,22 @@ export function buildSnapCandidates(
       span: [0, room.width],
     },
   ];
+  return { x, y };
+};
+
+/**
+ * Every line a moving piece can snap to: the inner faces of the four walls, the room's center
+ * lines, and the edges and centers of every other *visible* piece. Built once when a drag starts
+ * (the other pieces do not move meanwhile).
+ */
+export function buildSnapCandidates(
+  items: readonly SnapPiece[],
+  room: RoomDims,
+  movingId: Id,
+  /** A room that is not a rectangle: its own wall and centre lines (`roomSnapLines`). */
+  roomLines?: SnapCandidates,
+): SnapCandidates {
+  const { x, y } = roomLines ? { x: [...roomLines.x], y: [...roomLines.y] } : rectangleLines(room);
   for (const item of items) {
     if (item.id === movingId || item.visible === false) continue;
     const b = itemBounds(item);
@@ -396,6 +406,8 @@ export function measureClearances(
   items: readonly SnapPiece[],
   room: RoomDims,
   movingId: Id,
+  /** A room that is not a rectangle: the wall on each side is found along the measuring line. */
+  outline?: readonly Point[],
 ): Measurement[] {
   const nearest: Record<Side, { gap: number; lo: number; hi: number; item: boolean }> = {
     left: { gap: bounds.left, lo: bounds.top, hi: bounds.bottom, item: false },
@@ -403,6 +415,36 @@ export function measureClearances(
     top: { gap: bounds.top, lo: bounds.left, hi: bounds.right, item: false },
     bottom: { gap: room.height - bounds.bottom, lo: bounds.left, hi: bounds.right, item: false },
   };
+  if (outline) {
+    const midY = (bounds.top + bounds.bottom) / 2;
+    const midX = (bounds.left + bounds.right) / 2;
+    const quarterX = bounds.left + (bounds.right - bounds.left) / 4;
+    const rays: Record<Side, [Point, Point]> = {
+      left: [
+        { x: bounds.left, y: midY },
+        { x: -1, y: 0 },
+      ],
+      right: [
+        { x: bounds.right, y: midY },
+        { x: 1, y: 0 },
+      ],
+      top: [
+        { x: quarterX, y: bounds.top },
+        { x: 0, y: -1 },
+      ],
+      bottom: [
+        { x: midX, y: bounds.bottom },
+        { x: 0, y: 1 },
+      ],
+    };
+    for (const side of ['left', 'right', 'top', 'bottom'] as const) {
+      const [from, dir] = rays[side];
+      // Just inside the piece's edge: outside the room there is no wall to measure to.
+      const probe = { x: from.x - dir.x * 1e-6, y: from.y - dir.y * 1e-6 };
+      const d = pointInPolygon(probe, [...outline]) ? distanceToWall({ outline }, from, dir) : null;
+      nearest[side].gap = d ?? -1;
+    }
+  }
   const consider = (side: Side, gap: number, lo: number, hi: number) => {
     if (gap < -SAME || gap >= nearest[side].gap) return;
     nearest[side] = { gap: Math.max(0, gap), lo, hi, item: true };

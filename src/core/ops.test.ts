@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { checkIntegrity, loadPlan } from './load';
-import { wallFrame } from './geometry/walls';
+import { lOutline, wallFrame } from './geometry/walls';
 import {
   addItem,
   addOpening,
@@ -14,6 +14,7 @@ import {
   removeOpening,
   removeRoom,
   removeVertex,
+  reshapeRoom,
   toInventory,
   updateItem,
   updateOpening,
@@ -223,5 +224,58 @@ describe('rooms', () => {
     expect(removed.rooms).toHaveLength(1);
     expect(removed.items[1]).not.toHaveProperty('placement');
     expect(removeRoom(removed, 'room-1')).toBe(removed); // the last room stays
+  });
+});
+
+describe('reshapeRoom', () => {
+  // 12 x 10: the door on the bottom wall at x 7..10 (offset 2 from its right end), the window on
+  // the top wall at x 4..8.
+  it('moves each opening to the nearest wall running the same way, keeping its floor position', () => {
+    const p = plan();
+    const l = lOutline({ width: 12, height: 10, corner: 'tr', cutWidth: 5, cutHeight: 4 });
+    const next = reshapeRoom(p, 'room-1', l);
+    expect(checkIntegrity(next)).toEqual([]);
+    const room = next.rooms[0]!;
+    expect(room.outline).toEqual(l);
+    // The top wall is now 0..7: the window at 4..8 is kept on it, pushed back to 3..7.
+    const win = room.openings.find((o) => o.id === 'window-1')!;
+    expect(win.wall).toBe(0);
+    expect(ends(room, win).map((q) => q.x)).toEqual([3, 7]);
+    // The bottom wall is wall 4 of the L, still the full width: the door stays at x 7..10.
+    const door = room.openings.find((o) => o.id === 'door-1')!;
+    expect(door.wall).toBe(4);
+    expect(
+      ends(room, door)
+        .map((q) => q.x)
+        .sort((a, b) => a - b),
+    ).toEqual([7, 10]);
+  });
+
+  it('refuses an outline that crosses itself, and keeps openings on walls for any L', () => {
+    const p = plan();
+    const bow = [
+      { x: 0, y: 0 },
+      { x: 12, y: 10 },
+      { x: 12, y: 0 },
+      { x: 0, y: 10 },
+    ];
+    expect(reshapeRoom(p, 'room-1', bow)).toBe(p);
+    fc.assert(
+      fc.property(
+        fc.constantFrom('tl', 'tr', 'br', 'bl'),
+        fc.integer({ min: 1, max: 11 }),
+        fc.integer({ min: 1, max: 9 }),
+        (corner, cutWidth, cutHeight) => {
+          const next = reshapeRoom(
+            p,
+            'room-1',
+            lOutline({ width: 12, height: 10, corner, cutWidth, cutHeight }),
+          );
+          expect(checkIntegrity(next)).toEqual([]);
+          expect(next.rooms[0]!.openings.map((o) => o.id)).toEqual(['door-1', 'window-1']);
+        },
+      ),
+      { numRuns: 200 },
+    );
   });
 });

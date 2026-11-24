@@ -23,6 +23,7 @@ import { usePanZoom, type ViewInsets } from '../../hooks/usePanZoom';
 import { usePointerDrag } from '../../hooks/usePointerDrag';
 import { useProjectActions, type NewPlanStart } from '../../hooks/useProjectActions';
 import { useProjects } from '../../hooks/useProjects';
+import { useRoomShape } from '../../hooks/useRoomShape';
 import { useRotationDrag } from '../../hooks/useRotationDrag';
 import { useSelection } from '../../hooks/useSelection';
 import { track } from '../../lib/analytics';
@@ -30,8 +31,9 @@ import type { BootState } from '../../lib/boot';
 import { migrateColor } from '../../core/colors';
 import { DESIGN_MODES } from '../../lib/constants';
 import { normalizeDegrees } from '../../core/geometry';
+import { isRectangle } from '../../core/geometry/walls';
 import { piecesOutside } from '../../core/placement';
-import { movePiecesInside, resizeRoom } from '../../lib/edits';
+import { movePiecesInside, narrowedOpenings, resizeRoom } from '../../lib/edits';
 import {
   doorsOf,
   inventoryPieces,
@@ -41,14 +43,15 @@ import {
   placedPieces,
   roomSize,
   snapPieces,
+  theWall,
   windowsOf,
   withDoc,
 } from '../../lib/plans';
 import { HELP_PATH } from '../../lib/paths';
 import { sheetSummary } from '../../lib/sheet';
-import { nudgeStep } from '../../core/units';
+import { feetToDisplay, nudgeStep } from '../../core/units';
 import { loadSnapPreference, saveSnapPreference, type PlanStore } from '../../lib/storage';
-import type { DesignMode, Id, Item, Plan, RoomDims, UnitSystem, Wall } from '../../types';
+import type { DesignMode, Id, Item, Plan, RoomDims, UnitSystem } from '../../types';
 import { ColorPicker } from './ColorPicker';
 import { ExportModal } from './ExportModal';
 import { FileBrowserModal } from './FileBrowserModal';
@@ -131,7 +134,7 @@ export function Planner({ store, initial }: PlannerProps) {
     () => (isMobile ? { top: BADGE_INSET, bottom: sheetInset } : NO_INSETS),
     [isMobile, sheetInset],
   );
-  const { zoom, zoomRef, pan, zoomIn, zoomOut, fitToView, reveal } = usePanZoom(
+  const { zoom, zoomRef, pan, zoomIn, zoomOut, fitToView, reveal, keepView } = usePanZoom(
     containerRef,
     roomDims,
     isMobile,
@@ -340,6 +343,27 @@ export function Planner({ store, initial }: PlannerProps) {
     startDrag,
     zoomRef,
   });
+  const roomShape = useRoomShape({
+    history,
+    unitSystem,
+    isRoomSetup,
+    snapEnabled: snapOn,
+    announce: live.announce,
+    startDrag,
+    zoomRef,
+    containerRef,
+    keepView,
+    onWallsChanged: (before, after) => {
+      if (!offerMoveInside(before, after)) noteNarrowed(before, after);
+    },
+    onSelectCorner: () => setSelection(null),
+  });
+  // Selecting anything else deselects the corner; another plan starts from its own shape.
+  const { clearCorner, resetShape } = roomShape;
+  useEffect(() => {
+    if (selection) clearCorner();
+  }, [selection, clearCorner]);
+  useEffect(() => resetShape(), [projects.currentProjectId, resetShape]);
   const projectActions = useProjectActions({
     history,
     projects,
@@ -360,12 +384,10 @@ export function Planner({ store, initial }: PlannerProps) {
     () => piecesOutside({ items: plan.items, rooms: plan.rooms }).length,
     [plan.items, plan.rooms],
   );
-  const changeRoomDims = (dims: RoomDims) => {
-    const prev = roomDims;
-    const next = openings.updateRoomDims(dims);
-    if (!next || (next.width >= prev.width && next.height >= prev.height)) return;
-    const outside = piecesOutside(resizeRoom(plan, next)).length;
-    if (outside === 0) return;
+  /** The walls changed: if that left more pieces outside, offer to bring them back in. */
+  const offerMoveInside = (before: Plan, after: Plan): boolean => {
+    const outside = piecesOutside(after).length;
+    if (outside === 0 || outside <= piecesOutside(before).length) return false;
     const one = outside === 1;
     showNotice({
       key: 'outside-room',
@@ -381,6 +403,32 @@ export function Planner({ store, initial }: PlannerProps) {
         },
       },
     });
+    return true;
+  };
+  /** A door or window too wide for its wall after the walls changed was narrowed: say so. */
+  const noteNarrowed = (before: Plan, after: Plan) => {
+    const narrowed = narrowedOpenings(before, after);
+    if (!narrowed.length) return;
+    const r = mainRoom(after);
+    const name = (o: (typeof narrowed)[number]) => {
+      const list = o.kind === 'door' ? doorsOf(r) : windowsOf(r);
+      return `${o.kind === 'door' ? 'Door' : 'Window'} ${list.findIndex((x) => x.id === o.id) + 1}`;
+    };
+    const first = narrowed[0]!;
+    showNotice({
+      key: 'wall-full',
+      message:
+        narrowed.length === 1
+          ? `${name(first)} is wider than ${theWall(r, first.wall)} now, so it was made ${feetToDisplay(first.width, unitSystem)} wide.`
+          : `${narrowed.length} doors and windows were made narrower to fit their walls.`,
+      timeoutMs: 6000,
+    });
+  };
+  const changeRoomDims = (dims: RoomDims) => {
+    const prev = roomDims;
+    const next = openings.updateRoomDims(dims);
+    if (!next || (next.width >= prev.width && next.height >= prev.height)) return;
+    offerMoveInside(plan, resizeRoom(plan, next));
   };
   // The offer goes away once nothing is outside any more (moved by hand, resize undone...).
   useEffect(() => {
@@ -388,7 +436,7 @@ export function Planner({ store, initial }: PlannerProps) {
   }, [outsideCount, dismissNotice]);
 
   // --- Doors & windows: moving one to another wall ----------------------------------------
-  const changeOpeningWall = (type: 'door' | 'window', id: Id, wall: Wall) => {
+  const changeOpeningWall = (type: 'door' | 'window', id: Id, wall: number) => {
     if (openings.moveOpeningToWall(type, id, wall)) {
       dismissNotice('wall-full');
       return;
@@ -396,10 +444,10 @@ export function Planner({ store, initial }: PlannerProps) {
     const list = type === 'door' ? doors : windows;
     const index = list.findIndex((o) => o.id === id);
     const name = `${type === 'door' ? 'Door' : 'Window'} ${index + 1}`;
-    const current = list[index] ? openingPlace(room, list[index]).wall : undefined;
+    const current = list[index] ? openingPlace(room, list[index]).wall : wall;
     showNotice({
       key: 'wall-full',
-      message: `${name} doesn't fit on the ${wall} wall, so it stays on the ${current} wall.`,
+      message: `${name} doesn't fit on ${theWall(room, wall)}, so it stays on ${theWall(room, current)}.`,
       timeoutMs: 6000,
     });
   };
@@ -445,6 +493,11 @@ export function Planner({ store, initial }: PlannerProps) {
       undo,
       redo,
       deleteSelected: () => {
+        if (isRoomSetup && roomShape.selectedCorner !== null) {
+          roomShape.removeCorner();
+          requestAnimationFrame(focusCanvas);
+          return true;
+        }
         if (openings.deleteSelectedOpening()) {
           requestAnimationFrame(focusCanvas);
           return true;
@@ -456,6 +509,7 @@ export function Planner({ store, initial }: PlannerProps) {
       },
       deselect: () => {
         sel.clearSelection();
+        roomShape.clearCorner();
         focusCanvas();
       },
       nudge: (dirX, dirY, size) => {
@@ -464,6 +518,7 @@ export function Planner({ store, initial }: PlannerProps) {
           return true;
         }
         const step = nudgeStep(size, unitSystem);
+        if (isRoomSetup && roomShape.nudgeCorner(dirX * step, dirY * step)) return true;
         if (!canEditSelected) return openings.nudgeOpening(dirX * step, dirY * step);
         // Fine steps place exactly, without snapping (like Alt-dragging).
         furniture.moveItem(selectedItem.id, dirX * step, dirY * step, size !== 'fine');
@@ -667,6 +722,12 @@ export function Planner({ store, initial }: PlannerProps) {
               windows={windows}
               unitSystem={unitSystem}
               onRoomDimsChange={changeRoomDims}
+              shape={roomShape.shape}
+              onShapeChange={roomShape.changeShape}
+              onLShapeChange={roomShape.changeLShape}
+              onWallLengthChange={roomShape.setWallLength}
+              highlightedWall={roomShape.highlightedWall}
+              onHighlightWall={roomShape.highlightWall}
               onAddDoor={addDoor}
               onUpdateDoor={openings.updateDoor}
               onDeleteDoor={openings.deleteDoor}
@@ -743,11 +804,28 @@ export function Planner({ store, initial }: PlannerProps) {
               onDoorPointerDown={(e, door) => openings.startOpeningDrag(e, door.id, 'doors')}
               onWindowPointerDown={(e, win) => openings.startOpeningDrag(e, win.id, 'windows')}
               highlightDoorIds={highlightDoorIds}
+              corners={
+                roomShape.editingCorners
+                  ? {
+                      selected: roomShape.selectedCorner,
+                      highlightedWall: roomShape.highlightedWall,
+                      drag: roomShape.drag,
+                      onPointerDown: roomShape.startCornerDrag,
+                      onSelect: (i) => roomShape.selectCorner(i),
+                      onAddCorner: roomShape.addCorner,
+                      onRemoveCorner: (i) => {
+                        roomShape.removeCorner(i);
+                        requestAnimationFrame(focusCanvas);
+                      },
+                    }
+                  : null
+              }
               overlay={
                 overlayItemId !== undefined && (
                   <SnapOverlay
                     items={pieces}
                     room={roomDims}
+                    outline={isRectangle(room) ? undefined : room.outline}
                     zoom={zoom}
                     unitSystem={unitSystem}
                     itemId={overlayItemId}

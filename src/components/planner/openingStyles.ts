@@ -1,15 +1,17 @@
 /**
- * The canvas's drawing of doors and windows on a rectangular room: inline styles for the wall
- * gap, jambs, panes and drag handles, and SVG path data for door leaves and swings, in canvas
- * pixels. The shapes come from `openingDoorGeometry` in core/geometry/doors.ts (the same shapes
- * the export draws).
+ * The canvas's drawing of doors and windows on any wall: inline styles for the wall gap, jambs,
+ * panes and drag handles, and SVG path data for door leaves and swings, in canvas pixels (floor
+ * coordinates times PIXELS_PER_UNIT). Everything is laid out in the wall's drawing frame
+ * (core/geometry/walls.ts): along the wall from its left (or top) end, and into the room from its
+ * inner face; on a horizontal or vertical wall that is exactly the v3 drawing. The door shapes
+ * come from `openingDoorGeometry` in core/geometry/doors.ts (the same shapes the export draws).
  */
 import type { CSSProperties } from 'react';
 import { PIXELS_PER_UNIT as P } from '../../lib/constants';
-import { isHorizontalWall, type Point } from '../../core/geometry';
+import type { Point } from '../../core/geometry';
 import { openingDoorGeometry } from '../../core/geometry/doors';
-import { openingPlace, roomSize } from '../../lib/plans';
-import type { Opening, Room, RoomDims, Wall } from '../../types';
+import { frameAt, openingInFrame, type WallFrame } from '../../core/geometry/walls';
+import type { Opening, Room } from '../../types';
 
 const WALL_THICKNESS = 4;
 const JAMB_LENGTH = 12;
@@ -27,113 +29,76 @@ export interface WindowStyles extends OpeningStyles {
   pane: CSSProperties;
 }
 
-/** White wall gap where the opening is. */
-const gapStyle = (wall: Wall, pos: number, widthPx: number, room: RoomDims): CSSProperties => {
-  const base = { position: 'absolute', backgroundColor: 'white', zIndex: 10 } as const;
-  switch (wall) {
-    case 'bottom':
-      return {
-        ...base,
-        left: pos * P,
-        top: room.height * P - WALL_THICKNESS / 2,
-        width: widthPx,
-        height: WALL_THICKNESS,
-      };
-    case 'top':
-      return {
-        ...base,
-        left: pos * P,
-        top: -WALL_THICKNESS / 2,
-        width: widthPx,
-        height: WALL_THICKNESS,
-      };
-    case 'left':
-      return {
-        ...base,
-        left: -WALL_THICKNESS / 2,
-        top: pos * P,
-        width: WALL_THICKNESS,
-        height: widthPx,
-      };
-    case 'right':
-      return {
-        ...base,
-        left: room.width * P - WALL_THICKNESS / 2,
-        top: pos * P,
-        width: WALL_THICKNESS,
-        height: widthPx,
-      };
-  }
+const num = (n: number) => +n.toFixed(3);
+
+/**
+ * A box in a wall's frame: `a0` to `a1` along the wall (feet), `d0` to `d1` into the room (canvas
+ * px, negative = into the wall). On a wall at an angle the box is turned with it.
+ */
+const frameBox = (f: WallFrame, a0: number, a1: number, d0: number, d1: number): CSSProperties => {
+  const angle = (Math.atan2(f.along.y, f.along.x) * 180) / Math.PI;
+  // The box's own y axis (the along vector turned 90 degrees clockwise) is either the inward
+  // normal or its opposite (a wall drawn against the outline): start from the matching side.
+  const flipped = -f.along.y * f.inward.x + f.along.x * f.inward.y < 0;
+  const o = frameAt(f, a0, (flipped ? d1 : d0) / P);
+  const deg = num(((angle % 360) + 360) % 360);
+  return {
+    position: 'absolute',
+    left: num(o.x * P),
+    top: num(o.y * P),
+    width: num((a1 - a0) * P),
+    height: num(d1 - d0),
+    ...(deg !== 0 && deg !== 360 ? { transform: `rotate(${deg}deg)`, transformOrigin: '0 0' } : {}),
+  };
 };
 
-/** Architectural jamb lines at both ends of the opening. */
-const jambStyles = (
-  wall: Wall,
-  pos: number,
-  widthPx: number,
-  room: RoomDims,
-): [CSSProperties, CSSProperties] => {
-  const base = { position: 'absolute', backgroundColor: JAMB_COLOR, zIndex: 11 } as const;
-  if (isHorizontalWall(wall)) {
-    const top = wall === 'top' ? -JAMB_LENGTH / 2 : room.height * P - JAMB_LENGTH / 2;
-    const jamb = (x: number): CSSProperties => ({
-      ...base,
-      left: x - JAMB_WIDTH / 2,
-      top,
-      width: JAMB_WIDTH,
-      height: JAMB_LENGTH,
-    });
-    return [jamb(pos * P), jamb(pos * P + widthPx)];
-  }
-  const left = wall === 'left' ? -JAMB_LENGTH / 2 : room.width * P - JAMB_LENGTH / 2;
-  const jamb = (y: number): CSSProperties => ({
-    ...base,
-    left,
-    top: y - JAMB_WIDTH / 2,
-    width: JAMB_LENGTH,
-    height: JAMB_WIDTH,
+/** The resize cursor for dragging along a wall at this angle. */
+const cursorFor = (f: WallFrame) => {
+  const deg = ((((Math.atan2(f.along.y, f.along.x) * 180) / Math.PI) % 180) + 180) % 180;
+  if (deg < 22.5 || deg >= 157.5) return 'ew-resize';
+  if (deg < 67.5) return 'nwse-resize';
+  if (deg < 112.5) return 'ns-resize';
+  return 'nesw-resize';
+};
+
+/** White wall gap, the jambs at both ends, and the round drag handle in the middle. */
+const parts = (f: WallFrame, pos: number, width: number, handleSize: number, inset: number) => {
+  const base = { backgroundColor: 'white', zIndex: 10 } as const;
+  const jamb = (a: number): CSSProperties => ({
+    ...frameBox(
+      f,
+      a - JAMB_WIDTH / 2 / P,
+      a + JAMB_WIDTH / 2 / P,
+      -JAMB_LENGTH / 2,
+      JAMB_LENGTH / 2,
+    ),
+    backgroundColor: JAMB_COLOR,
+    zIndex: 11,
   });
-  return [jamb(pos * P), jamb(pos * P + widthPx)];
-};
-
-/** Round drag handle centered on the opening. `inset` nudges window handles 2px into the room. */
-const handleStyle = (
-  wall: Wall,
-  pos: number,
-  widthPx: number,
-  room: RoomDims,
-  size: number,
-  inset: number,
-): CSSProperties => {
-  const along = pos * P + widthPx / 2 - size / 2;
-  const base = { position: 'absolute', width: size, height: size, zIndex: 20 } as const;
-  switch (wall) {
-    case 'bottom':
-      return { ...base, left: along, top: room.height * P - size / 2, cursor: 'ew-resize' };
-    case 'top':
-      return { ...base, left: along, top: -size / 2 + inset, cursor: 'ew-resize' };
-    case 'left':
-      return { ...base, left: -size / 2 + inset, top: along, cursor: 'ns-resize' };
-    case 'right':
-      return { ...base, left: room.width * P - size / 2, top: along, cursor: 'ns-resize' };
-  }
+  const c = frameAt(f, pos + width / 2, inset / P);
+  return {
+    gap: { ...frameBox(f, pos, pos + width, -WALL_THICKNESS / 2, WALL_THICKNESS / 2), ...base },
+    jamb1: jamb(pos),
+    jamb2: jamb(pos + width),
+    handle: {
+      position: 'absolute',
+      left: num(c.x * P - handleSize / 2),
+      top: num(c.y * P - handleSize / 2),
+      width: handleSize,
+      height: handleSize,
+      zIndex: 20,
+      cursor: cursorFor(f),
+    } as CSSProperties,
+  };
 };
 
 /** Canvas swing arc stroke (the export uses its own palette in core/render/scene/nodes.ts). */
 export const SWING_ARC_STROKE = { stroke: '#94a3b8', strokeWidth: 2, strokeDasharray: '4 3' };
 const LEAF_THICKNESS = 4;
 
-export const doorStyles = (door: Opening, plan: Pick<Room, 'outline'>): OpeningStyles => {
-  const room = roomSize(plan);
-  const { wall, position: pos, width } = openingPlace(plan, door);
-  const widthPx = width * P;
-  const [jamb1, jamb2] = jambStyles(wall, pos, widthPx, room);
-  return {
-    gap: gapStyle(wall, pos, widthPx, room),
-    jamb1,
-    jamb2,
-    handle: handleStyle(wall, pos, widthPx, room, 20, 0),
-  };
+export const doorStyles = (door: Opening, room: Pick<Room, 'outline'>): OpeningStyles => {
+  const { frame, position, width } = openingInFrame(room, door);
+  return parts(frame, position, width, 20, 0);
 };
 
 /** SVG path data for the canvas door drawing, in canvas pixels (room interior top-left = 0,0). */
@@ -199,66 +164,17 @@ export const doorSvg = (door: Opening, room: Pick<Room, 'outline'>): DoorSvg => 
   };
 };
 
-export const windowStyles = (win: Opening, plan: Pick<Room, 'outline'>): WindowStyles => {
-  const room: RoomDims = roomSize(plan);
-  const { wall, position: pos, width } = openingPlace(plan, win);
-  const widthPx = width * P;
-  const [jamb1, jamb2] = jambStyles(wall, pos, widthPx, room);
-  const paneBase = {
-    position: 'absolute',
-    backgroundColor: '#93c5fd',
-    border: '2px solid #3b82f6',
-    borderRadius: 2,
-    zIndex: 11,
-  } as const;
-  let pane: CSSProperties;
-  switch (wall) {
-    case 'top':
-      pane = {
-        ...paneBase,
-        left: pos * P,
-        top: -2,
-        width: widthPx,
-        height: 8,
-        cursor: 'ew-resize',
-      };
-      break;
-    case 'bottom':
-      pane = {
-        ...paneBase,
-        left: pos * P,
-        top: room.height * P - 6,
-        width: widthPx,
-        height: 8,
-        cursor: 'ew-resize',
-      };
-      break;
-    case 'left':
-      pane = {
-        ...paneBase,
-        left: -2,
-        top: pos * P,
-        width: 8,
-        height: widthPx,
-        cursor: 'ns-resize',
-      };
-      break;
-    case 'right':
-      pane = {
-        ...paneBase,
-        left: room.width * P - 6,
-        top: pos * P,
-        width: 8,
-        height: widthPx,
-        cursor: 'ns-resize',
-      };
-      break;
-  }
+export const windowStyles = (win: Opening, room: Pick<Room, 'outline'>): WindowStyles => {
+  const { frame, position, width } = openingInFrame(room, win);
   return {
-    gap: gapStyle(wall, pos, widthPx, room),
-    jamb1,
-    jamb2,
-    pane,
-    handle: handleStyle(wall, pos, widthPx, room, 16, 2),
+    ...parts(frame, position, width, 16, 2),
+    pane: {
+      ...frameBox(frame, position, position + width, -2, 6),
+      backgroundColor: '#93c5fd',
+      border: '2px solid #3b82f6',
+      borderRadius: 2,
+      zIndex: 11,
+      cursor: cursorFor(frame),
+    },
   };
 };

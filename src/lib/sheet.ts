@@ -6,7 +6,8 @@
 import { DESIGN_MODES } from './constants';
 import { feetToDisplay } from '../core/units';
 import type { DesignMode, Plan, Selection, UnitSystem } from '../types';
-import { doorsOf, mainRoom, openingPlace, roomSize, windowsOf } from './plans';
+import { isRectangle } from '../core/geometry/walls';
+import { doorsOf, mainRoom, openingPlace, roomSize, wallLabel, wallName, windowsOf } from './plans';
 
 export type Detent = 'peek' | 'half' | 'full';
 
@@ -110,7 +111,9 @@ export function sheetSummary(
     const index = list.findIndex((o) => o.id === selection.id);
     if (index >= 0) {
       const name = selection.type === 'door' ? 'Door' : 'Window';
-      return `${name} ${index + 1} · ${openingPlace(room, list[index]!).wall} wall`;
+      const wall = openingPlace(room, list[index]!).wall;
+      const where = isRectangle(room) ? `${wallName(room, wall)} wall` : wallLabel(room, wall);
+      return `${name} ${index + 1} · ${where}`;
     }
   }
   if (mode === DESIGN_MODES.ROOM_SETUP) {

@@ -75,9 +75,10 @@ Room Planner uses a focused two-step workflow:
 Configure the room shell before adding furniture:
 
 1. **Set Dimensions** - Enter room width and height
-2. **Add Doors** - Click "+ Add Door", set position, width, wall, and type
-3. **Add Windows** - Click "+ Add Window", configure position and width
-4. **Drag to Position** - On the canvas, drag door/window handles to fine-tune placement
+2. **Pick a Shape** - Rectangle, L-shape, or Custom: drag corners, add a corner with + on a wall, edit wall lengths in the wall list
+3. **Add Doors** - Click "+ Add Door", set position, width, wall, and type
+4. **Add Windows** - Click "+ Add Window", configure position and width
+5. **Drag to Position** - On the canvas, drag door/window handles to fine-tune placement
 
 #### Step 2: Furniture (Green)
 
@@ -279,7 +280,7 @@ Contributions are welcome! Here's how to get started:
 - [ ] Measurement tool (click to measure distances)
 - [ ] 3D view / isometric preview
 - [ ] Multi-room floor plans
-- [ ] Non-rectangular room shapes
+- [x] Non-rectangular room shapes (L-shapes, alcoves, angled walls)
 - [ ] Furniture snapping/alignment guides
 - [ ] Collaborative editing (real-time multi-user) (while keeping no backend?)
 - [ ] Accessibility improvements (ARIA, keyboard nav)

@@ -76,9 +76,10 @@ const NEWER_RECORD =
   '{ "id":"project-v5",  "createdAt":"2027-01-01T00:00:00.000Z","updatedAt":"2027-01-02T00:00:00.000Z",' +
   '"plan":{"version":5,"name":"From the future","floors":[{"x":1.50}]} }';
 
-const L_SHAPED: Plan = {
+/** Two rooms: in the format, not yet in the editor (PR 9). */
+const TWO_ROOMS: Plan = {
   version: 4,
-  name: 'L room',
+  name: 'Two rooms',
   unit: 'ft',
   rooms: [
     {
@@ -87,9 +88,17 @@ const L_SHAPED: Plan = {
         { x: 0, y: 0 },
         { x: 10, y: 0 },
         { x: 10, y: 6 },
-        { x: 5, y: 6 },
-        { x: 5, y: 10 },
-        { x: 0, y: 10 },
+        { x: 0, y: 6 },
+      ],
+      openings: [],
+    },
+    {
+      id: 'room-2',
+      outline: [
+        { x: 10, y: 0 },
+        { x: 16, y: 0 },
+        { x: 16, y: 6 },
+        { x: 10, y: 6 },
       ],
       openings: [],
     },
@@ -294,12 +303,12 @@ describe('plans this build cannot open', () => {
   });
 
   it('a saved plan with what the editor cannot show yet is kept the same way', () => {
-    const record = JSON.stringify(createProject('L room', L_SHAPED, NOW));
+    const record = JSON.stringify(createProject('Two rooms', TWO_ROOMS, NOW));
     const { s } = withNewKeys(`[${record}]`);
     const store = createPlanStore(s);
     const state = store.load(LATER);
     expect(state.projects).toEqual([]);
-    expect(state.locked.map((l) => l.name)).toEqual(['L room']);
+    expect(state.locked.map((l) => l.name)).toEqual(['Two rooms']);
     store.savePlans([createProject('Mine', starterPlan(), LATER)]);
     expect(splitJsonArray(s.getItem(KEYS.plans)!)![0]).toBe(record);
   });
@@ -614,7 +623,7 @@ describe('opening share links at boot', () => {
     const store = createPlanStore(s);
     bootFromStorage(store, NOW);
     const before = s.dump();
-    const result = await boot(await buildPlanUrl('https://example.com/', L_SHAPED), store, LATER);
+    const result = await boot(await buildPlanUrl('https://example.com/', TWO_ROOMS), store, LATER);
     expect(result.linkProblem).toEqual({ kind: 'unsupported', where: 'link' });
     expect(result.shared).toBeNull();
     expect(s.dump()).toEqual(before);
