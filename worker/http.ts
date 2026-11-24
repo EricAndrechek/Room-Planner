@@ -137,7 +137,6 @@ export async function handleMcp(request: Request, env: Env): Promise<Response> {
   if (!['POST', 'GET', 'DELETE'].includes(request.method)) return methodNotAllowed(allow);
   const handler = createMcpHandler(() => createServer(origin), {
     maxRequestBodySize: MAX_BODY,
-    responseMode: 'json',
     // Reporting only, and never the request: an error can quote the body, which may hold a plan.
     onerror: (error) => console.error(`mcp: ${error.name}`),
   });

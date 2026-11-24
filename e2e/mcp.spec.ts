@@ -183,7 +183,7 @@ async function host(
 ) {
   await page.setContent(
     `<!doctype html><html><body style="margin:0;padding:16px;background:${theme === 'dark' ? '#0b1120' : '#f1f5f9'}">` +
-      `<iframe id="view" title="Room Planner plan" sandbox="allow-scripts" style="border:0;width:${width}px;height:400px;display:block"></iframe>` +
+      `<iframe id="view" title="Room Planner plan" sandbox="allow-scripts" style="border:0;width:min(${width}px,calc(100vw - 32px));height:400px;display:block"></iframe>` +
       `</body></html>`,
   );
   await page.evaluate(

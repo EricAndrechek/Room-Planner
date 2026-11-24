@@ -5,6 +5,9 @@
  * (workerd rejects named exports that are not handlers).
  */
 import { handleMcp, type Env } from './http';
+import { warmUp } from './warm';
+
+warmUp();
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
