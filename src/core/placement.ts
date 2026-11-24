@@ -193,12 +193,12 @@ export function findOpeningSpotOnWall(
  * Top-left corner of a new, unrotated `width` x `height` box in `room`. Positions on a `step` grid
  * centred on the middle of the room's bounding box are tried nearest-first; the first that is
  * inside the room, overlaps no piece (touching is fine) and stays out of every door's swing,
- * track and doorway wins. If nothing is free, the middle.
+ * track and doorway wins (an L or an ellipse by its true shape). If nothing is free, the middle.
  */
 export function furnitureSpotBox(
   plan: Pick<Plan, 'items' | 'rooms'>,
   room: Room,
-  size: { width: number; height: number },
+  size: { width: number; height: number } & Partial<Pick<Item, 'shape' | 'cut'>>,
   step = PLACEMENT_STEP,
 ): { x: number; y: number } {
   const b = roomBounds(room);
@@ -236,15 +236,16 @@ export function furnitureSpotBox(
   for (const c of candidates) {
     const { x, y } = at(c);
     const parts = itemParts({
-      shape: 'rect',
+      shape: size.shape ?? 'rect',
+      cut: size.cut,
       width,
       depth: height,
       placement: { x: x + width / 2, y: y + height / 2, rotation: 0 },
     });
     if (!rect && !parts.every((p) => partInRoom(p, room))) continue;
     if (pieces.some((p) => partsOverlap(parts, p) > 0)) continue;
-    const shape = shrinkPolygon(parts[0]!, GEOMETRY_EPSILON);
-    if (doorZones.some((z) => polygonsOverlap(shape, z))) continue;
+    const shapes = parts.map((p) => shrinkPolygon(p, GEOMETRY_EPSILON));
+    if (doorZones.some((z) => shapes.some((sh) => polygonsOverlap(sh, z)))) continue;
     return { x, y };
   }
   return at(centre);

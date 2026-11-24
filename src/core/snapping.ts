@@ -2,13 +2,17 @@
  * Snapping, alignment guides and clearance measurements for furniture.
  *
  * Everything works on a piece's axis-aligned bounding box (for a rotated piece, the box around its
- * rotated corners), in feet, in room coordinates (0,0 is the inner corner of the top and left
- * walls). Pure functions: the drag/keyboard code calls them with the visible items and draws the
- * result.
+ * rotated outline: an L's six corners, an ellipse's curve), in feet, in room coordinates (0,0 is
+ * the inner corner of the top and left walls). An L turned by a multiple of 90 degrees also offers
+ * the two inner edges of its notch, to snap and measure to. Pure functions: the drag/keyboard code
+ * calls them with the visible items and draws the result.
  *
  * Cost: {@link buildSnapCandidates} is O(n) once per drag; {@link snapBounds} and
  * {@link measureClearances} are O(n) per pointer move, with no allocation beyond the result.
  */
+import { normalizeDegrees } from './geometry';
+import { isL, itemParts, notchEdges, partsBounds, shapeExtents } from './geometry/shapes';
+import type { Item } from './schema';
 import type { Id, RoomDims } from './types';
 import { feetToDisplay } from './units';
 
@@ -27,8 +31,26 @@ export interface Bounds {
   bottom: number;
 }
 
-/** A piece's unrotated box: top-left corner, size, and rotation about its centre (degrees). */
-type Box = { x: number; y: number; width: number; height: number; rotation: number };
+/**
+ * A piece's unrotated box: top-left corner, size, and rotation about its centre (degrees), with its
+ * shape (a rectangle when left out).
+ */
+type Box = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  shape?: Item['shape'];
+  cut?: Item['cut'];
+};
+
+const shapeOf = (item: Box) => ({
+  shape: item.shape ?? 'rect',
+  width: item.width,
+  depth: item.height,
+  cut: item.cut,
+});
 
 /** A piece as snapping and the measurements see it (`itemBox` of a plan's item, with its id). */
 export interface SnapPiece extends Box {
@@ -47,6 +69,12 @@ export const itemBounds = (item: Box): Bounds => {
   }
   let halfW = item.height / 2;
   let halfH = item.width / 2;
+  if (rot % 90 !== 0 && (item.shape === 'ellipse' || isL(item))) {
+    const e = shapeExtents(shapeOf(item), rot);
+    const cx = item.x + item.width / 2;
+    const cy = item.y + item.height / 2;
+    return { left: cx + e.left, top: cy + e.top, right: cx + e.right, bottom: cy + e.bottom };
+  }
   if (rot % 90 !== 0) {
     const rad = (rot * Math.PI) / 180;
     const cos = Math.abs(Math.cos(rad));
@@ -57,6 +85,22 @@ export const itemBounds = (item: Box): Bounds => {
   const cx = item.x + item.width / 2;
   const cy = item.y + item.height / 2;
   return { left: cx - halfW, top: cy - halfH, right: cx + halfW, bottom: cy + halfH };
+};
+
+/**
+ * The axis-aligned rectangles a piece is measured against: its two parts for an L turned by a
+ * multiple of 90 degrees (so a gap into its notch is measured to the notch), else its bounds.
+ */
+export const itemRects = (item: Box): Bounds[] => {
+  if (!isL(item) || normalizeDegrees(item.rotation) % 90 !== 0) return [itemBounds(item)];
+  return itemParts({
+    ...shapeOf(item),
+    placement: {
+      x: item.x + item.width / 2,
+      y: item.y + item.height / 2,
+      rotation: item.rotation,
+    },
+  }).map((part) => partsBounds([part]));
 };
 
 /** Which feature of a box a line belongs to (left/top = start, right/bottom = end). */
@@ -137,6 +181,10 @@ export function buildSnapCandidates(
       { pos: (b.top + b.bottom) / 2, edge: 'center', source, span: [b.left, b.right] },
       { pos: b.bottom, edge: 'end', source, span: [b.left, b.right] },
     );
+    const centre = { x: item.x + item.width / 2, y: item.y + item.height / 2 };
+    for (const e of notchEdges(shapeOf(item), centre, item.rotation)) {
+      (e.axis === 'x' ? x : y).push({ pos: e.pos, edge: e.facing, source, span: e.span });
+    }
   }
   return { x, y };
 }
@@ -409,19 +457,20 @@ export function measureClearances(
   };
   for (const other of items) {
     if (other.id === movingId || other.visible === false) continue;
-    const o = itemBounds(other);
-    // Overlap across the side (strictly positive, so a corner-to-corner touch is no clear line).
-    const vLo = Math.max(bounds.top, o.top);
-    const vHi = Math.min(bounds.bottom, o.bottom);
-    if (vHi - vLo > SAME) {
-      consider('left', bounds.left - o.right, vLo, vHi);
-      consider('right', o.left - bounds.right, vLo, vHi);
-    }
-    const hLo = Math.max(bounds.left, o.left);
-    const hHi = Math.min(bounds.right, o.right);
-    if (hHi - hLo > SAME) {
-      consider('top', bounds.top - o.bottom, hLo, hHi);
-      consider('bottom', o.top - bounds.bottom, hLo, hHi);
+    for (const o of itemRects(other)) {
+      // Overlap across the side (strictly positive, so a corner-to-corner touch is no clear line).
+      const vLo = Math.max(bounds.top, o.top);
+      const vHi = Math.min(bounds.bottom, o.bottom);
+      if (vHi - vLo > SAME) {
+        consider('left', bounds.left - o.right, vLo, vHi);
+        consider('right', o.left - bounds.right, vLo, vHi);
+      }
+      const hLo = Math.max(bounds.left, o.left);
+      const hHi = Math.min(bounds.right, o.right);
+      if (hHi - hLo > SAME) {
+        consider('top', bounds.top - o.bottom, hLo, hHi);
+        consider('bottom', o.top - bounds.bottom, hLo, hHi);
+      }
     }
   }
   const out: Measurement[] = [];
