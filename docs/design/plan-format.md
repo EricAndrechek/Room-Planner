@@ -804,6 +804,8 @@ the options are Workers Paid or trimming the SDK's per-request work.
   (`initialize`, `notifications/initialized`, `tools/list`) before its first call, and an agent
   loops on `check_layout`. Cloudflare's guidance prefers a key other than IP; with no accounts
   there is none, and the counters are per location and approximate, which is acceptable.
+  Branch previews do not inherit bindings, so the `previews` block repeats it on its own
+  namespace (the first preview, without it, never limited a 200-request burst).
 - Over the limit: HTTP 429 with `Retry-After` and a JSON-RPC error that says to wait.
 - The zone has Bot Fight Mode off and no AI-bot blocking (checked read-only). Keep it that way: on
   a Free zone Bot Fight Mode cannot be skipped for one path and would challenge MCP clients.

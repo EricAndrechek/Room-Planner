@@ -330,8 +330,8 @@ test.describe('plan viewer', () => {
 test.describe('the /mcp endpoint', () => {
   test.describe.configure({ mode: 'serial' });
 
-  test.beforeEach(async ({ request, browserName }) => {
-    test.skip(browserName !== 'chromium', 'HTTP only: one engine is enough');
+  test.beforeEach(async ({ request }) => {
+    test.skip(test.info().project.name !== 'chromium', 'HTTP only: one project is enough');
     const card = await request.get('/mcp/server-card');
     test.skip(card.status() !== 200, 'This server has no Worker (astro preview)');
   });

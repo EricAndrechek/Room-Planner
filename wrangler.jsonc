@@ -27,9 +27,14 @@
   // Custom domain. Cloudflare creates the DNS record itself. The old hostname
   // (roomplanner.andrechek.com) is a Cloudflare redirect rule, not part of this repo (see docs/DEPLOY.md).
   "routes": [{ "pattern": "room-planner.andrechek.com", "custom_domain": true }],
-  // Branch Previews: Workers Builds runs `npx wrangler preview` for non-main branches,
-  // served on workers.dev (noindex). The block can stay empty; top-level settings apply.
-  "previews": {},
+  // Branch Previews: Workers Builds runs `npx wrangler preview` for non-main branches, served on
+  // workers.dev (noindex). Previews do not inherit bindings, so the rate limit is repeated here,
+  // on its own namespace so previews never share production's counters.
+  "previews": {
+    "ratelimits": [
+      { "name": "MCP_LIMIT", "namespace_id": "4705", "simple": { "limit": 120, "period": 60 } },
+    ],
+  },
   "preview_urls": true,
   "workers_dev": true,
   "observability": { "enabled": true },
