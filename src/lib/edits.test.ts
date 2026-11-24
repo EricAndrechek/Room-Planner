@@ -12,6 +12,8 @@ import {
   moveOpeningToWall,
   movePiecesInside,
   openingSpot,
+  toggleHidden,
+  toggleLock,
   updateOpening,
 } from './edits';
 import { boxOf, itemWarnings, mainRoom, openingPlace } from './plans';
@@ -303,5 +305,17 @@ describe('movePiecesInside', () => {
     expect(boxOf(fixed.items[1]!)).toMatchObject({ y: 0 });
     expect(fixed.items.slice(2)).toEqual(plan.items.slice(2));
     expect(movePiecesInside(plan)).toBe(plan);
+  });
+});
+
+describe('toggleLock and toggleHidden', () => {
+  it('turn the flag on, and off again', () => {
+    const plan = toPlan(defaultLayout());
+    const locked = toggleLock(plan, 'item-1');
+    expect(locked.items[0]!.locked).toBe(true);
+    expect(toggleLock(locked, 'item-1').items[0]).toEqual(plan.items[0]);
+    const hidden = toggleHidden(plan, 'item-1');
+    expect(hidden.items[0]!.hidden).toBe(true);
+    expect(toggleHidden(hidden, 'item-1').items[0]).toEqual(plan.items[0]);
   });
 });
