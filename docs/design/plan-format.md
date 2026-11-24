@@ -855,7 +855,9 @@ and Depth; equal values give a circle. Resizing, rotating, snapping and colour w
 Each placed piece's card gets "Take out of room"; each tray piece gets "Place", which puts it in
 the free spot nearest the middle of the room in view. On desktop a piece can also be dragged
 between the canvas and the tray. Pieces in the tray keep their size, colour and name, appear in
-exports as a list under the drawing, and never warn. Deleting stays a separate action.
+exports as a list under the drawing, and never warn. Deleting stays a separate action. The shipped UI
+calls this "Set aside": a toggle "In the room · Set aside (n)" at the top of the Items step, and a
+piece goes back onto the plan by dragging it there or tapping Place and then the plan.
 
 **Several rooms.**
 

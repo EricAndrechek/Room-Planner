@@ -25,9 +25,11 @@ const shortcutGroups = SHORTCUT_GROUPS.map((g) => ({
 const sections = [
   { id: 'getting-started', label: 'Getting started' },
   { id: 'units', label: 'Units & measurements' },
+  { id: 'rooms', label: 'Rooms & floor plans' },
   { id: 'doors-windows', label: 'Doors & windows' },
   { id: 'furniture', label: 'Furniture' },
   { id: 'rotation', label: 'Rotating items' },
+  { id: 'set-aside', label: 'Set aside' },
   { id: 'locking', label: 'Locking & hiding' },
   { id: 'warnings', label: 'Overlap & boundary warnings' },
   { id: 'projects', label: 'Saving & floor plans' },
@@ -171,6 +173,67 @@ const sections = [
       </p>
     </section>
 
+    <section id="rooms">
+      <h2>Rooms &amp; floor plans</h2>
+      <p>
+        A plan is one floor with any number of rooms. Room Setup (step 1) starts with a{' '}
+        <strong>Rooms</strong> list: each room has a name, its size and area, and the list shows the
+        total area of the floor.
+      </p>
+      <ul>
+        <li>
+          <strong>Add room</strong> — puts a new 10 ft × 10 ft rectangle against a free side of the
+          selected room, flush, so the two share a wall.
+        </li>
+        <li>
+          <strong>Rename</strong> — click a room's name in the list and type, for example “Bedroom”
+          or “Hallway”.
+        </li>
+        <li>
+          <strong>Edit a room</strong> — select it in the list, or tap it on the plan, then use the
+          usual tools: Rectangle, L-shape or Custom shape, size, the wall list, doors and windows.
+        </li>
+        <li>
+          <strong>Move a room</strong> — drag it on the plan (mouse or touch). Its walls snap to
+          other rooms' walls and corners, so walls become shared. The arrow keys nudge the selected
+          room (<kbd>Shift</kbd> for bigger steps); its X/Y fields are the precise way. Rooms can't
+          overlap: a move that would overlap another room is undone and the room goes back.
+        </li>
+        <li>
+          <strong>Duplicate or delete</strong> — a duplicate copies the shape, doors and windows,
+          not the furniture. Deleting a room sets its furniture aside rather than losing it, and
+          Undo brings everything back.
+        </li>
+        <li>
+          <strong>Wall thickness</strong> — rooms share walls with zero thickness, so an interior
+          wall is drawn as a thin line, and a floor drawn here is a little narrower than the real
+          building by the thickness of its interior walls.
+        </li>
+      </ul>
+      <h3>Doors between rooms</h3>
+      <p>
+        A door on a wall two rooms share connects them. It is drawn once, its card says which rooms
+        it joins (“Bedroom ↔ Hallway”), and it can swing into either room (<em>Swing in</em> or{' '}
+        <em>Swing out</em>). Furniture in its way is flagged in both rooms. Windows belong on
+        outside walls; one on a shared wall gets a warning.
+      </p>
+      <h3>Furniture in rooms</h3>
+      <p>
+        A piece belongs to whichever room it is in. Drag it through a doorway into another room and
+        it just moves there. A piece straddling two rooms, such as a rug across a doorway, shows the
+        “outside the room” warning for now. <strong>Add item</strong> and placing a set-aside piece
+        go to the selected room.
+      </p>
+      <h3>Zoom, export and sharing</h3>
+      <p>
+        <strong>Fit</strong> shows the whole floor; the room chips over the plan zoom to one room,
+        which is handy on a phone. Room names and areas are drawn on the plan and in exports.
+        Exports (PNG, PDF and print) draw the whole floor on one page with each room's name and
+        area, followed by the Set aside list. Share links, QR codes and JSON carry the whole floor
+        with its room names, and older single-room links still open as before.
+      </p>
+    </section>
+
     <section id="doors-windows">
       <h2>Doors &amp; windows</h2>
       <p>Add as many doors and windows as you need, on any wall.</p>
@@ -244,6 +307,44 @@ const sections = [
         selected item 90°, or <kbd>Alt</kbd>/<kbd>Option</kbd>+<kbd>R</kbd> to turn it 1° at a time
         (add <kbd>Shift</kbd> to turn the other way).
       </p>
+    </section>
+
+    <section id="set-aside">
+      <h2>Set aside</h2>
+      <p>
+        Set aside takes a piece out of the plan without deleting it. At the top of the Items step
+        (step 2) a toggle switches between <strong>In the room</strong> and{' '}
+        <strong>Set aside (n)</strong>.
+      </p>
+      <ul>
+        <li>
+          <strong>Set a piece aside</strong> — select it (click or tap) and use the action bar that
+          appears next to it, or in the top row of the bottom sheet on a phone: <em>Rotate 90°</em>,
+          <em>Duplicate</em>, <em>Set aside</em> and <em>Delete</em>. Delete shows an Undo toast
+          instead of asking. Each card in the list has a “…” menu with the same actions, and{' '}
+          <kbd>I</kbd> sets the selected piece aside (<kbd>R</kbd> rotates, <kbd>Delete</kbd>{' '}
+          deletes).
+        </li>
+        <li>
+          <strong>What it keeps</strong> — a set-aside piece keeps its name, size, color and shape,
+          never raises warnings, and is listed under the drawing in exports as “Set aside”.
+        </li>
+        <li>
+          <strong>Put it back by dragging</strong> — drag it from the Set aside list onto the plan
+          (mouse or finger) and drop it exactly where it should go. It snaps, and lands in the room
+          under the drop point.
+        </li>
+        <li>
+          <strong>Put it back by tapping</strong> — tap <strong>Place</strong>, then tap the plan
+          where it should go; a preview follows your pointer or finger, and Cancel stops. With the
+          keyboard, pressing Place with <kbd>Enter</kbd> or <kbd>Space</kbd> puts it in a free spot
+          in the selected room.
+        </li>
+        <li>
+          <strong>Moving between rooms</strong> — set aside is shared by the whole floor, so it is
+          also how you move a piece to a room far away.
+        </li>
+      </ul>
     </section>
 
     <section id="locking">

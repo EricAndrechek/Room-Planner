@@ -20,6 +20,7 @@ A powerful, intuitive tool for planning room layouts with furniture, doors, and 
 
 - **Flexible Dimensions** - Set room size in multiple unit systems (feet & inches, decimal feet, inches, meters, centimeters)
 - **Smart Input Parsing** - Type dimensions naturally (e.g., `12'6"`, `150in`, `3.5m`, `350cm`)
+- **Floor Plans with Several Rooms** - Add, name and drag rooms into place; walls snap and are shared, and a door on a shared wall connects two rooms
 - **Multiple Doors & Windows** - Add unlimited doors and windows with customizable positions
 - **Door Types** - Swing-in, swing-out, and sliding door options
 
@@ -31,6 +32,7 @@ A powerful, intuitive tool for planning room layouts with furniture, doors, and 
 - **Color Coding** - 10 preset colors plus custom hex color picker
 - **Visibility Toggle** - Hide/show items to compare layouts
 - **Item Locking** - Lock furniture to prevent accidental moves
+- **Set Aside** - Take a piece out of the plan without deleting it, then drag it back or tap where it should go
 
 ### 💾 Save & Share
 

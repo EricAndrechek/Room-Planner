@@ -23,7 +23,10 @@ Key facts:
 - Platform: any modern web browser on desktop, tablet or phone. Installable as a progressive web app; works offline after the first visit.
 - Privacy: plans live in the browser's local storage. Anonymous usage analytics (never layouts or plan names) can be turned off on the help page.
 - Share links: a link carries the whole layout in the URL fragment (\`#s=\` followed by base64url-encoded, deflate-compressed JSON), so the layout is never sent to a server. Opening a link adds a copy of the layout as a new plan in the recipient's browser; the link is a snapshot.
-- Scope: one room per plan (a rectangle, an L-shape or any outline with straight walls), drawn in 2D from above; furniture pieces are rectangles, L-shapes or ellipses with a name, size, color and rotation. For a whole home, make one plan per room.
+- Scope: one floor per plan, with any number of connected rooms (each a rectangle, an L-shape or any outline with straight walls), drawn in 2D from above. Rooms share walls with zero thickness, so a plan is a little narrower than the real building. Furniture pieces are rectangles, L-shapes or ellipses with a name, size, color and rotation.
+- Doors between rooms: a door on a wall two rooms share connects them and can swing into either room; furniture in its way is flagged in both rooms.
+- Set aside: a piece can be taken out of the plan without deleting it. It keeps its name, size, color and shape, never raises warnings, and is listed under the drawing in exports. It can be dragged back onto the plan, or placed by tapping where it goes.
+- Plan data: in the plan's JSON, \`rooms\` may hold several rooms in one floor coordinate space, a door on a shared wall connects two rooms, and an item without \`placement\` is set aside.
 
 Features:
 
