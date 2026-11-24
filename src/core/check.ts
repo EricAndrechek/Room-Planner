@@ -11,9 +11,10 @@ import {
   shrinkPolygon,
   type Point,
 } from './geometry';
-import { openingDoorGeometry, type DoorGeometry } from './geometry/doors';
+import { DOORWAY_DEPTH, openingDoorGeometry, sweptArea, type DoorGeometry } from './geometry/doors';
+import { neighbourOf, outlinesOverlap, roomName, sharedLength } from './floor';
 import { itemParts, partsBounds } from './geometry/shapes';
-import { isRectangle, openingInFrame, roomBounds, wallFrame } from './geometry/walls';
+import { frameAt, isRectangle, openingInFrame, roomBounds, wallFrame } from './geometry/walls';
 import type { Item, Opening, Plan, Room } from './schema';
 import type { UnitSystem } from './types';
 import { feetToDisplay } from './units';
@@ -26,6 +27,7 @@ export type IssueCode =
   | 'opening_overlap'
   | 'opening_off_wall'
   | 'room_overlap'
+  | 'window_between_rooms'
   | 'tight_clearance'
   | 'unknown_field';
 
@@ -174,12 +176,39 @@ export const activePieces = (plan: Pick<Plan, 'items'>) =>
     .filter((i) => i.placement && !i.hidden)
     .map((item) => ({ item, parts: itemParts(item) }));
 
-/** Every door with its shape, in plan order (rooms, then the room's openings). */
+/**
+ * Every door with its shape, in plan order (rooms, then the room's openings), and the areas it
+ * needs kept clear: `clearance` (what the door sweeps or runs in) and `doorways` (the passage in
+ * front of it). A door between two rooms (on a wall they share) has both on both sides: its
+ * swing into whichever room it opens into, and a doorway in each room.
+ */
 export const planDoors = (plan: Pick<Plan, 'rooms'>) =>
   plan.rooms.flatMap((room) =>
     room.openings
       .filter((o) => o.kind === 'door')
-      .map((door) => ({ room, door, geometry: openingDoorGeometry(room, door) as DoorGeometry })),
+      .map((door) => {
+        const geometry = openingDoorGeometry(room, door) as DoorGeometry & {
+          frame: ReturnType<typeof wallFrame>;
+        };
+        const other = plan.rooms.length > 1 ? neighbourOf(plan, room, door) : null;
+        const clearance = [...geometry.clearance];
+        const doorways = [geometry.doorway];
+        if (other) {
+          // Outward swings sweep the next room; and it has a doorway of its own.
+          if (geometry.side === 'outside')
+            clearance.push(...geometry.leaves.map((l) => sweptArea(l)));
+          const f = geometry.frame;
+          const a0 = geometry.position;
+          const a1 = a0 + geometry.width;
+          doorways.push([
+            frameAt(f, a0, 0),
+            frameAt(f, a1, 0),
+            frameAt(f, a1, -DOORWAY_DEPTH),
+            frameAt(f, a0, -DOORWAY_DEPTH),
+          ]);
+        }
+        return { room, door, geometry, other, clearance, doorways };
+      }),
   );
 
 const nameOf = (item: Item) => item.label.trim() || 'A piece';
@@ -187,8 +216,10 @@ const nameOf = (item: Item) => item.label.trim() || 'A piece';
 const wallName = (room: Room, wall: number) =>
   isRectangle(room) ? `the ${WALL_NAMES[wall]} wall` : `wall ${wall}`;
 
-const doorName = (plan: Plan, room: Room, door: Opening) =>
-  `the door on ${wallName(room, door.wall)}${plan.rooms.length > 1 ? ` of ${room.name || room.id}` : ''}`;
+const doorName = (plan: Plan, room: Room, door: Opening, other?: Room | null) =>
+  other
+    ? `the door between ${roomName(plan, room)} and ${roomName(plan, other)}`
+    : `the door on ${wallName(room, door.wall)}${plan.rooms.length > 1 ? ` of ${roomName(plan, room)}` : ''}`;
 
 /** Every issue with the plan's layout, in a stable order. */
 export function checkLayout(plan: Plan, options: CheckOptions = {}): Issue[] {
@@ -227,20 +258,20 @@ export function checkLayout(plan: Plan, options: CheckOptions = {}): Issue[] {
   for (const { item, parts } of pieces) {
     const shapes = parts.map((p) => shrinkPolygon(p, GEOMETRY_EPSILON));
     const hits = (zone: Point[]) => shapes.some((sh) => polygonsOverlap(sh, zone));
-    for (const { room, door, geometry } of doors) {
-      if (geometry.clearance.some(hits)) {
+    for (const { room, door, other, clearance, doorways } of doors) {
+      if (clearance.some(hits)) {
         if (!want('door_blocked')) continue;
         issues.push({
           code: 'door_blocked',
           severity: 'warning',
-          message: `${nameOf(item)} is in the way of ${doorName(plan, room, door)}.`,
+          message: `${nameOf(item)} is in the way of ${doorName(plan, room, door, other)}.`,
           ids: [item.id, door.id],
         });
-      } else if (want('doorway_blocked') && hits(geometry.doorway)) {
+      } else if (want('doorway_blocked') && doorways.some(hits)) {
         issues.push({
           code: 'doorway_blocked',
           severity: 'warning',
-          message: `${nameOf(item)} stands in the doorway of ${doorName(plan, room, door)}.`,
+          message: `${nameOf(item)} stands in the doorway of ${doorName(plan, room, door, other)}.`,
           ids: [item.id, door.id],
         });
       }
@@ -285,18 +316,31 @@ export function checkLayout(plan: Plan, options: CheckOptions = {}): Issue[] {
   // Rooms that overlap (rooms that share a wall only touch).
   plan.rooms.forEach((a, i) => {
     for (const b of want('room_overlap') ? plan.rooms.slice(i + 1) : []) {
-      const sa = shrinkPolygon(a.outline, GEOMETRY_EPSILON);
-      const sb = shrinkPolygon(b.outline, GEOMETRY_EPSILON);
-      if (polygonsOverlap(sa, sb)) {
+      if (outlinesOverlap(a, b)) {
         issues.push({
           code: 'room_overlap',
           severity: 'warning',
-          message: `${a.name || a.id} overlaps ${b.name || b.id}.`,
+          message: `${roomName(plan, a)} overlaps ${roomName(plan, b)}.`,
           ids: [a.id, b.id],
         });
       }
     }
   });
+
+  // Windows on a wall another room shares look into that room, not outside.
+  for (const room of want('window_between_rooms') && plan.rooms.length > 1 ? plan.rooms : []) {
+    for (const o of room.openings) {
+      if (o.kind !== 'window') continue;
+      if (sharedLength(plan, room, o) <= GEOMETRY_EPSILON) continue;
+      const other = neighbourOf(plan, room, o);
+      issues.push({
+        code: 'window_between_rooms',
+        severity: 'warning',
+        message: `The window ${o.id} is on a wall ${roomName(plan, room)} shares with ${other ? roomName(plan, other) : 'another room'}.`,
+        ids: [o.id, room.id],
+      });
+    }
+  }
 
   // Tight clearances: straight gaps between pieces, and to the walls of a rectangular room.
   const bounds = pieces.map((p) => partsBounds(p.parts));

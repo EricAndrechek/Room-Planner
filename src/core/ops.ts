@@ -355,3 +355,20 @@ export function removeRoom(plan: Plan, roomId: string): Plan {
     }),
   };
 }
+
+/** Add a room (given an id with `nextId` if it has none). Its outline must be clockwise. */
+export const addRoom = (plan: Plan, room: Partial<Room> & Pick<Room, 'outline'>): Plan => ({
+  ...plan,
+  rooms: [...plan.rooms, { openings: [], ...room, id: room.id ?? nextId(plan, 'room') } as Room],
+});
+
+/** Rename a room: an empty name removes it (the room is then called "Room N"). */
+export function renameRoom(plan: Plan, roomId: string, name: string): Plan {
+  const r = roomIndex(plan, roomId);
+  const room = plan.rooms[r];
+  if (!room) return plan;
+  const trimmed = name.trim().slice(0, 80);
+  if ((room.name ?? '') === trimmed) return plan;
+  const { name: _old, ...rest } = room;
+  return withRoom(plan, r, (trimmed ? { ...rest, name: trimmed } : rest) as Room);
+}

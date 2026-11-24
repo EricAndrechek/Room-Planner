@@ -228,10 +228,7 @@ export function furnitureSpotBox(
   candidates.sort((p, q) => p.d - q.d || p.y - q.y || p.x - q.x);
 
   const pieces = activePieces(plan).map((p) => p.parts);
-  const doorZones: Point[][] = planDoors(plan).flatMap(({ geometry: g }) => [
-    ...g.clearance,
-    g.doorway,
-  ]);
+  const doorZones: Point[][] = planDoors(plan).flatMap((d) => [...d.clearance, ...d.doorways]);
   const rect = isRectangle(room);
   for (const c of candidates) {
     const { x, y } = at(c);
