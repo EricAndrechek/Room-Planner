@@ -1,0 +1,174 @@
+{
+  "_comment": "Links in the 2.0 fragment format (#s= deflate-raw, #j= plain), UTF-8, written by encodeShareFragment(toShareConfig(layout, name, \"cm\")) at e3c6075 for the layout in doors-storage.json, with a non-Latin name. Lengths in centimetres. \"json\" is what the Share dialog JSON box shows for the same plan.",
+  "deflate": "https://room-planner.andrechek.com/#s=ndQxj9MwFAfwr3J6rMaKHduxvQEnsbEwohuSxm2tS-IqcemVqjvbfQAGJMTMChsS91lghY-AcpeS9FK3FVsSWe_n9_6ON1ClpQENL-8-N968s2Vp6osfXy9-fvn06_33iz8fP9z-_nYLCJaV9a_XjTclaJiUgKB2rry0ZQN6Ayub-zloESksEMyNnc09aB5RrOgWQe5c3YB-swGbgyZot14RzBiChWust64CTSTFUiJYpUUBGjLnvWutua1m7TYLM_WAwK8X7VuzstXsqa1gi7rKieI8ZgmnCRGPla6mdwsYknHEsDwpoIfHZ9WsMO02oxEZc6YCZH0_jiEqIqxEj-4W7Klu6ceNsViOxvd4WEFmv7fcLbPCnNccJyoJsF3RQYYcU3YCPdibiFgIeRwaIwSzcGqFzW01GwtJWBhnRKXCPBzSwk2uzYEuJCHs_IROIJmduiIfI4rK6Nw8YiWOBOIWpjo0KxExws_v4zjSH-jxUbtqkSp3q0MXBKEEK7p3urovg4PRlrDelHsFijQz7YLnJoe-HKeY9fcTURITiuAGNIkEFhLBGnTUXm0-feAiBBNXuBo0PFHxhE_bam9tY7N2_75emt3gaG--ass3Pq0GNOM4oT3dvd78-0ePwdNJHrMgHP8nTLnC0YmWj8usly9r0zSmDrK72G7u669BUxLjWITcXGZsakIuH7imue7R3X03Rrtbft2HfhgWxiRZEoJFD7-Ypzbc7nDKFCvJup4FZu3IA8POszRhI_tq-xc",
+  "plain": "https://room-planner.andrechek.com/#j=eyJuYW1lIjoiR8Okc3RlemltbWVyIMK3IOWuouaIvyDwn5uP77iPIiwidW5pdFN5c3RlbSI6ImNtIiwicm9vbURpbXMiOnsid2lkdGgiOjYwOS42LCJoZWlnaHQiOjUwMi45Mn0sImRvb3JzIjpbeyJpZCI6MSwid2lkdGgiOjkxLjQ0LCJwb3NpdGlvbiI6MTgyLjg4LCJ3YWxsIjoiYm90dG9tIiwiaGluZ2UiOiJsZWZ0IiwidHlwZSI6InN3aW5nLWluIn0seyJpZCI6MTc5NTUzNDc1MjcxNiwid2lkdGgiOjkxLjQ0LCJ3YWxsIjoidG9wIiwicG9zaXRpb24iOjMwNC44LCJoaW5nZSI6ImxlZnQiLCJ0eXBlIjoic3dpbmctaW4iLCJzd2luZ0FuZ2xlIjoxODB9LHsiaWQiOjE3OTU1MzQ3NTM1NDksIndpZHRoIjo5MS40NCwid2FsbCI6InJpZ2h0IiwicG9zaXRpb24iOjYwLjk2LCJoaW5nZSI6InJpZ2h0IiwidHlwZSI6InN3aW5nLW91dCJ9LHsiaWQiOjE3OTU1MzQ3NTQzODEsIndpZHRoIjo5MS40NCwid2FsbCI6ImJvdHRvbSIsInBvc2l0aW9uIjo2MC45NiwiaGluZ2UiOiJsZWZ0IiwidHlwZSI6ImRvdWJsZS1pbiIsInN3aW5nQW5nbGUiOjE4MH0seyJpZCI6MTc5NTUzNDc1NTE5Nywid2lkdGgiOjkxLjQ0LCJ3YWxsIjoibGVmdCIsInBvc2l0aW9uIjoxNS4yNCwiaGluZ2UiOiJsZWZ0IiwidHlwZSI6ImRvdWJsZS1vdXQifSx7ImlkIjoxNzk1NTM0NzU2MDQ3LCJ3aWR0aCI6OTEuNDQsIndhbGwiOiJ0b3AiLCJwb3NpdGlvbiI6NDExLjQ4LCJoaW5nZSI6ImxlZnQiLCJ0eXBlIjoic2xpZGluZyJ9LHsiaWQiOjE3OTU1MzQ3NTcwNDcsIndpZHRoIjo5MS40NCwid2FsbCI6InJpZ2h0IiwicG9zaXRpb24iOjI4OS41NiwiaGluZ2UiOiJyaWdodCIsInR5cGUiOiJwb2NrZXQifSx7ImlkIjoxNzk1NTM0NzU4MTE0LCJ3aWR0aCI6OTEuNDQsIndhbGwiOiJib3R0b20iLCJwb3NpdGlvbiI6Mjg5LjU2LCJoaW5nZSI6InJpZ2h0IiwidHlwZSI6ImJpZm9sZCJ9LHsiaWQiOjE3OTU1MzQ3NTkyODAsIndpZHRoIjo5MS40NCwid2FsbCI6ImxlZnQiLCJwb3NpdGlvbiI6Mzk2LjI0LCJoaW5nZSI6ImxlZnQiLCJ0eXBlIjoib3BlbmluZyJ9LHsiaWQiOjE3OTU1MzQ3NjA0MTUsIndpZHRoIjo5MS40NCwid2FsbCI6ImJvdHRvbSIsInBvc2l0aW9uIjozOTYuMjQsImhpbmdlIjoibGVmdCIsInR5cGUiOiJzd2luZy1vdXQiLCJzd2luZ0FuZ2xlIjoxODB9XSwid2luZG93cyI6W3siaWQiOjEsIndpZHRoIjoxMjEuOTIsInBvc2l0aW9uIjoxMjEuOTIsIndhbGwiOiJ0b3AifV0sIml0ZW1zIjpbeyJpZCI6MSwibGFiZWwiOiJCZWQiLCJ3aWR0aCI6MTUyLjQsImhlaWdodCI6MTk4LjEyLCJ4IjoxMDYuNjgsInkiOjAsInJvdGF0aW9uIjowLCJjb2xvciI6IiM5M2M1ZmQiLCJ2aXNpYmxlIjp0cnVlfSx7ImlkIjoyLCJsYWJlbCI6Ik5pZ2h0c3RhbmQiLCJ3aWR0aCI6NDUuNzIsImhlaWdodCI6NDUuNzIsIngiOjYwLjk2LCJ5IjowLCJyb3RhdGlvbiI6MCwiY29sb3IiOiIjZmNkMzRkIiwidmlzaWJsZSI6dHJ1ZX0seyJpZCI6MywibGFiZWwiOiJOaWdodHN0YW5kIiwid2lkdGgiOjQ1LjcyLCJoZWlnaHQiOjQ1LjcyLCJ4IjoyNTkuMDgsInkiOjAsInJvdGF0aW9uIjowLCJjb2xvciI6IiNmY2QzNGQiLCJ2aXNpYmxlIjp0cnVlfSx7ImlkIjo0LCJsYWJlbCI6IkRyZXNzZXIiLCJ3aWR0aCI6NDUuNzIsImhlaWdodCI6MTIxLjkyLCJ4IjowLCJ5IjoyMTMuMzYsInJvdGF0aW9uIjowLCJjb2xvciI6IiNkOGI0ZmUiLCJ2aXNpYmxlIjp0cnVlfSx7ImlkIjo1LCJsYWJlbCI6IkRlc2siLCJ3aWR0aCI6NjAuOTYsImhlaWdodCI6MTIxLjkyLCJ4IjozMDQuOCwieSI6MTk4LjEyLCJyb3RhdGlvbiI6MCwiY29sb3IiOiIjNmVlN2I3IiwidmlzaWJsZSI6dHJ1ZX0seyJpZCI6NiwibGFiZWwiOiJDaGFpciIsIndpZHRoIjo0NS43MiwiaGVpZ2h0Ijo0NS43MiwieCI6MjUyLjk4NCwieSI6MjE2LjQwOCwicm90YXRpb24iOjAsImNvbG9yIjoiI2ZkYmE3NCIsInZpc2libGUiOnRydWV9XX0",
+  "json": {
+    "name": "Gästezimmer · 客房 🛏️",
+    "unitSystem": "cm",
+    "roomDims": {
+      "width": 609.6,
+      "height": 502.92
+    },
+    "doors": [
+      {
+        "id": 1,
+        "width": 91.44,
+        "position": 182.88,
+        "wall": "bottom",
+        "hinge": "left",
+        "type": "swing-in"
+      },
+      {
+        "id": 1795534752716,
+        "width": 91.44,
+        "wall": "top",
+        "position": 304.8,
+        "hinge": "left",
+        "type": "swing-in",
+        "swingAngle": 180
+      },
+      {
+        "id": 1795534753549,
+        "width": 91.44,
+        "wall": "right",
+        "position": 60.96,
+        "hinge": "right",
+        "type": "swing-out"
+      },
+      {
+        "id": 1795534754381,
+        "width": 91.44,
+        "wall": "bottom",
+        "position": 60.96,
+        "hinge": "left",
+        "type": "double-in",
+        "swingAngle": 180
+      },
+      {
+        "id": 1795534755197,
+        "width": 91.44,
+        "wall": "left",
+        "position": 15.24,
+        "hinge": "left",
+        "type": "double-out"
+      },
+      {
+        "id": 1795534756047,
+        "width": 91.44,
+        "wall": "top",
+        "position": 411.48,
+        "hinge": "left",
+        "type": "sliding"
+      },
+      {
+        "id": 1795534757047,
+        "width": 91.44,
+        "wall": "right",
+        "position": 289.56,
+        "hinge": "right",
+        "type": "pocket"
+      },
+      {
+        "id": 1795534758114,
+        "width": 91.44,
+        "wall": "bottom",
+        "position": 289.56,
+        "hinge": "right",
+        "type": "bifold"
+      },
+      {
+        "id": 1795534759280,
+        "width": 91.44,
+        "wall": "left",
+        "position": 396.24,
+        "hinge": "left",
+        "type": "opening"
+      },
+      {
+        "id": 1795534760415,
+        "width": 91.44,
+        "wall": "bottom",
+        "position": 396.24,
+        "hinge": "left",
+        "type": "swing-out",
+        "swingAngle": 180
+      }
+    ],
+    "windows": [
+      {
+        "id": 1,
+        "width": 121.92,
+        "position": 121.92,
+        "wall": "top"
+      }
+    ],
+    "items": [
+      {
+        "id": 1,
+        "label": "Bed",
+        "width": 152.4,
+        "height": 198.12,
+        "x": 106.68,
+        "y": 0,
+        "rotation": 0,
+        "color": "#93c5fd",
+        "visible": true
+      },
+      {
+        "id": 2,
+        "label": "Nightstand",
+        "width": 45.72,
+        "height": 45.72,
+        "x": 60.96,
+        "y": 0,
+        "rotation": 0,
+        "color": "#fcd34d",
+        "visible": true
+      },
+      {
+        "id": 3,
+        "label": "Nightstand",
+        "width": 45.72,
+        "height": 45.72,
+        "x": 259.08,
+        "y": 0,
+        "rotation": 0,
+        "color": "#fcd34d",
+        "visible": true
+      },
+      {
+        "id": 4,
+        "label": "Dresser",
+        "width": 45.72,
+        "height": 121.92,
+        "x": 0,
+        "y": 213.36,
+        "rotation": 0,
+        "color": "#d8b4fe",
+        "visible": true
+      },
+      {
+        "id": 5,
+        "label": "Desk",
+        "width": 60.96,
+        "height": 121.92,
+        "x": 304.8,
+        "y": 198.12,
+        "rotation": 0,
+        "color": "#6ee7b7",
+        "visible": true
+      },
+      {
+        "id": 6,
+        "label": "Chair",
+        "width": 45.72,
+        "height": 45.72,
+        "x": 252.984,
+        "y": 216.408,
+        "rotation": 0,
+        "color": "#fdba74",
+        "visible": true
+      }
+    ]
+  }
+}

@@ -24,9 +24,12 @@ export const LEGACY_QUERY_KEY = 'config';
 
 // --- new (fragment) format ---------------------------------------------------------
 
-/** Encode a config into a URL fragment payload, e.g. `s=...` (no leading `#`). */
+/**
+ * Encode a payload into a URL fragment, e.g. `s=...` (no leading `#`): a v3 config, or a plan in
+ * the compact form (an array).
+ */
 export const encodeShareFragment = async (
-  config: ShareConfig,
+  config: ShareConfig | readonly unknown[],
   { compress = supportsCompression() }: { compress?: boolean } = {},
 ): Promise<string> => {
   const json = new TextEncoder().encode(JSON.stringify(config));
@@ -34,32 +37,52 @@ export const encodeShareFragment = async (
   return `${HASH_KEY_PLAIN}=${bytesToBase64Url(json)}`;
 };
 
-const parseConfig = (json: string): ShareConfig | null => {
+/**
+ * What a link's payload turned out to be: absent, present but undecodable (cut off or mangled:
+ * bad base64, bad deflate data, not JSON), not decodable in this browser (`#s=` without
+ * DecompressionStream), or JSON of any shape (the caller decides what it is).
+ */
+export type DecodedPayload =
+  | { status: 'none' }
+  | { status: 'damaged' }
+  | { status: 'unsupported' }
+  | { status: 'ok'; data: unknown };
+
+const parseJson = (json: string): DecodedPayload => {
   try {
-    const parsed: unknown = JSON.parse(json);
-    return isShareConfig(parsed) ? parsed : null;
+    return { status: 'ok', data: JSON.parse(json) as unknown };
   } catch {
-    return null;
+    return { status: 'damaged' };
   }
 };
 
-/** Decode a fragment (with or without the leading `#`). Returns null if it isn't a share link. */
-export const decodeShareFragment = async (hash: string): Promise<ShareConfig | null> => {
+/** Decode a fragment's payload (with or without the leading `#`), whatever JSON it holds. */
+export const decodeFragmentPayload = async (hash: string): Promise<DecodedPayload> => {
   const params = new URLSearchParams(hash.replace(/^#/, ''));
+  const deflated = params.get(HASH_KEY_DEFLATE);
+  const plain = params.get(HASH_KEY_PLAIN);
   try {
-    const deflated = params.get(HASH_KEY_DEFLATE);
     if (deflated) {
-      if (!supportsCompression()) return null;
+      if (!supportsCompression()) return { status: 'unsupported' };
       const bytes = await inflate(base64UrlToBytes(deflated));
-      return parseConfig(new TextDecoder().decode(bytes));
+      return parseJson(new TextDecoder().decode(bytes));
     }
-    const plain = params.get(HASH_KEY_PLAIN);
-    if (plain) return parseConfig(new TextDecoder().decode(base64UrlToBytes(plain)));
+    if (plain) return parseJson(new TextDecoder().decode(base64UrlToBytes(plain)));
   } catch {
-    return null;
+    return { status: 'damaged' };
   }
-  return null;
+  // `#s=` or `#j=` with nothing after it.
+  return params.has(HASH_KEY_DEFLATE) || params.has(HASH_KEY_PLAIN)
+    ? { status: 'damaged' }
+    : { status: 'none' };
 };
+
+const asConfig = (d: DecodedPayload): ShareConfig | null =>
+  d.status === 'ok' && isShareConfig(d.data) ? d.data : null;
+
+/** Decode a fragment (with or without the leading `#`). Returns null if it isn't a v3 share link. */
+export const decodeShareFragment = async (hash: string): Promise<ShareConfig | null> =>
+  asConfig(await decodeFragmentPayload(hash));
 
 // --- legacy (?config=) format ---------------------------------------------------------
 
@@ -75,13 +98,16 @@ export const encodeLegacyConfig = (config: ShareConfig): string => btoa(JSON.str
  * Latin-1 names come back the same). One tolerance added: a `+` that a chat
  * app left unescaped arrives as a space; turn it back into `+`.
  */
-export const decodeLegacyConfig = (value: string): ShareConfig | null => {
+export const decodeLegacyPayload = (value: string): DecodedPayload => {
   try {
-    return parseConfig(atob(value.replace(/ /g, '+')));
+    return parseJson(atob(value.replace(/ /g, '+')));
   } catch {
-    return null;
+    return { status: 'damaged' };
   }
 };
+
+export const decodeLegacyConfig = (value: string): ShareConfig | null =>
+  asConfig(decodeLegacyPayload(value));
 
 // --- URL helpers ------------------------------------------------------------------
 
@@ -113,6 +139,30 @@ export const readShareLink = async (href: string): Promise<SharedLayoutLink | nu
   return null;
 };
 
+export type SharePayload =
+  | { status: 'none' }
+  | { status: 'unsupported' }
+  | { status: 'damaged'; legacy: boolean }
+  | { status: 'ok'; data: unknown; legacy: boolean };
+
+/**
+ * The payload of whatever share link `href` carries, in any format and of any version: the
+ * fragment first, then legacy `?config=` (also when the fragment is damaged).
+ */
+export const readSharePayload = async (href: string): Promise<SharePayload> => {
+  const url = new URL(href);
+  const fragment = url.hash ? await decodeFragmentPayload(url.hash) : { status: 'none' as const };
+  if (fragment.status === 'ok') return { ...fragment, legacy: false };
+  const legacy = url.searchParams.get(LEGACY_QUERY_KEY);
+  if (legacy !== null) {
+    const decoded = legacy ? decodeLegacyPayload(legacy) : { status: 'damaged' as const };
+    if (decoded.status === 'ok') return { ...decoded, legacy: true };
+    if (fragment.status !== 'unsupported') return { status: 'damaged', legacy: true };
+  }
+  if (fragment.status === 'damaged') return { status: 'damaged', legacy: false };
+  return { status: fragment.status };
+};
+
 /** The current URL with any share payload removed (used after importing it). */
 export const stripShareLink = (href: string): string => {
   const url = new URL(href);
@@ -125,7 +175,7 @@ export const stripShareLink = (href: string): string => {
 /** Build a share URL for `config` on top of `baseHref` (query/fragment replaced). */
 export const buildShareUrl = async (
   baseHref: string,
-  config: ShareConfig,
+  config: ShareConfig | readonly unknown[],
   options?: { compress?: boolean },
 ): Promise<string> => {
   const url = new URL(stripShareLink(baseHref));

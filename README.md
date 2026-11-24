@@ -228,8 +228,9 @@ src/
 │                          # useSelection, useOpenings, useFurnitureEditing,
 │                          # usePanZoom, usePointerDrag, useKeyboardShortcuts...
 ├── core/                  # pure document logic, no React/DOM (ESLint-enforced):
+│                          # schema (plan format v4), load + migrate/ (every old format),
 │                          # units, colors, layout, geometry/, openings, placement,
-│                          # snapping, share/ (link codec), render/ (export scene, SVG)
+│                          # snapping, share/ (link codec, compact form), render/
 ├── lib/                   # app logic: storage, projects, boot, analytics facade,
 │                          # export/ (PNG/PDF), guides/ (example layouts, drawings, links)
 ├── styles/global.css      # Tailwind v4 + app styles
