@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.EricAndrechek/room-planner",
   "title": "Room Planner",
-  "description": "Lay out a room: furniture to scale, clash and door checks, and a link to edit the plan.",
-  "version": "2.0.0",
+  "description": "Lay out a room to scale, check furniture, doors and clearances, and get a link to edit the plan.",
+  "version": "1.0.0",
   "websiteUrl": "https://room-planner.andrechek.com/agents/",
   "repository": {
     "url": "https://github.com/EricAndrechek/Room-Planner",
@@ -11,9 +11,19 @@
   },
   "icons": [
     {
+      "src": "https://room-planner.andrechek.com/favicon.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": ["any"]
+    },
+    {
       "src": "https://room-planner.andrechek.com/pwa-192x192.png",
       "mimeType": "image/png",
       "sizes": ["192x192"]
+    },
+    {
+      "src": "https://room-planner.andrechek.com/pwa-512x512.png",
+      "mimeType": "image/png",
+      "sizes": ["512x512"]
     }
   ],
   "remotes": [

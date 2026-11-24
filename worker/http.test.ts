@@ -30,7 +30,9 @@ const env = (allowed = Infinity): Env & { calls: string[] } => {
   };
 };
 
-const call = (request: Request, e: Env = env()) => worker.fetch(request, e);
+// No ExecutionContext: nothing is reported to PostHog from these tests (see analytics.test.ts).
+const call = (request: Request, e: Env = env()) =>
+  worker.fetch(request, e, undefined as unknown as ExecutionContext);
 
 const post = (body: unknown, headers: Record<string, string> = {}) =>
   new Request(`${ORIGIN}/mcp`, {
@@ -316,11 +318,47 @@ describe('HTTP', () => {
 });
 
 describe('registry entry', () => {
+  it('initialize shows the same identity as server.json', async () => {
+    const r = await call(
+      post({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-06-18',
+          capabilities: {},
+          clientInfo: { name: 't', version: '1' },
+        },
+      }),
+    );
+    const body = await r.text();
+    const msg = JSON.parse(/^data: (.*)$/m.exec(body)?.[1] ?? body);
+    expect(msg.result.serverInfo).toMatchObject({
+      name: 'room-planner',
+      title: server.title,
+      version: server.version,
+      description: server.description,
+      websiteUrl: server.websiteUrl,
+      icons: server.icons,
+    });
+  });
+
   it('server.json and the AI Catalog agree with the server card', async () => {
     const card = (await (await call(new Request(`${ORIGIN}/mcp/server-card`))).json()) as Record<
       string,
       unknown
     >;
+    for (const key of [
+      'name',
+      'version',
+      'title',
+      'description',
+      'websiteUrl',
+      'icons',
+      'repository',
+    ]) {
+      expect(card[key], key).toEqual((server as Record<string, unknown>)[key]);
+    }
     expect(server.name).toBe(card.name);
     expect(server.version).toBe(card.version);
     expect(server.description.length).toBeLessThanOrEqual(100);

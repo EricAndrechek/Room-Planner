@@ -8,14 +8,24 @@ import {
   type CallToolResult,
   type StandardSchemaWithJSON,
 } from '@modelcontextprotocol/server';
-import { version } from '../package.json';
+import registry from '../server.json';
 import { CHECK_LAYOUT, CREATE_PLAN, INSTRUCTIONS, READ_PLAN } from './descriptions';
+import type { Activity } from './analytics';
 import { checkPlan, createPlan, planSchema, readPlan, type ToolOutcome } from './tools';
 import { VIEWER_MIME_TYPE, VIEWER_URI, viewerHtml } from './viewer';
 
 export const SERVER_NAME = 'room-planner';
-export const SERVER_TITLE = 'Room Planner';
-export const SERVER_VERSION: string = version;
+/**
+ * Who the server is, from server.json (the MCP Registry entry), the one source for the name,
+ * version, title, description, website and icons that `initialize`, the server card and the
+ * registry all show. A release bumps `version` there (docs/DEPLOY.md).
+ */
+export const REGISTRY_NAME: string = registry.name;
+export const SERVER_TITLE: string = registry.title;
+export const SERVER_VERSION: string = registry.version;
+export const SERVER_DESCRIPTION: string = registry.description;
+export const WEBSITE_URL: string = registry.websiteUrl;
+export const SERVER_ICONS = registry.icons.map((i) => ({ ...i, sizes: [...i.sizes] }));
 export const SITE = 'https://room-planner.andrechek.com';
 
 /**
@@ -78,14 +88,40 @@ const READ_ONLY = {
   openWorldHint: false,
 } as const;
 
-/** A fresh server for one request. `origin` is the site the links point at. */
-export function createServer(origin: string): McpServer {
+/**
+ * A fresh server for one request. `origin` is the site the links point at; `record` hears what
+ * each call did, for usage analytics (analytics.ts).
+ */
+export function createServer(origin: string, record: (a: Activity) => void = () => {}): McpServer {
+  /** A tool handler that also reports its outcome. */
+  const tool =
+    <A>(name: string, run: (args: A) => ToolOutcome | Promise<ToolOutcome>) =>
+    async (args: A): Promise<CallToolResult> => {
+      const start = Date.now();
+      try {
+        const outcome = await run(args);
+        record({
+          kind: 'tool',
+          tool: name,
+          ok: !outcome.isError,
+          stats: outcome.stats,
+          durationMs: Date.now() - start,
+        });
+        return toResult(outcome);
+      } catch (error) {
+        record({ kind: 'tool_failed', tool: name, durationMs: Date.now() - start });
+        throw error;
+      }
+    };
+
   const server = new McpServer(
     {
       name: SERVER_NAME,
       title: SERVER_TITLE,
       version: SERVER_VERSION,
-      websiteUrl: `${SITE}/agents/`,
+      description: SERVER_DESCRIPTION,
+      websiteUrl: WEBSITE_URL,
+      icons: SERVER_ICONS,
     },
     { instructions: INSTRUCTIONS, capabilities: { tools: {}, resources: {} } },
   );
@@ -99,7 +135,7 @@ export function createServer(origin: string): McpServer {
       annotations: { title: 'Create a room plan', ...READ_ONLY },
       _meta: withViewer,
     },
-    async (args) => toResult(await createPlan(args, origin)),
+    tool('create_plan', (args: Record<string, unknown>) => createPlan(args, origin)),
   );
 
   server.registerTool(
@@ -110,7 +146,7 @@ export function createServer(origin: string): McpServer {
       inputSchema: inputSchema(checkArgs),
       annotations: { title: 'Check a room layout', ...READ_ONLY },
     },
-    async (args) => toResult(checkPlan(args)),
+    tool('check_layout', (args: Record<string, unknown>) => checkPlan(args)),
   );
 
   server.registerTool(
@@ -122,7 +158,7 @@ export function createServer(origin: string): McpServer {
       annotations: { title: 'Read a Room Planner link', ...READ_ONLY },
       _meta: withViewer,
     },
-    async (args) => toResult(await readPlan(args, origin)),
+    tool('read_plan', (args: Record<string, unknown>) => readPlan(args, origin)),
   );
 
   server.registerResource(
@@ -136,17 +172,20 @@ export function createServer(origin: string): McpServer {
       _meta: { ui: { prefersBorder: true } },
       cacheHint: { ttlMs: 3_600_000, cacheScope: 'public' },
     },
-    async (uri) => ({
-      contents: [
-        {
-          uri: uri.href,
-          mimeType: VIEWER_MIME_TYPE,
-          text: viewerHtml(),
-          // No csp: the view fetches nothing, so the host's default (no network) is right.
-          _meta: { ui: { prefersBorder: true } },
-        },
-      ],
-    }),
+    async (uri) => {
+      record({ kind: 'resource', uri: uri.href });
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: VIEWER_MIME_TYPE,
+            text: viewerHtml(),
+            // No csp: the view fetches nothing, so the host's default (no network) is right.
+            _meta: { ui: { prefersBorder: true } },
+          },
+        ],
+      };
+    },
   );
 
   return server;

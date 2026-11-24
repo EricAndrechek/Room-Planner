@@ -11,7 +11,17 @@
  * IP. Nothing is logged: no request body, no plan.
  */
 import { SUPPORTED_PROTOCOL_VERSIONS, createMcpHandler } from '@modelcontextprotocol/server';
-import { SERVER_TITLE, SERVER_VERSION, SITE, createServer } from './mcp';
+import { environmentOf, report, type Activity } from './analytics';
+import registry from '../server.json';
+import {
+  REGISTRY_NAME,
+  SERVER_DESCRIPTION,
+  SERVER_ICONS,
+  SERVER_TITLE,
+  SERVER_VERSION,
+  WEBSITE_URL,
+  createServer,
+} from './mcp';
 
 export interface Env {
   ASSETS: Fetcher;
@@ -19,8 +29,6 @@ export interface Env {
   MCP_LIMIT?: RateLimit;
 }
 
-/** The registry name (server.json) and the card's `name`. */
-export const REGISTRY_NAME = 'io.github.EricAndrechek/room-planner';
 /** Largest request body the endpoint reads (a 500-piece plan is about 100 KB). */
 export const MAX_BODY = 256 * 1024;
 export const RETRY_AFTER_SECONDS = 60;
@@ -63,6 +71,16 @@ const methodNotAllowed = (allow: string) =>
     Allow: allow,
   });
 
+const payloadTooLarge = () =>
+  json(
+    {
+      jsonrpc: '2.0',
+      id: null,
+      error: { code: -32600, message: 'The request body is too large.' },
+    },
+    413,
+  );
+
 const tooManyRequests = () =>
   json(
     {
@@ -83,11 +101,10 @@ export const serverCard = (origin: string) => ({
   name: REGISTRY_NAME,
   version: SERVER_VERSION,
   title: SERVER_TITLE,
-  description:
-    'Lay out a room: furniture to scale, clash checks, and a link to edit it. Free, no account.',
-  websiteUrl: `${SITE}/agents/`,
-  repository: { url: 'https://github.com/EricAndrechek/Room-Planner', source: 'github' },
-  icons: [{ src: `${SITE}/pwa-192x192.png`, mimeType: 'image/png', sizes: ['192x192'] }],
+  description: SERVER_DESCRIPTION,
+  websiteUrl: WEBSITE_URL,
+  repository: registry.repository,
+  icons: SERVER_ICONS,
   remotes: [
     {
       type: 'streamable-http',
@@ -128,14 +145,94 @@ export function overMemoryLimit(key: string, now = Date.now()): boolean {
   return ++w.count > RATE_LIMIT;
 }
 
-/** Handle /mcp and /mcp/*. `RateLimit-Policy` (IETF draft) states the limit. */
-export async function handleMcp(request: Request, env: Env): Promise<Response> {
-  const response = await route(request, env);
-  response.headers.set('RateLimit-Policy', `"mcp";q=${RATE_LIMIT};w=60`);
-  return response;
+type Json = Record<string, unknown>;
+const isObject = (v: unknown): v is Json =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+const CLIENT_INFO_KEY = 'io.modelcontextprotocol/clientInfo';
+const PROTOCOL_KEY = 'io.modelcontextprotocol/protocolVersion';
+
+/** What analytics learns about a request as it is handled. */
+interface Trace {
+  activities: Activity[];
+  protocol?: string;
+  clientName?: string;
+  clientVersion?: string;
 }
 
-async function route(request: Request, env: Env): Promise<Response> {
+/**
+ * Handle /mcp and /mcp/*. `RateLimit-Policy` (IETF draft) states the limit. With `ctx`, usage is
+ * reported to PostHog after the response (production and previews only; analytics.ts).
+ */
+export async function handleMcp(
+  request: Request,
+  env: Env,
+  ctx?: Pick<ExecutionContext, 'waitUntil'>,
+  fetchImpl: typeof fetch = fetch,
+): Promise<Response> {
+  const trace: Trace = {
+    activities: [],
+    protocol: request.headers.get('mcp-protocol-version') ?? undefined,
+  };
+  const response = await route(request, env, trace);
+  response.headers.set('RateLimit-Policy', `"mcp";q=${RATE_LIMIT};w=60`);
+  const hostname = new URL(request.url).hostname;
+  if (!ctx || environmentOf(hostname) === 'development') return response;
+  // A 2025-era answer is a stream that ends when the tool does, so report once the body is out.
+  let sent: Promise<unknown> = Promise.resolve();
+  let out = response;
+  if (response.body) {
+    const { readable, writable } = new TransformStream();
+    sent = response.body.pipeTo(writable).catch(() => undefined);
+    out = new Response(readable, response);
+  }
+  const cf = (request as Request & { cf?: { country?: string } }).cf;
+  ctx.waitUntil(
+    sent.then(() =>
+      report(
+        trace.activities,
+        {
+          hostname,
+          ip: clientKey(request),
+          userAgent: request.headers.get('user-agent'),
+          country: typeof cf?.country === 'string' ? cf.country : undefined,
+          protocol: trace.protocol,
+          clientName: trace.clientName,
+          clientVersion: trace.clientVersion,
+          serverVersion: SERVER_VERSION,
+          now: Date.now(),
+        },
+        fetchImpl,
+      ),
+    ),
+  );
+  return out;
+}
+
+/** Read what analytics needs from a JSON-RPC message (no plan content). */
+function observe(message: unknown, trace: Trace) {
+  if (!isObject(message)) return;
+  const params = isObject(message.params) ? message.params : {};
+  const meta = isObject(params._meta) ? params._meta : {};
+  const info = isObject(params.clientInfo)
+    ? params.clientInfo
+    : isObject(meta[CLIENT_INFO_KEY])
+      ? meta[CLIENT_INFO_KEY]
+      : {};
+  if (typeof info.name === 'string') trace.clientName = info.name;
+  if (typeof info.version === 'string') trace.clientVersion = info.version;
+  const protocol = params.protocolVersion ?? meta[PROTOCOL_KEY];
+  if (typeof protocol === 'string') trace.protocol = protocol;
+  if (message.method === 'initialize' || message.method === 'server/discover') {
+    trace.activities.push({
+      kind: 'initialize',
+      clientName: trace.clientName,
+      clientVersion: trace.clientVersion,
+      protocol: trace.protocol,
+    });
+  }
+}
+
+async function route(request: Request, env: Env, trace: Trace): Promise<Response> {
   const url = new URL(request.url);
   // Links and the card point at this site; behind Cloudflare it is https (wrangler dev says http).
   const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
@@ -151,10 +248,11 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (request.method === 'OPTIONS') return preflight(allow);
 
   const key = clientKey(request);
-  if (overMemoryLimit(key)) return tooManyRequests();
-  if (env.MCP_LIMIT) {
-    const { success } = await env.MCP_LIMIT.limit({ key });
-    if (!success) return tooManyRequests();
+  const limited =
+    overMemoryLimit(key) || (env.MCP_LIMIT && !(await env.MCP_LIMIT.limit({ key })).success);
+  if (limited) {
+    trace.activities.push({ kind: 'rate_limited' });
+    return tooManyRequests();
   }
 
   if (isCard) {
@@ -169,11 +267,28 @@ async function route(request: Request, env: Env): Promise<Response> {
 
   // POST is the protocol; GET and DELETE are the SDK's 405 for a stateless server.
   if (!['POST', 'GET', 'DELETE'].includes(request.method)) return methodNotAllowed(allow);
-  const handler = createMcpHandler(() => createServer(origin), {
+  // The body is parsed once, here: analytics reads the method and client, and the SDK gets the
+  // parsed value (so this path applies the body limit itself).
+  let parsedBody: unknown;
+  if (request.method === 'POST') {
+    const text = await request.clone().text();
+    if (text.length > MAX_BODY) return payloadTooLarge();
+    try {
+      parsedBody = JSON.parse(text);
+      observe(parsedBody, trace);
+    } catch {
+      parsedBody = undefined; // the SDK answers the parse error
+    }
+  }
+  const record = (a: Activity) => trace.activities.push(a);
+  const handler = createMcpHandler(() => createServer(origin, record), {
     maxRequestBodySize: MAX_BODY,
     // Reporting only, and never the request: an error can quote the body, which may hold a plan.
     onerror: (error) => console.error(`mcp: ${error.name}`),
   });
-  const response = await handler.fetch(request);
+  const response = await handler.fetch(
+    request,
+    parsedBody === undefined ? undefined : { parsedBody },
+  );
   return withHeaders(response, response.status === 405 ? { Allow: allow } : {});
 }

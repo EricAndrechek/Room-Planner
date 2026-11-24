@@ -38,7 +38,36 @@ export interface ToolOutcome {
   /** `structuredContent`. */
   structured?: Record<string, unknown>;
   isError?: boolean;
+  /** Counts for usage analytics (analytics.ts): never names, labels or coordinates. */
+  stats: ToolStats;
 }
+
+/** Why a call failed, as a fixed vocabulary. */
+export type ErrorKind =
+  | 'missing_plan'
+  | 'invalid_plan'
+  | 'newer_version'
+  | 'unsupported_plan'
+  | 'bad_argument'
+  | 'missing_url'
+  | 'bad_url'
+  | 'no_plan_in_link'
+  | 'damaged_link';
+
+export interface ToolStats {
+  errorKind?: ErrorKind;
+  rooms?: number;
+  items?: number;
+  unit?: string;
+  issues?: Issue[];
+}
+
+const planStats = (plan: Plan, unit: string, issues: Issue[]): ToolStats => ({
+  rooms: plan.rooms.length,
+  items: plan.items.length,
+  unit,
+  issues,
+});
 
 // --- Input schemas -----------------------------------------------------------------------------
 
@@ -92,9 +121,15 @@ export type ReadInput =
   | { ok: true; plan: Plan; unit: Unit; unitSystem: UnitSystem; warnings: Issue[] }
   | { ok: false; outcome: ToolOutcome };
 
-const fail = (text: string): { ok: false; outcome: ToolOutcome } => ({
+const failure = (text: string, errorKind: ErrorKind): ToolOutcome => ({
+  text,
+  isError: true,
+  stats: { errorKind },
+});
+
+const fail = (text: string, errorKind: ErrorKind): { ok: false; outcome: ToolOutcome } => ({
   ok: false,
-  outcome: { text, isError: true },
+  outcome: failure(text, errorKind),
 });
 
 const describeInvalid = (issues: LoadIssue[]): string => {
@@ -115,15 +150,18 @@ export const displayUnitOf = (plan: Plan): UnitSystem => plan.settings?.unitSyst
 
 /** An agent's `plan` argument, checked strictly. The plan comes back in feet. */
 export function readPlanInput(raw: unknown): ReadInput {
-  if (raw === undefined) return fail('Missing argument "plan": send the whole plan document.');
+  if (raw === undefined) {
+    return fail('Missing argument "plan": send the whole plan document.', 'missing_plan');
+  }
   const result = loadPlan(raw, 'strict');
   if (!result.ok) {
     if (result.reason === 'newer') {
       return fail(
         `This plan is version ${result.version}; this server reads plan versions up to ${PLAN_VERSION}. Send "version": ${PLAN_VERSION}.`,
+        'newer_version',
       );
     }
-    return fail(describeInvalid(result.issues));
+    return fail(describeInvalid(result.issues), 'invalid_plan');
   }
   const unit =
     isObject(raw) && UNITS.includes(raw.unit as Unit) ? (raw.unit as Unit) : result.plan.unit;
@@ -214,6 +252,7 @@ export async function createPlan(args: { plan?: unknown }, origin: string): Prom
         `Room Planner cannot open this plan yet: ${link.blockers.join('; ')}.`,
         'The app currently edits one rectangular room with doors, windows and rectangular pieces that have a placement. Change the plan to fit and call create_plan again, or use check_layout to check it as it is.',
       ].join('\n'),
+      stats: { ...planStats(plan, unit, issues), errorKind: 'unsupported_plan' },
     };
   }
   const omitted = linkOmissions(plan);
@@ -227,6 +266,7 @@ export async function createPlan(args: { plan?: unknown }, origin: string): Prom
   return {
     text,
     structured: { plan: fromFeet(plan, unit), issues, summary, url: link.url },
+    stats: planStats(plan, unit, issues),
   };
 }
 
@@ -237,16 +277,20 @@ export function checkPlan(args: { plan?: unknown; minClearance?: unknown }): Too
   const { plan, unit, unitSystem, warnings } = input;
   const mc = args.minClearance;
   if (mc !== undefined && (typeof mc !== 'number' || !Number.isFinite(mc) || mc < 0)) {
-    return {
-      isError: true,
-      text: "minClearance must be a number of 0 or more, in the plan's unit.",
-    };
+    return failure(
+      "minClearance must be a number of 0 or more, in the plan's unit.",
+      'bad_argument',
+    );
   }
   const minClearance = typeof mc === 'number' ? toFeet(mc, unit) : undefined;
   const issues = [...warnings, ...checkLayout(plan, { unitSystem, minClearance })];
   const ok = !issues.some((i) => i.severity !== 'info');
   const summary = summarize(plan, unitSystem);
-  return { text: [summary, ...issueLines(issues)].join('\n'), structured: { ok, issues, summary } };
+  return {
+    text: [summary, ...issueLines(issues)].join('\n'),
+    structured: { ok, issues, summary },
+    stats: planStats(plan, unit, issues),
+  };
 }
 
 /** The unit a plan read from a link goes back in: the one it displays in. */
@@ -256,16 +300,16 @@ const unitOfDisplay = (u: UnitSystem): Unit => (u === 'ft-in' ? 'ft' : u);
 export async function readPlan(args: { url?: unknown }, origin: string): Promise<ToolOutcome> {
   const url = args.url;
   if (typeof url !== 'string' || !url.trim()) {
-    return { isError: true, text: 'Missing argument "url": the whole Room Planner link.' };
+    return failure('Missing argument "url": the whole Room Planner link.', 'missing_url');
   }
   let href: string;
   try {
     href = new URL(url.trim()).toString();
   } catch {
-    return {
-      isError: true,
-      text: 'This is not a URL. Send the whole Room Planner link, starting with https://.',
-    };
+    return failure(
+      'This is not a URL. Send the whole Room Planner link, starting with https://.',
+      'bad_url',
+    );
   }
   const result = await readPlanLink(href);
   if (!result.ok) {
@@ -279,7 +323,15 @@ export async function readPlan(args: { url?: unknown }, origin: string): Promise
             : 'issues' in result
               ? describeInvalid(result.issues)
               : 'This link has no plan in it.';
-    return { isError: true, text };
+    const kind: ErrorKind =
+      result.reason === 'none'
+        ? 'no_plan_in_link'
+        : result.reason === 'damaged'
+          ? 'damaged_link'
+          : result.reason === 'newer'
+            ? 'newer_version'
+            : 'invalid_plan';
+    return failure(text, kind);
   }
   const plan = result.plan;
   const unitSystem = displayUnitOf(plan);
@@ -291,5 +343,6 @@ export async function readPlan(args: { url?: unknown }, origin: string): Promise
   return {
     text: [summary, ...issueLines(issues)].join('\n'),
     structured: { plan: fromFeet(plan, unitOfDisplay(unitSystem)), issues, summary, url: own },
+    stats: planStats(plan, unitOfDisplay(unitSystem), issues),
   };
 }

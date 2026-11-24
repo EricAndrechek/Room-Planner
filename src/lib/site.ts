@@ -39,4 +39,4 @@ export const MCP_PATH = 'mcp';
  * /agents/, the help page and the FAQ.
  */
 export const MCP_PRIVACY =
-  'The MCP server processes each plan in memory to answer the request and then discards it. It stores nothing, has no accounts, and does not log plans. A plan link it returns holds the whole plan in the part of the URL after #, which browsers do not send to any server.';
+  "The MCP server processes each plan in memory to answer the request and then discards it. It stores no plans, has no accounts, and does not log plans. For usage analytics it sends PostHog the tool name, the plan's size and issue counts, the client app's name and the request's IP address (used for approximate location), like the website's own analytics; never plan content, names or links. A plan link it returns holds the whole plan in the part of the URL after #, which browsers do not send to any server.";

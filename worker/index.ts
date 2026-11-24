@@ -10,9 +10,9 @@ import { warmUp } from './warm';
 warmUp();
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const { pathname } = new URL(request.url);
-    if (pathname === '/mcp' || pathname.startsWith('/mcp/')) return handleMcp(request, env);
+    if (pathname === '/mcp' || pathname.startsWith('/mcp/')) return handleMcp(request, env, ctx);
     // Only reached for paths that `run_worker_first` sends here by mistake: serve the site.
     return env.ASSETS.fetch(request);
   },

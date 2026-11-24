@@ -29,7 +29,7 @@ const faqs: { q: string; a: string }[] = [
   },
   {
     q: 'Can an AI assistant plan my room?',
-    a: `Yes. ${link('agents/', 'Room Planner’s MCP server')} works with Claude, ChatGPT, VS Code, Cursor and other MCP apps: the assistant lays out the room, checks it for clashes and blocked doors, and gives you a link that opens the plan in the planner. It is free and needs no account. The server only sees the plans an assistant sends it, processes them in memory and stores nothing.`,
+    a: `Yes. ${link('agents/', 'Room Planner’s MCP server')} works with Claude, ChatGPT, VS Code, Cursor and other MCP apps: the assistant lays out the room, checks it for clashes and blocked doors, and gives you a link that opens the plan in the planner. It is free and needs no account. The server only sees the plans an assistant sends it, processes them in memory and stores none of them; for usage analytics it records the tool used, the plan's size, the client app and the request's IP address (for approximate location), like the website's analytics.`,
   },
   {
     q: 'Can I use it on a phone or tablet?',
