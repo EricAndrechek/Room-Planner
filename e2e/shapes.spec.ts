@@ -282,6 +282,8 @@ test('a share link keeps L and round pieces', async ({ page, browser }) => {
 });
 
 test('the Shape control has no serious accessibility violations', async ({ browser }) => {
+  // Two pages and two full axe scans.
+  test.slow();
   for (const viewport of [
     { width: 1280, height: 800 },
     { width: 390, height: 844 },
