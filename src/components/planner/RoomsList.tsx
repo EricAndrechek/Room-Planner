@@ -82,7 +82,10 @@ export function RoomsList({
   const f = floorBounds(plan);
   const len = (v: number) => feetToDisplay(v, unitSystem);
   return (
-    <section aria-labelledby={`${uid}-h`} data-testid="rooms-list">
+    // A plain <div>: a <section> or a group labelled by its heading here crashed Firefox's content
+    // process when axe or a focus change walked Room Setup (reproduced with Firefox 159 under
+    // Playwright, 2026-11-24). The heading still names the part for screen readers.
+    <div data-testid="rooms-list">
       <div className="flex justify-between items-center mb-2">
         <h2 id={`${uid}-h`} className="text-xs font-bold text-slate-500 uppercase tracking-wider">
           Rooms
@@ -219,6 +222,6 @@ export function RoomsList({
           {plan.rooms.length} rooms · {areaText(floorArea(plan), unitSystem)} in all
         </p>
       )}
-    </section>
+    </div>
   );
 }
