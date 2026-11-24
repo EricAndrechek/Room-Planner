@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type MouseEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { track } from '../../lib/analytics';
 import {
   feetToDisplay,
@@ -29,6 +30,13 @@ interface DimensionInputProps {
    * 117 ft room — did you mean 11'7"?").
    */
   confirmAbove?: number;
+  /**
+   * Where to show the error and the "did you mean?" prompt instead of under the field: e.g. a
+   * full-width row under a Width/Length pair, where a half-width column would cramp them.
+   */
+  messageSlot?: HTMLElement | null;
+  /** Field name prefixed to those messages ("Width: …"), for when they are not under the field. */
+  messageLabel?: string;
 }
 
 /** A large size as people say it: "117 ft" (imperial) or "45 m" (metric). */
@@ -54,6 +62,8 @@ export function DimensionInput({
   unitSystem = 'ft-in',
   id,
   confirmAbove,
+  messageSlot,
+  messageLabel,
 }: DimensionInputProps) {
   // While focused the user edits a draft; otherwise the value is displayed.
   const [draft, setDraft] = useState<string | null>(null);
@@ -121,6 +131,61 @@ export function DimensionInput({
     onChange(feet);
   };
 
+  // The error / "did you mean?" prompt: under the field, or in `messageSlot` (a full-width row
+  // under a pair of fields), named after the field so it is clear which one it is about.
+  const prefix = messageLabel ? <span className="font-semibold">{messageLabel}: </span> : null;
+  const messages =
+    error || pending ? (
+      <>
+        {error && (
+          <p id={errorId} className="mt-1 text-[10px] leading-tight text-red-700" role="alert">
+            {prefix}
+            {error}
+          </p>
+        )}
+        {pending && (
+          // Focus moves to the first choice, so the group's question is read out with it.
+          <div
+            role="group"
+            aria-labelledby={`${promptId}-text`}
+            className="mt-1 p-2 rounded-md border border-amber-300 bg-amber-50 text-amber-950"
+            data-testid="dimension-confirm"
+            onKeyDown={(e) => {
+              if (e.key !== 'Escape') return;
+              e.preventDefault();
+              e.stopPropagation();
+              choose('cancel');
+            }}
+          >
+            <p id={`${promptId}-text`} className="text-[11px] leading-snug mb-1.5">
+              {prefix}
+              That&apos;s a {bigSize(pending.feet, unitSystem)} room —{' '}
+              {pending.alt !== null
+                ? `did you mean ${feetToDisplay(pending.alt, unitSystem)}?`
+                : 'keep it?'}
+            </p>
+            <div className="flex flex-wrap gap-1.5 [&>button]:whitespace-nowrap">
+              <button
+                ref={firstChoice}
+                type="button"
+                onClick={(e) => choose(pending.alt !== null ? 'reinterpret' : 'keep', e)}
+                className="px-2 py-1 rounded-sm bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-medium transition-colors"
+              >
+                {pending.alt !== null ? `Use ${feetToDisplay(pending.alt, unitSystem)}` : 'Keep'}
+              </button>
+              <button
+                type="button"
+                onClick={(e) => choose(pending.alt !== null ? 'keep' : 'cancel', e)}
+                className="px-2 py-1 rounded-sm bg-white border border-amber-300 hover:bg-amber-100 text-amber-950 text-[11px] font-medium transition-colors"
+              >
+                {pending.alt !== null ? `Keep ${bigSize(pending.feet, unitSystem)}` : 'Cancel'}
+              </button>
+            </div>
+          </div>
+        )}
+      </>
+    ) : null;
+
   const suffix = unitSuffix(unitSystem);
   const shown = draft ?? (typeof value === 'number' ? feetToInputValue(value, unitSystem) : '');
 
@@ -162,50 +227,7 @@ export function DimensionInput({
           </span>
         )}
       </div>
-      {error && (
-        <p id={errorId} className="mt-1 text-[10px] leading-tight text-red-700" role="alert">
-          {error}
-        </p>
-      )}
-      {pending && (
-        // Focus moves to the first choice, so the group's question is read out with it.
-        <div
-          role="group"
-          aria-labelledby={`${promptId}-text`}
-          className="mt-1 p-2 rounded-md border border-amber-300 bg-amber-50 text-amber-950"
-          data-testid="dimension-confirm"
-          onKeyDown={(e) => {
-            if (e.key !== 'Escape') return;
-            e.preventDefault();
-            e.stopPropagation();
-            choose('cancel');
-          }}
-        >
-          <p id={`${promptId}-text`} className="text-[11px] leading-snug mb-1.5">
-            That&apos;s a {bigSize(pending.feet, unitSystem)} room —{' '}
-            {pending.alt !== null
-              ? `did you mean ${feetToDisplay(pending.alt, unitSystem)}?`
-              : 'keep it?'}
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              ref={firstChoice}
-              type="button"
-              onClick={(e) => choose(pending.alt !== null ? 'reinterpret' : 'keep', e)}
-              className="px-2 py-1 rounded-sm bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-medium transition-colors"
-            >
-              {pending.alt !== null ? `Use ${feetToDisplay(pending.alt, unitSystem)}` : 'Keep'}
-            </button>
-            <button
-              type="button"
-              onClick={(e) => choose(pending.alt !== null ? 'keep' : 'cancel', e)}
-              className="px-2 py-1 rounded-sm bg-white border border-amber-300 hover:bg-amber-100 text-amber-950 text-[11px] font-medium transition-colors"
-            >
-              {pending.alt !== null ? `Keep ${bigSize(pending.feet, unitSystem)}` : 'Cancel'}
-            </button>
-          </div>
-        </div>
-      )}
+      {messages && (messageSlot ? createPortal(messages, messageSlot) : messages)}
     </div>
   );
 }

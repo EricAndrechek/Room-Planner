@@ -102,7 +102,15 @@ test.describe('room size input', () => {
     await width.fill('117');
     await width.press('Enter');
     const prompt = page.getByTestId('dimension-confirm');
-    await expect(prompt).toContainText(`That's a 117 ft room — did you mean 11'7"?`);
+    await expect(prompt).toContainText(`Width: That's a 117 ft room — did you mean 11'7"?`);
+    await expect(prompt).toHaveAccessibleName(`Width: That's a 117 ft room — did you mean 11'7"?`);
+    await expect(width).toHaveAttribute('aria-describedby', /confirm-text/);
+    // A full-width row under the Width/Length pair, with the two choices side by side.
+    const row = (await page.getByTestId('room-dims-messages').boundingBox())!;
+    const field = (await width.boundingBox())!;
+    expect(row.width).toBeGreaterThan(field.width * 1.6);
+    const [a, b] = await prompt.getByRole('button').all();
+    expect(Math.abs((await a!.boundingBox())!.y - (await b!.boundingBox())!.y)).toBeLessThan(2);
     // Nothing is used until a choice is made; focus is on the first choice.
     expect(await storedWidth(page)).toBe(12);
     const use = prompt.getByRole('button', { name: `Use 11'7"` });
@@ -172,9 +180,10 @@ test.describe('room size input', () => {
     await width.press('Enter');
     await expect(width).toHaveAttribute('aria-invalid', 'true');
     const describedBy = (await width.getAttribute('aria-describedby'))!;
-    await expect(page.locator(`[id="${describedBy}"]`)).toHaveText(
-      `Max 500'. For 11'7", type 11 7`,
-    );
+    // Shown in the full-width row under Width and Length, named after the field.
+    const error = page.locator(`[id="${describedBy}"]`);
+    await expect(error).toHaveText(`Width: Max 500'. For 11'7", type 11 7`);
+    await expect(page.getByTestId('room-dims-messages')).toContainText('Width: Max 500');
     await expect(page.getByTestId('dimension-confirm')).toHaveCount(0);
     await expect(width).toHaveValue(`12'`);
     expect(await storedWidth(page)).toBe(12);

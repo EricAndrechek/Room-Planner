@@ -1,5 +1,5 @@
 import { ArrowLeftRight, ArrowRight, Home, Plus, Trash2, Unlock } from 'lucide-react';
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import { glowClass, useCardHighlight } from '../../hooks/useCardHighlight';
 import type { AddedOpening } from '../../hooks/useOpenings';
 import { DOOR_TYPES, WALL_OPTIONS } from '../../lib/constants';
@@ -48,6 +48,8 @@ const plural = (n: number, word: string) => `${n} ${word}${n !== 1 ? 's' : ''}`;
 export function RoomSetupPanel(props: RoomSetupPanelProps) {
   const { isActiveMode, expanded, roomDims, doors, windows, unitSystem } = props;
   const { register, isHighlighted } = useCardHighlight(props.highlight);
+  // Full-width row under Width and Length for their errors and "did you mean?" prompts.
+  const [dimsMessages, setDimsMessages] = useState<HTMLDivElement | null>(null);
   // Ids for the visible field labels (`htmlFor`), unique per panel and per door/window row.
   const uid = useId();
   const fid = (...parts: (string | number)[]) => [uid, ...parts].join('-');
@@ -119,6 +121,8 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                   min={1}
                   max={roomMaxFeet(unitSystem)}
                   confirmAbove={roomConfirmAboveFeet(unitSystem)}
+                  messageSlot={dimsMessages}
+                  messageLabel="Width"
                   label="Room width"
                   unitSystem={unitSystem}
                 />
@@ -136,11 +140,14 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                   min={1}
                   max={roomMaxFeet(unitSystem)}
                   confirmAbove={roomConfirmAboveFeet(unitSystem)}
+                  messageSlot={dimsMessages}
+                  messageLabel="Length"
                   label="Room length"
                   unitSystem={unitSystem}
                 />
               </div>
             </div>
+            <div ref={setDimsMessages} data-testid="room-dims-messages" />
             <div className="mt-2 text-xs text-slate-500">
               Total area: <strong>{formatArea(roomDims.width, roomDims.height)}</strong>
             </div>
