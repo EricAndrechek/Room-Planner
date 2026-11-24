@@ -281,22 +281,70 @@ export function insideShift(item: Item, room: Pick<Room, 'outline'>): { dx: numb
 
 /**
  * The piece moved the least amount that puts it inside `room` (see `insideShift`). The same
- * object when it already is inside, or is in the inventory. For an outline other than a rectangle
- * the result may still be outside; the check then reports it.
+ * object when it already is inside, or is in the inventory. In a room that is not a rectangle
+ * (an L, an alcove) a piece still outside after that goes to the nearest spot on a `step` grid
+ * that is inside the room and overlaps none of `others` (the other pieces' parts), else the
+ * nearest one inside; with neither it stays put and the check reports it (section 3).
  */
-export function moveInside(item: Item, room: Pick<Room, 'outline'>): Item {
+export function moveInside(
+  item: Item,
+  room: Pick<Room, 'outline'>,
+  others: readonly Point[][][] = [],
+  step = PLACEMENT_STEP / 2,
+): Item {
+  if (!item.placement) return item;
   const { dx, dy } = insideShift(item, room);
-  if (!item.placement || (Math.abs(dx) < GEOMETRY_EPSILON && Math.abs(dy) < GEOMETRY_EPSILON)) {
-    return item;
+  let at = { x: item.placement.x + dx, y: item.placement.y + dy };
+  if (!isRectangle(room)) {
+    const spot = nearestInside(item, room, at, others, step);
+    if (spot) at = spot;
   }
-  return {
-    ...item,
-    placement: {
-      ...item.placement,
-      x: round(item.placement.x + dx),
-      y: round(item.placement.y + dy),
-    },
+  const mx = at.x - item.placement.x;
+  const my = at.y - item.placement.y;
+  if (Math.abs(mx) < GEOMETRY_EPSILON && Math.abs(my) < GEOMETRY_EPSILON) return item;
+  return { ...item, placement: { ...item.placement, x: round(at.x), y: round(at.y) } };
+}
+
+/** The nearest centre to `from` (on a `step` grid around it) where the piece is in the room. */
+function nearestInside(
+  item: Item,
+  room: Pick<Room, 'outline'>,
+  from: { x: number; y: number },
+  others: readonly Point[][][],
+  step: number,
+): { x: number; y: number } | null {
+  const base = itemParts(item);
+  if (base.length === 0 || !item.placement) return null;
+  const ox = from.x - item.placement.x;
+  const oy = from.y - item.placement.y;
+  const shifted = (dx: number, dy: number) =>
+    base.map((part) => part.map((p) => ({ x: p.x + ox + dx, y: p.y + oy + dy })));
+  const inside = (parts: Point[][]) => parts.every((p) => partInRoom(p, room));
+  if (inside(shifted(0, 0))) return null;
+  const pb = partsBounds(shifted(0, 0));
+  const rb = roomBounds(room);
+  // A coarser grid in a very big room, so the search stays at about 25,000 spots at most.
+  step = Math.max(step, Math.max(rb.right - rb.left, rb.bottom - rb.top) / 160);
+  // Every shift that keeps the piece's box inside the room's box, nearest first.
+  const range = (lo: number, hi: number) => {
+    const out: number[] = [];
+    for (let k = Math.ceil(lo / step); k * step <= hi + 1e-9; k++) out.push(k * step);
+    return out;
   };
+  const xs = range(rb.left - pb.left, rb.right - pb.right);
+  const ys = range(rb.top - pb.top, rb.bottom - pb.bottom);
+  const shifts: { dx: number; dy: number; d: number }[] = [];
+  for (const dx of xs) for (const dy of ys) shifts.push({ dx, dy, d: Math.hypot(dx, dy) });
+  shifts.sort((a, b) => a.d - b.d || a.dy - b.dy || a.dx - b.dx);
+  let fallback: { x: number; y: number } | null = null;
+  for (const { dx, dy } of shifts) {
+    const parts = shifted(dx, dy);
+    if (!inside(parts)) continue;
+    const at = { x: from.x + dx, y: from.y + dy };
+    if (!others.some((o) => partsOverlap(parts, o) > 0)) return at;
+    fallback ??= at;
+  }
+  return fallback;
 }
 
 /** Placed, visible pieces that are (partly) outside every room. */
