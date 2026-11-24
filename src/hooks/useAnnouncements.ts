@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { warningText, type ItemWarning } from '../core/geometry';
 import { feetToDisplay } from '../core/units';
-import type { FurnitureItem, Id, Layout, SaveStatus, UnitSystem } from '../types';
+import { boxOf, doorsOf, mainRoom, windowsOf } from '../lib/plans';
+import type { Id, Item, Plan, SaveStatus, UnitSystem } from '../types';
 
 /** Rapid changes (key repeat, drags) are coalesced into one announcement. */
 const DEBOUNCE_MS = 350;
 
-const describeItem = (item: FurnitureItem, unitSystem: UnitSystem) =>
-  `${feetToDisplay(item.x, unitSystem)}, ${feetToDisplay(item.y, unitSystem)}`;
+/** Where a piece is, as its box's top-left corner. */
+const describeItem = (item: Item, unitSystem: UnitSystem) => {
+  const { x, y } = boxOf(item);
+  return `${feetToDisplay(x, unitSystem)}, ${feetToDisplay(y, unitSystem)}`;
+};
 
-/** Spoken summary of what changed between two layouts (items only), or ''. */
-export function describeLayoutChange(prev: Layout, next: Layout, unitSystem: UnitSystem): string {
+const rotationOf = (item: Item) => item.placement?.rotation ?? 0;
+
+/** Spoken summary of what changed between two plans (pieces only), or ''. */
+export function describeLayoutChange(prev: Plan, next: Plan, unitSystem: UnitSystem): string {
   const before = new Map(prev.items.map((i) => [i.id, i]));
   const parts: string[] = [];
   for (const item of next.items) {
@@ -19,10 +25,22 @@ export function describeLayoutChange(prev: Layout, next: Layout, unitSystem: Uni
       parts.push(`${item.label} added`);
       continue;
     }
-    if (old.x !== item.x || old.y !== item.y) {
-      parts.push(`${item.label} moved to ${describeItem(item, unitSystem)}`);
+    if (
+      old.placement?.x !== item.placement?.x ||
+      old.placement?.y !== item.placement?.y ||
+      old.width !== item.width ||
+      old.depth !== item.depth
+    ) {
+      const was = boxOf(old);
+      const now = boxOf(item);
+      // A resize keeps the corner (to within rounding): not a move.
+      if (Math.abs(was.x - now.x) > 1e-9 || Math.abs(was.y - now.y) > 1e-9) {
+        parts.push(`${item.label} moved to ${describeItem(item, unitSystem)}`);
+      }
     }
-    if (old.rotation !== item.rotation) parts.push(`${item.label} rotated ${item.rotation}°`);
+    if (rotationOf(old) !== rotationOf(item)) {
+      parts.push(`${item.label} rotated ${rotationOf(item)}°`);
+    }
     if (!!old.locked !== !!item.locked) {
       parts.push(`${item.label} ${item.locked ? 'locked' : 'unlocked'}`);
     }
@@ -33,14 +51,14 @@ export function describeLayoutChange(prev: Layout, next: Layout, unitSystem: Uni
 }
 
 /** Doors/windows that came back or went away (spoken after undo/redo), or ''. */
-export function describeOpeningsChange(prev: Layout, next: Layout): string {
+export function describeOpeningsChange(prev: Plan, next: Plan): string {
   const parts: string[] = [];
   const diff = (before: number, after: number, kind: string) => {
     if (after > before) parts.push(`${kind} restored`);
     else if (after < before) parts.push(`${kind} removed`);
   };
-  diff(prev.doors.length, next.doors.length, 'Door');
-  diff(prev.windows.length, next.windows.length, 'Window');
+  diff(doorsOf(mainRoom(prev)).length, doorsOf(mainRoom(next)).length, 'Door');
+  diff(windowsOf(mainRoom(prev)).length, windowsOf(mainRoom(next)).length, 'Window');
   return parts.join('. ');
 }
 
@@ -48,7 +66,7 @@ export function describeOpeningsChange(prev: Layout, next: Layout): string {
 export function describeNewWarnings(
   prev: Map<Id, ItemWarning>,
   next: Map<Id, ItemWarning>,
-  items: FurnitureItem[],
+  items: readonly Item[],
 ): string {
   const parts: string[] = [];
   for (const item of items) {
@@ -73,7 +91,7 @@ export function describeNewWarnings(
  * layout-change announcement so "Undo. Bed moved to …" is spoken as one.
  */
 export function useAnnouncements(
-  layout: Layout,
+  layout: Plan,
   warnings: Map<Id, ItemWarning>,
   unitSystem: UnitSystem,
   saveStatus: SaveStatus,

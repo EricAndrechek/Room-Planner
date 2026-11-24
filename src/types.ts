@@ -1,39 +1,40 @@
 /**
- * Shared app types. The document types live in `core/types.ts` (re-exported here); all lengths
- * are stored internally in FEET; unit systems only affect display, parsing and the share/export
- * format.
+ * Shared app types. The document is the v4 `Plan` (core/schema.ts), held and stored in FEET; unit
+ * systems only affect display, parsing and the share/export format.
  */
-import type { Id, Layout, UnitSystem } from './core/types';
+import type { Plan } from './core/schema';
 
-export type {
-  Door,
-  DoorType,
-  FurnitureItem,
-  Hinge,
-  Id,
-  Layout,
-  RoomDims,
-  RoomWindow,
-  SwingAngle,
-  UnitSystem,
-  Wall,
-} from './core/types';
+export type { Item, Opening, Plan, Room } from './core/schema';
+export type { RoomDims, UnitSystem, Wall } from './core/types';
+
+/** Ids of rooms, openings and pieces (one namespace per plan). */
+export type Id = string;
 
 export type DesignMode = 'room-setup' | 'furniture';
 
-export interface ProjectData extends Layout {
-  designMode?: DesignMode;
-  unitSystem?: UnitSystem;
-}
-
+/**
+ * A saved plan ("My Floor Plans"), as stored in `room-planner-plans`: the plan itself (whose `name`
+ * is the plan's name) and the editor state that goes with it.
+ */
 export interface Project {
   id: string;
-  name: string;
-  data: ProjectData;
   /** ISO timestamp. */
   createdAt: string;
   /** ISO timestamp. */
   updatedAt: string;
+  ui?: { designMode?: DesignMode };
+  plan: Plan;
+}
+
+/**
+ * A saved plan this build cannot open (made by a newer Room Planner): listed, never opened, and
+ * written back exactly as it was read.
+ */
+export interface LockedProject {
+  id: string | null;
+  name: string;
+  version: number;
+  updatedAt: string | null;
 }
 
 export type EntityType = 'item' | 'door' | 'window';

@@ -97,17 +97,18 @@ test('wide screens: Copy link, Email it to me and a QR code that scans to the sa
 
 test('a long plan link still gives a QR code that scans', async ({ page, isMobile }) => {
   test.skip(isMobile, 'the QR code is for wide screens');
-  // 25 pieces with long names: a link of well over 600 characters.
+  // 40 pieces with long names: a link of well over 600 characters (the compact plan form makes
+  // 25 such pieces fit in fewer).
   await page.addInitScript(() => {
     if (sessionStorage.getItem('seeded')) return;
     sessionStorage.setItem('seeded', '1');
-    const items = Array.from({ length: 25 }, (_, i) => ({
+    const items = Array.from({ length: 40 }, (_, i) => ({
       id: i + 1,
       label: `Piece number ${i + 1} with a longer name`,
       width: 1 + (i % 3),
       height: 1 + (i % 2),
       x: (i % 5) * 2.3,
-      y: Math.floor(i / 5) * 2.3,
+      y: Math.floor(i / 5) * 1.45,
       rotation: (i * 15) % 90,
       color: '#93c5fd',
       visible: true,

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { storedDims, storedOpenings, storedPieces, storedUi } from './storage';
 import { isNarrow, openStep, viewPlan } from './ui';
 
 // Fixes for friction seen in real sessions (see the PR): each test names the behaviour it guards.
@@ -15,11 +16,16 @@ const returningIn = (page: Page, mode: 'room-setup' | 'furniture') =>
     if (sessionStorage.getItem('seeded')) return;
     sessionStorage.setItem('seeded', '1');
     localStorage.setItem('room-sim-v3-mode', m);
-    localStorage.setItem('room-sim-v3-dims', JSON.stringify({ width: 12, height: 12 }));
+    localStorage.setItem('dims', JSON.stringify({ width: 12, height: 12 }));
   }, mode);
 
-const stored = <T>(page: Page, key: string): Promise<T> =>
-  page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? 'null'), key);
+/** What the planner stored, in its fields' terms (e2e/storage.ts). */
+const stored = async <T>(page: Page, what: 'items' | 'dims' | 'doors' | 'windows'): Promise<T> =>
+  (what === 'items'
+    ? await storedPieces(page)
+    : what === 'dims'
+      ? await storedDims(page)
+      : await storedOpenings(page, what === 'doors' ? 'door' : 'window')) as T;
 
 const badge = (page: Page) => page.getByTestId('mode-badge');
 const notice = (page: Page) => page.getByTestId('app-notice');
@@ -29,7 +35,7 @@ test.describe('locked furniture in room setup', () => {
     await page.goto('/');
     await ready(page);
     await expect(badge(page)).toContainText(/Furniture Mode|Drag to move/);
-    expect(await page.evaluate(() => localStorage.getItem('room-sim-v3-mode'))).toBe('furniture');
+    expect((await storedUi(page)).designMode).toBe('furniture');
   });
 
   test('a returning visitor keeps the mode they were in (room setup)', async ({ page }) => {
@@ -69,10 +75,10 @@ test.describe('locked furniture in room setup', () => {
     await ready(page);
     const bed = page.getByRole('button', { name: /^Bed,/ });
     await bed.focus();
-    const items = await stored<{ x: number }[]>(page, 'room-sim-v3-items');
+    const items = await stored<{ x: number }[]>(page, 'items');
     await page.keyboard.press('ArrowRight');
     await expect(notice(page)).toContainText('Furniture is locked');
-    expect(await stored(page, 'room-sim-v3-items')).toEqual(items);
+    expect(await stored(page, 'items')).toEqual(items);
   });
 
   test('the phone badge says furniture is locked, on one line', async ({ page }) => {
@@ -94,8 +100,7 @@ test.describe('room size input', () => {
     await openStep(page, 'room');
     return page.getByLabel('Room width');
   };
-  const storedWidth = async (page: Page) =>
-    (await stored<{ width: number }>(page, 'room-sim-v3-dims')).width;
+  const storedWidth = async (page: Page) => (await stored<{ width: number }>(page, 'dims')).width;
 
   test('"117" asks "did you mean 11\'7"?", and Use 11\'7" sets it', async ({ page }) => {
     const width = await setup(page);
@@ -202,7 +207,7 @@ test('Add Item lands in free floor near the middle, selected, with its card in v
   await page.getByRole('button', { name: 'Add Item' }).click();
   const piece = page.getByRole('button', { name: /^New Item,/ });
   await expect(piece).toHaveAttribute('aria-pressed', 'true');
-  const items = await stored<{ label: string; x: number; y: number }[]>(page, 'room-sim-v3-items');
+  const items = await stored<{ label: string; x: number; y: number }[]>(page, 'items');
   // Not dropped on the bed in the middle: the nearest free spot (touching the foot of the bed).
   expect(items.find((i) => i.label === 'New Item')).toMatchObject({ x: 4.5, y: 6.5 });
   await expect(page.getByText(/Overlapping|Outside room|Blocks door/)).toHaveCount(0);
@@ -226,7 +231,7 @@ test('shrinking the room offers to move stranded pieces inside, as one undoable 
 }) => {
   type Item = { label: string; x: number; y: number; width: number; height: number };
   const outside = async () =>
-    (await stored<Item[]>(page, 'room-sim-v3-items')).filter(
+    (await stored<Item[]>(page, 'items')).filter(
       (i) => i.x < -0.001 || i.y < -0.001 || i.x + i.width > 8.001 || i.y + i.height > 12.001,
     ).length;
   await returningIn(page, 'room-setup');
@@ -244,12 +249,12 @@ test('shrinking the room offers to move stranded pieces inside, as one undoable 
   await expect(notice(page)).toHaveCount(0);
   await expect.poll(outside).toBe(0);
   // Still 8 wide: only the pieces moved.
-  expect(await stored(page, 'room-sim-v3-dims')).toEqual({ width: 8, height: 12 });
+  expect(await stored(page, 'dims')).toEqual({ width: 8, height: 12 });
 
   // One undo puts the pieces back where they were (the room stays 8 wide).
   await page.getByRole('button', { name: 'Undo' }).click();
   await expect.poll(outside).toBe(n);
-  expect(await stored(page, 'room-sim-v3-dims')).toEqual({ width: 8, height: 12 });
+  expect(await stored(page, 'dims')).toEqual({ width: 8, height: 12 });
 });
 
 test('the shrink notice can be dismissed, and growing the room never shows it', async ({
@@ -288,13 +293,13 @@ test('wall segmented control moves an opening to a free spot on the new wall', a
     'aria-checked',
     'true',
   );
-  const [win] = await stored<Opening[]>(page, 'room-sim-v3-windows');
+  const [win] = await stored<Opening[]>(page, 'windows');
   expect(win).toMatchObject({ wall: 'left', position: 4 }); // free there: kept
 
   // The door (6'..9' on its wall) would land on the window (4'..8'): it goes to a free spot.
   const doorWall = page.getByRole('radiogroup', { name: 'Door 1 wall' });
   await doorWall.getByRole('radio', { name: 'Left' }).click();
-  const [door] = await stored<Opening[]>(page, 'room-sim-v3-doors');
+  const [door] = await stored<Opening[]>(page, 'doors');
   expect(door!.wall).toBe('left');
   const clear = door!.position + door!.width <= win!.position || door!.position >= 8;
   expect(clear, `door at ${door!.position} overlaps the window`).toBe(true);
@@ -331,7 +336,7 @@ test("an opening that doesn't fit on the chosen wall stays put, and says so", as
     'aria-checked',
     'true',
   );
-  expect((await stored<{ wall: string }[]>(page, 'room-sim-v3-doors'))[0]!.wall).toBe('bottom');
+  expect((await stored<{ wall: string }[]>(page, 'doors'))[0]!.wall).toBe('bottom');
 });
 
 test('the active step header is a plain label; the inactive one expands its locked section', async ({

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import fs from 'node:fs';
+import { storedPieces } from './storage';
 
 const fixture = (name: string) =>
   JSON.parse(fs.readFileSync(new URL(`../src/core/__fixtures__/${name}`, import.meta.url), 'utf8'));
@@ -10,8 +11,7 @@ async function ready(page: Page) {
   await page.waitForTimeout(700);
 }
 
-const storedItems = (page: Page) =>
-  page.evaluate(() => JSON.parse(localStorage.getItem('room-sim-v3-items') ?? '[]'));
+const storedItems = (page: Page) => storedPieces(page);
 
 const center = async (page: Page, selector: Parameters<Page['locator']>[0]) => {
   const box = (await page.locator(selector).boundingBox())!;
@@ -62,7 +62,7 @@ test('add, drag, rotate, undo, share, reopen and reload', async ({ page, browser
   await page.getByRole('button', { name: 'Add Item' }).click();
   const piece = page.getByRole('button', { name: /^New Item,/ });
   await expect(piece).toBeVisible();
-  const before = (await storedItems(page)).find((i: { label: string }) => i.label === 'New Item');
+  const before = (await storedItems(page)).find((i: { label: string }) => i.label === 'New Item')!;
   // The free spot nearest the middle (the middle itself is the bed).
   expect(before).toMatchObject({ x: 4.5, y: 6.5, width: 3, height: 2, rotation: 0 });
 
@@ -72,7 +72,7 @@ test('add, drag, rotate, undo, share, reopen and reload', async ({ page, browser
   await page.mouse.down();
   await page.mouse.move(start.x + 60, start.y - 90, { steps: 10 });
   await page.mouse.up();
-  const dragged = (await storedItems(page)).find((i: { label: string }) => i.label === 'New Item');
+  const dragged = (await storedItems(page)).find((i: { label: string }) => i.label === 'New Item')!;
   expect(dragged.x).toBeGreaterThan(before.x + 0.5);
   expect(dragged.y).toBeLessThan(before.y - 0.5);
 
@@ -161,12 +161,13 @@ test("loads data saved by the original app's localStorage", async ({ page, isMob
   await expect(page.getByRole('button', { name: /^Rug,/ })).toHaveCount(0); // hidden
   if (!isMobile) await expect(page.getByRole('button', { name: 'Show Rug' })).toBeVisible();
 
-  // Nothing was rewritten just by loading.
+  // The old keys are never rewritten (they stay the backup); the plan moved to the new keys.
   const after = await page.evaluate(() =>
     Object.fromEntries(Object.keys(localStorage).map((k) => [k, localStorage.getItem(k)])),
   );
   for (const [k, v] of Object.entries(seed)) expect(after[k]).toBe(v);
-  expect(after['room-planner-schema']).toBe('1');
+  expect(after['room-planner-schema']).toBe('2');
+  expect(JSON.parse(after['room-planner-working']!).version).toBe(4);
 });
 
 test('legacy ?config= links from the original app still open', async ({ page, isMobile }) => {

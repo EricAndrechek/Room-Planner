@@ -4,9 +4,16 @@ import { glowClass, useCardHighlight } from '../../hooks/useCardHighlight';
 import type { AddedOpening } from '../../hooks/useOpenings';
 import { DOOR_TYPES, WALL_OPTIONS } from '../../lib/constants';
 import { wallLength } from '../../core/geometry';
-import { doorSwingAngle, hasHingeSide, isSwingDoor } from '../../core/openings';
+import {
+  doorSwingAngle,
+  hasHingeSide,
+  isSwingDoor,
+  type DoorType,
+} from '../../core/geometry/doors';
 import { feetToDisplay, formatArea, roomConfirmAboveFeet, roomMaxFeet } from '../../core/units';
-import type { Door, DoorType, Id, RoomDims, RoomWindow, UnitSystem, Wall } from '../../types';
+import type { OpeningPatch } from '../../lib/edits';
+import { openingPlace, roomSize } from '../../lib/plans';
+import type { Id, Opening, Room, RoomDims, UnitSystem, Wall } from '../../types';
 import { DimensionInput } from './DimensionInput';
 import { StepHeader } from './StepHeader';
 import { Segmented } from './Segmented';
@@ -17,16 +24,16 @@ interface RoomSetupPanelProps {
   onToggleExpanded: () => void;
   onActivate: () => void;
   onContinue: () => void;
-  roomDims: RoomDims;
-  doors: Door[];
-  windows: RoomWindow[];
+  room: Room;
+  doors: Opening[];
+  windows: Opening[];
   unitSystem: UnitSystem;
   onRoomDimsChange: (dims: RoomDims) => void;
   onAddDoor: () => void;
-  onUpdateDoor: (id: Id, updates: Partial<Door>) => void;
+  onUpdateDoor: (id: Id, updates: OpeningPatch) => void;
   onDeleteDoor: (id: Id) => void;
   onAddWindow: () => void;
-  onUpdateWindow: (id: Id, updates: Partial<RoomWindow>) => void;
+  onUpdateWindow: (id: Id, updates: OpeningPatch) => void;
   onDeleteWindow: (id: Id) => void;
   /** Move a door/window to another wall (at a free spot there). */
   onChangeWall: (type: 'door' | 'window', id: Id, wall: Wall) => void;
@@ -46,7 +53,8 @@ const plural = (n: number, word: string) => `${n} ${word}${n !== 1 ? 's' : ''}`;
 
 /** Step 1 group in the sidebar: room size, doors and windows. */
 export function RoomSetupPanel(props: RoomSetupPanelProps) {
-  const { isActiveMode, expanded, roomDims, doors, windows, unitSystem } = props;
+  const { isActiveMode, expanded, room, doors, windows, unitSystem } = props;
+  const roomDims: RoomDims = roomSize(room);
   const { register, isHighlighted } = useCardHighlight(props.highlight);
   // Full-width row under Width and Length for their errors and "did you mean?" prompts.
   const [dimsMessages, setDimsMessages] = useState<HTMLDivElement | null>(null);
@@ -169,7 +177,8 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
 
             <div className="space-y-3">
               {doors.map((door, index) => {
-                const wallLen = wallLength(roomDims, door.wall);
+                const place = openingPlace(room, door);
+                const wallLen = wallLength(roomDims, place.wall);
                 const card = { type: 'door', id: door.id } as const;
                 const lit = isHighlighted(card);
                 return (
@@ -199,7 +208,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                       <Segmented
                         label={`Door ${index + 1} wall`}
                         options={WALL_SEGMENTS}
-                        value={door.wall}
+                        value={place.wall}
                         onChange={(wall) => props.onChangeWall('door', door.id, wall)}
                       />
                     </div>
@@ -237,7 +246,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                         </label>
                         <DimensionInput
                           id={fid('door', index, 'width')}
-                          value={door.width}
+                          value={place.width}
                           onChange={(val) => props.onUpdateDoor(door.id, { width: val })}
                           className={smallInput('focus:ring-indigo-500')}
                           min={1}
@@ -255,11 +264,11 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                         </label>
                         <DimensionInput
                           id={fid('door', index, 'position')}
-                          value={door.position}
+                          value={place.position}
                           onChange={(val) => props.onUpdateDoor(door.id, { position: val })}
                           className={smallInput('focus:ring-indigo-500')}
                           min={0}
-                          max={Math.max(0, wallLen - door.width)}
+                          max={Math.max(0, wallLen - place.width)}
                           label="Door position"
                           unitSystem={unitSystem}
                         />
@@ -273,13 +282,13 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                             type="button"
                             onClick={() =>
                               props.onUpdateDoor(door.id, {
-                                hinge: door.hinge === 'left' ? 'right' : 'left',
+                                hinge: place.hinge === 'left' ? 'right' : 'left',
                               })
                             }
                             className="flex-1 py-1.5 px-2 bg-slate-100 hover:bg-slate-200 rounded-sm text-[10px] font-medium text-slate-600 flex items-center justify-center gap-1 transition-colors"
                           >
                             <ArrowLeftRight className="w-3 h-3" aria-hidden="true" />{' '}
-                            {hingeWord(door.type)}: {door.hinge === 'left' ? 'Left' : 'Right'}
+                            {hingeWord(door.type)}: {place.hinge === 'left' ? 'Left' : 'Right'}
                           </button>
                         )}
                         {isSwingDoor(door.type) && (
@@ -348,7 +357,8 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
 
             <div className="space-y-3">
               {windows.map((win, index) => {
-                const wallLen = wallLength(roomDims, win.wall);
+                const place = openingPlace(room, win);
+                const wallLen = wallLength(roomDims, place.wall);
                 const card = { type: 'window', id: win.id } as const;
                 const lit = isHighlighted(card);
                 return (
@@ -378,7 +388,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                       <Segmented
                         label={`Window ${index + 1} wall`}
                         options={WALL_SEGMENTS}
-                        value={win.wall}
+                        value={place.wall}
                         onChange={(wall) => props.onChangeWall('window', win.id, wall)}
                         ring="focus-visible:ring-blue-500"
                         activeText="text-blue-700"
@@ -394,7 +404,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                         </label>
                         <DimensionInput
                           id={fid('window', index, 'width')}
-                          value={win.width}
+                          value={place.width}
                           onChange={(val) => props.onUpdateWindow(win.id, { width: val })}
                           className={smallInput('focus:ring-blue-500')}
                           min={0.5}
@@ -412,11 +422,11 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                         </label>
                         <DimensionInput
                           id={fid('window', index, 'position')}
-                          value={win.position}
+                          value={place.position}
                           onChange={(val) => props.onUpdateWindow(win.id, { position: val })}
                           className={smallInput('focus:ring-blue-500')}
                           min={0}
-                          max={Math.max(0, wallLen - win.width)}
+                          max={Math.max(0, wallLen - place.width)}
                           label="Window position"
                           unitSystem={unitSystem}
                         />

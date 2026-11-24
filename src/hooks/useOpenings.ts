@@ -7,10 +7,19 @@ import {
 } from 'react';
 import { track } from '../lib/analytics';
 import { PIXELS_PER_UNIT } from '../lib/constants';
-import { constrainOpening, isHorizontalWall, wallLength } from '../core/geometry';
-import { findOpeningSpot, findOpeningSpotOnWall } from '../core/openings';
-import { clamp } from '../core/units';
-import type { Door, Id, Layout, RoomDims, RoomWindow, Selection, Wall } from '../types';
+import {
+  addDoor as addDoorEdit,
+  addWindow as addWindowEdit,
+  deleteOpening,
+  insertOpening,
+  moveOpeningToWall as moveToWall,
+  resizeRoom,
+  slideOpening,
+  updateOpening,
+  type OpeningPatch,
+} from '../lib/edits';
+import { doorsOf, mainRoom, openingPlace, roomSize, windowsOf } from '../lib/plans';
+import type { Id, Plan, RoomDims, Selection, Wall } from '../types';
 import type { History } from './useHistory';
 import { nextCardSeq, type CardRef } from './useCardHighlight';
 import type { usePointerDrag } from './usePointerDrag';
@@ -22,29 +31,8 @@ export interface AddedOpening extends CardRef {
   type: 'door' | 'window';
 }
 
-/** Defaults for a new opening; it goes to the next free spot from here. */
-const NEW_DOOR = {
-  width: 3,
-  wall: 'bottom' as Wall,
-  position: 2,
-  hinge: 'left',
-  type: 'swing-in',
-} as const;
-const NEW_WINDOW = { width: 3, wall: 'top' as Wall, position: 2 };
-
-/** Slide one door/window along its wall by `delta` feet, kept on the wall. */
-const slideOpening = (l: Layout, kind: OpeningKind, id: Id, dx: number, dy: number): Layout => ({
-  ...l,
-  [kind]: (l[kind] as (Door | RoomWindow)[]).map((o) => {
-    if (o.id !== id) return o;
-    const len = wallLength(l.roomDims, o.wall);
-    const delta = isHorizontalWall(o.wall) ? dx : dy;
-    return { ...o, position: clamp(o.position + delta, 0, len - o.width) };
-  }),
-});
-
 interface Options {
-  history: History<Layout>;
+  history: History<Plan>;
   selection: Selection | null;
   setSelection: Dispatch<SetStateAction<Selection | null>>;
   /** Speak a message in the live region. */
@@ -69,8 +57,11 @@ export function useOpenings({
   startDrag,
   zoomRef,
 }: Options) {
-  const { present: layout, set: setLayout, apply: applyLayout, commit } = history;
+  const { present: plan, set: setPlan, apply: applyPlan, commit } = history;
   const [lastAdded, setLastAdded] = useState<AddedOpening | null>(null);
+  const room = mainRoom(plan);
+  const doors = doorsOf(room);
+  const windows = windowsOf(room);
 
   /** Select a new opening, point the sidebar at it and say where it went. */
   const added = (type: 'door' | 'window', id: Id, number: number, wall: Wall) => {
@@ -85,56 +76,40 @@ export function useOpenings({
   /** Resize the room (one undo step). Returns the new size, or null if nothing changed. */
   const updateRoomDims = (dims: RoomDims): RoomDims | null => {
     const next = { width: Math.max(1, dims.width || 1), height: Math.max(1, dims.height || 1) };
-    const prev = layout.roomDims;
+    const prev = roomSize(room);
     if (next.width === prev.width && next.height === prev.height) return null;
-    applyLayout((l) => ({ ...l, roomDims: next }));
+    applyPlan((p) => resizeRoom(p, next));
     const area = next.width * next.height - prev.width * prev.height;
     track('room_resized', { direction: area > 0 ? 'larger' : area < 0 ? 'smaller' : 'same_area' });
     return next;
   };
 
   const addDoor = () => {
-    const spot = findOpeningSpot(layout, NEW_DOOR.width, NEW_DOOR, { swing: NEW_DOOR });
-    const door: Door = {
-      id: Date.now(),
-      width: NEW_DOOR.width,
-      ...spot,
-      hinge: NEW_DOOR.hinge,
-      type: NEW_DOOR.type,
-    };
-    applyLayout((l) => ({ ...l, doors: [...l.doors, door] }));
-    track('door_added', { count: layout.doors.length + 1 });
-    added('door', door.id, layout.doors.length + 1, spot.wall);
+    const { door, wall } = addDoorEdit(plan);
+    applyPlan((p) => insertOpening(p, door));
+    track('door_added', { count: doors.length + 1 });
+    added('door', door.id, doors.length + 1, wall);
   };
-  const updateDoor = (id: Id, updates: Partial<Door>) =>
-    applyLayout((l) => ({
-      ...l,
-      doors: l.doors.map((d) => (d.id === id ? constrainOpening(d, updates, l.roomDims, 1) : d)),
-    }));
+  const updateDoor = (id: Id, updates: OpeningPatch) =>
+    applyPlan((p) => updateOpening(p, id, updates, 1));
   const deleteDoor = (id: Id) => {
-    applyLayout((l) => ({ ...l, doors: l.doors.filter((d) => d.id !== id) }));
+    applyPlan((p) => deleteOpening(p, id));
     deselect('door', id);
-    track('door_removed', { count: layout.doors.filter((d) => d.id !== id).length });
+    track('door_removed', { count: doors.filter((d) => d.id !== id).length });
   };
 
   const addWindow = () => {
-    const spot = findOpeningSpot(layout, NEW_WINDOW.width, NEW_WINDOW);
-    const win: RoomWindow = { id: Date.now(), width: NEW_WINDOW.width, ...spot };
-    applyLayout((l) => ({ ...l, windows: [...l.windows, win] }));
-    track('window_added', { count: layout.windows.length + 1 });
-    added('window', win.id, layout.windows.length + 1, spot.wall);
+    const { window: win, wall } = addWindowEdit(plan);
+    applyPlan((p) => insertOpening(p, win));
+    track('window_added', { count: windows.length + 1 });
+    added('window', win.id, windows.length + 1, wall);
   };
-  const updateWindow = (id: Id, updates: Partial<RoomWindow>) =>
-    applyLayout((l) => ({
-      ...l,
-      windows: l.windows.map((w) =>
-        w.id === id ? constrainOpening(w, updates, l.roomDims, 0.5) : w,
-      ),
-    }));
+  const updateWindow = (id: Id, updates: OpeningPatch) =>
+    applyPlan((p) => updateOpening(p, id, updates, 0.5));
   const deleteWindow = (id: Id) => {
-    applyLayout((l) => ({ ...l, windows: l.windows.filter((w) => w.id !== id) }));
+    applyPlan((p) => deleteOpening(p, id));
     deselect('window', id);
-    track('window_removed', { count: layout.windows.filter((w) => w.id !== id).length });
+    track('window_removed', { count: windows.filter((w) => w.id !== id).length });
   };
 
   /**
@@ -143,27 +118,14 @@ export function useOpenings({
    * announced. False, and nothing changes, if it fits nowhere on that wall.
    */
   const moveOpeningToWall = (type: 'door' | 'window', id: Id, wall: Wall): boolean => {
-    const kind: OpeningKind = type === 'door' ? 'doors' : 'windows';
-    const list: (Door | RoomWindow)[] = layout[kind];
+    const list = type === 'door' ? doors : windows;
     const index = list.findIndex((o) => o.id === id);
     const opening = list[index];
     if (!opening) return false;
-    if (opening.wall === wall) return true;
-    const others = { ...layout, [kind]: list.filter((o) => o.id !== id) };
-    const position = findOpeningSpotOnWall(
-      others,
-      opening.width,
-      wall,
-      opening.position,
-      type === 'door' ? { swing: opening as Door } : {},
-    );
-    if (position === null) return false;
-    applyLayout((l) => ({
-      ...l,
-      [kind]: (l[kind] as (Door | RoomWindow)[]).map((o) =>
-        o.id === id ? { ...o, wall, position } : o,
-      ),
-    }));
+    if (openingPlace(room, opening).wall === wall) return true;
+    const next = moveToWall(plan, id, wall);
+    if (next === null) return false;
+    applyPlan((p) => moveToWall(p, id, wall) ?? p);
     setSelection({ id, type });
     announce(`${type === 'door' ? 'Door' : 'Window'} ${index + 1} moved to the ${wall} wall`);
     return true;
@@ -185,7 +147,7 @@ export function useOpenings({
         const dy = (ev.clientY - last.y) / scale;
         last = { x: ev.clientX, y: ev.clientY };
         if (dx || dy) moved = true;
-        setLayout((l) => slideOpening(l, kind, id, dx, dy));
+        setPlan((p) => slideOpening(p, id, dx, dy));
       },
       onEnd: () => {
         commit();
@@ -197,9 +159,8 @@ export function useOpenings({
   /** Slide the selected door/window along its wall (room setup only). */
   const nudgeOpening = (dx: number, dy: number): boolean => {
     if (!isRoomSetup || (selection?.type !== 'door' && selection?.type !== 'window')) return false;
-    const kind = selection.type === 'door' ? 'doors' : 'windows';
     const id = selection.id;
-    applyLayout((l) => slideOpening(l, kind, id, dx, dy));
+    applyPlan((p) => slideOpening(p, id, dx, dy));
     return true;
   };
 
@@ -210,7 +171,7 @@ export function useOpenings({
   const deleteSelectedOpening = (): boolean => {
     if (!isRoomSetup || (selection?.type !== 'door' && selection?.type !== 'window')) return false;
     const isDoor = selection.type === 'door';
-    const list: { id: Id }[] = isDoor ? layout.doors : layout.windows;
+    const list = isDoor ? doors : windows;
     const index = list.findIndex((o) => o.id === selection.id);
     if (index < 0) return false;
     if (isDoor) deleteDoor(selection.id);

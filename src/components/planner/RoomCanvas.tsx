@@ -3,22 +3,14 @@ import { Home, Sofa } from 'lucide-react';
 import { DESIGN_MODES, PIXELS_PER_UNIT } from '../../lib/constants';
 import { feetToDisplay, nudgeStep } from '../../core/units';
 import type { ItemWarning } from '../../core/geometry';
-import type {
-  DesignMode,
-  Door,
-  FurnitureItem,
-  Id,
-  Layout,
-  RoomWindow,
-  Selection,
-  UnitSystem,
-} from '../../types';
+import { doorsOf, mainRoom, roomSize, shownPieces, windowsOf } from '../../lib/plans';
+import type { DesignMode, Id, Item, Opening, Plan, Selection, UnitSystem } from '../../types';
 import { FurniturePiece } from './FurniturePiece';
 import { DoorShape, WindowShape } from './Openings';
 
 interface RoomCanvasProps {
   containerRef: RefObject<HTMLDivElement | null>;
-  layout: Layout;
+  plan: Plan;
   warnings: Map<Id, ItemWarning>;
   selection: Selection | null;
   designMode: DesignMode;
@@ -27,13 +19,13 @@ interface RoomCanvasProps {
   pan: { x: number; y: number };
   showModeBadge: boolean;
   onSelectOpening: (type: 'door' | 'window', id: Id) => void;
-  onItemPointerDown: (e: ReactPointerEvent<HTMLDivElement>, item: FurnitureItem) => void;
-  onRotatePointerDown: (e: ReactPointerEvent<HTMLDivElement>, item: FurnitureItem) => void;
-  onSelectItem: (item: FurnitureItem) => void;
+  onItemPointerDown: (e: ReactPointerEvent<HTMLDivElement>, item: Item) => void;
+  onRotatePointerDown: (e: ReactPointerEvent<HTMLDivElement>, item: Item) => void;
+  onSelectItem: (item: Item) => void;
   /** Enter/Space on a piece while room setup locks furniture. */
-  onLockedItemPress?: (item: FurnitureItem) => void;
-  onDoorPointerDown: (e: ReactPointerEvent<HTMLDivElement>, door: Door) => void;
-  onWindowPointerDown: (e: ReactPointerEvent<HTMLDivElement>, win: RoomWindow) => void;
+  onLockedItemPress?: (item: Item) => void;
+  onDoorPointerDown: (e: ReactPointerEvent<HTMLDivElement>, door: Opening) => void;
+  onWindowPointerDown: (e: ReactPointerEvent<HTMLDivElement>, win: Opening) => void;
   /** Doors whose clearance to highlight (a piece being moved is in their way). */
   highlightDoorIds?: readonly Id[];
   /** Drawn inside the room, above the furniture (guides and measurements). */
@@ -51,7 +43,7 @@ const GRID_STYLE = {
 /** The zoomable/pannable floor plan. */
 export function RoomCanvas({
   containerRef,
-  layout,
+  plan,
   warnings,
   selection,
   designMode,
@@ -70,7 +62,10 @@ export function RoomCanvas({
   covered = false,
   highlightDoorIds = [],
 }: RoomCanvasProps) {
-  const { roomDims, doors, windows, items } = layout;
+  const room = mainRoom(plan);
+  const roomDims = roomSize(room);
+  const doors = doorsOf(room);
+  const windows = windowsOf(room);
   const isRoomSetup = designMode === DESIGN_MODES.ROOM_SETUP;
   const isActive = (type: Selection['type'], id: Id) =>
     selection?.type === type && selection.id === id;
@@ -150,7 +145,7 @@ export function RoomCanvas({
             <DoorShape
               key={door.id}
               opening={door}
-              room={roomDims}
+              room={room}
               isActive={isActive('door', door.id)}
               isLocked={!isRoomSetup}
               unitSystem={unitSystem}
@@ -164,7 +159,7 @@ export function RoomCanvas({
             <WindowShape
               key={win.id}
               opening={win}
-              room={roomDims}
+              room={room}
               isActive={isActive('window', win.id)}
               isLocked={!isRoomSetup}
               unitSystem={unitSystem}
@@ -174,25 +169,23 @@ export function RoomCanvas({
             />
           ))}
 
-          {items
-            .filter((i) => i.visible !== false)
-            .map((item) => (
-              <FurniturePiece
-                key={item.id}
-                item={item}
-                warning={warnings.get(item.id)}
-                isActive={isActive('item', item.id)}
-                modeLocked={isRoomSetup}
-                unitSystem={unitSystem}
-                onPointerDown={onItemPointerDown}
-                onRotatePointerDown={onRotatePointerDown}
-                onSelect={onSelectItem}
-                onLockedPress={onLockedItemPress}
-                // Only the selected piece draws zoom-dependent UI (its rotate handle): others keep
-                // their memoized render while zooming.
-                zoom={isActive('item', item.id) ? zoom : 1}
-              />
-            ))}
+          {shownPieces(plan).map((item) => (
+            <FurniturePiece
+              key={item.id}
+              item={item}
+              warning={warnings.get(item.id)}
+              isActive={isActive('item', item.id)}
+              modeLocked={isRoomSetup}
+              unitSystem={unitSystem}
+              onPointerDown={onItemPointerDown}
+              onRotatePointerDown={onRotatePointerDown}
+              onSelect={onSelectItem}
+              onLockedPress={onLockedItemPress}
+              // Only the selected piece draws zoom-dependent UI (its rotate handle): others keep
+              // their memoized render while zooming.
+              zoom={isActive('item', item.id) ? zoom : 1}
+            />
+          ))}
           {overlay}
         </div>
       </div>

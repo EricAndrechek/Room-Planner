@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { animationsSettled, openStep, setDetent, viewPlan } from './ui';
+import { storedPieces } from './storage';
 
 /** Wait for the island to mount and the initial auto-fit zoom to settle. */
 async function ready(page: Page) {
@@ -229,9 +230,9 @@ test('furniture can be selected, moved, rotated, undone and removed with the key
 }) => {
   await page.goto('/');
   await ready(page);
-  const items = () =>
-    page.evaluate(() => JSON.parse(localStorage.getItem('room-sim-v3-items') ?? '[]'));
-  const itemOf = async () => (await items()).find((i: { label: string }) => i.label === 'New Item');
+  const items = () => storedPieces(page);
+  const itemOf = async () =>
+    (await items()).find((i: { label: string }) => i.label === 'New Item')!;
 
   // Set up one piece (setup itself is mouse-free: Tab + Enter would work, click is just shorter).
   await openStep(page, 'furniture');

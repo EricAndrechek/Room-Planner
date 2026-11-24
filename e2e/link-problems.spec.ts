@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { storedDims, storedPlans } from './storage';
 import { isNarrow } from './ui';
 
 // Links this build cannot open (docs/design/plan-format.md, section 4): a plan from a newer Room
@@ -19,19 +20,12 @@ async function open(page: Page, path: string) {
 }
 
 /** Names of the saved plans (a first visit may autosave the starter plan; nothing else). */
-const savedNames = (page: Page) =>
-  page.evaluate(() =>
-    (JSON.parse(localStorage.getItem('room-planner-projects') ?? '[]') as { name: string }[]).map(
-      (p) => p.name,
-    ),
-  );
+const savedNames = async (page: Page) => (await storedPlans(page)).map((p) => p.plan.name);
 const expectNothingFromTheLink = async (page: Page) => {
   const names = await savedNames(page);
   expect(names).not.toContain('From the future');
   expect(names).not.toContain('Shared Floor Plan');
-  expect(await page.evaluate(() => localStorage.getItem('room-sim-v3-dims') ?? '')).not.toContain(
-    '9',
-  );
+  expect(await storedDims(page)).not.toEqual({ width: 9, height: 9 });
 };
 
 test('a plan from a newer Room Planner asks for an update and changes nothing', async ({
@@ -97,7 +91,7 @@ test('the JSON box refuses a newer plan with the reason', async ({ page }) => {
   const dialog = page.getByRole('dialog', { name: 'Share & Save Layout' });
   await dialog
     .getByPlaceholder('Paste your JSON config here...')
-    .fill(JSON.stringify({ version: 4, unit: 'ft', rooms: [] }));
+    .fill(JSON.stringify({ version: 5, unit: 'ft', rooms: [] }));
   await dialog.getByRole('button', { name: 'Load Configuration' }).click();
   await expect(
     dialog.getByText('This plan was made with a newer version of Room Planner.'),

@@ -1,4 +1,4 @@
-import type { FurnitureItem, Id, RoomDims, Wall } from '../types';
+import type { RoomDims, Wall } from '../types';
 import { FIT_MIN_ZOOM, MAX_ZOOM, MIN_ZOOM } from '../constants';
 import { clamp } from '../units';
 
@@ -7,7 +7,8 @@ export interface Point {
   y: number;
 }
 
-type Box = Pick<FurnitureItem, 'x' | 'y' | 'width' | 'height'> & { rotation?: number };
+/** A piece's unrotated box: top-left corner, size, and rotation about its centre (degrees). */
+type Box = { x: number; y: number; width: number; height: number; rotation?: number };
 
 /**
  * Tolerance (feet) used for both collision and bounds checks, so that pieces
@@ -155,28 +156,9 @@ export interface ItemWarning {
   blocksDoor?: boolean;
   /** Standing in a doorway (softer warning). */
   blocksDoorway?: boolean;
-  /** The doors it blocks. */
-  doorIds?: Id[];
+  /** The doors it blocks (their opening ids). */
+  doorIds?: string[];
 }
-
-/**
- * Collision / out-of-bounds state for every visible item. Hidden items are
- * ignored entirely (they neither warn nor cause warnings).
- */
-export const computeItemWarnings = (
-  items: FurnitureItem[],
-  room: RoomDims,
-): Map<Id, ItemWarning> => {
-  const visible = items.filter((i) => i.visible !== false);
-  const result = new Map<Id, ItemWarning>();
-  for (const item of visible) {
-    result.set(item.id, {
-      outOfBounds: !isItemInBounds(item, room),
-      collision: visible.some((other) => other.id !== item.id && checkItemsCollision(item, other)),
-    });
-  }
-  return result;
-};
 
 export const warningText = (w: ItemWarning, longCollision = false): string =>
   w.outOfBounds && w.collision
@@ -193,23 +175,6 @@ export const isHorizontalWall = (wall: Wall): boolean => wall === 'top' || wall 
 
 export const wallLength = (room: RoomDims, wall: Wall): number =>
   isHorizontalWall(wall) ? room.width : room.height;
-
-/**
- * Apply an edit to a door/window, keeping it on its wall: width is clamped to
- * [minWidth, wall length] and position to [0, wall length - width].
- */
-export const constrainOpening = <T extends { width: number; position: number; wall: Wall }>(
-  opening: T,
-  updates: Partial<T>,
-  room: RoomDims,
-  minWidth = 1,
-): T => {
-  const wall = updates.wall ?? opening.wall;
-  const len = wallLength(room, wall);
-  const width = clamp(updates.width ?? opening.width, minWidth, len);
-  const position = clamp(updates.position ?? opening.position, 0, Math.max(0, len - width));
-  return { ...opening, ...updates, width, position };
-};
 
 // --- Rotation ---------------------------------------------------------------
 

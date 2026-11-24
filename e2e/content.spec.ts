@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { storedPieces } from './storage';
 
 // The static content pages (guides, FAQ, help): metadata, structured data, internal links, and the
 // guides' "Open this layout in the planner" share links.
@@ -145,9 +146,7 @@ test('guide example: the drawing is inline, and "Open this layout" opens it as a
     page.getByRole('heading', { level: 1, name: 'Queen bed in a 10 × 12 ft bedroom' }),
   ).toBeVisible();
   expect(new URL(page.url()).hash).toBe('');
-  const items = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem('room-sim-v3-items') ?? '[]'),
-  );
+  const items = await storedPieces(page);
   expect(items.map((i: { label: string }) => i.label)).toEqual([
     'Queen bed',
     'Nightstand',

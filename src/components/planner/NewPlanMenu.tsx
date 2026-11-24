@@ -1,7 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { FilePlus, Home, Square } from 'lucide-react';
 import type { NewPlanStart } from '../../hooks/useProjectActions';
-import { INITIAL_ROOM } from '../../lib/constants';
+import { mainRoom, roomSize, starterPlan } from '../../lib/plans';
+
+/** Both starts have the starter room's size. */
+const START_SIZE = roomSize(mainRoom(starterPlan()));
 import { feetToDisplay } from '../../core/units';
 import type { UnitSystem } from '../../types';
 import { Tooltip } from './Tooltip';
@@ -13,7 +16,7 @@ interface NewPlanMenuProps {
 
 /** The two ways to start a new plan (also offered in My Floor Plans), with their descriptions. */
 export function newPlanChoices(unitSystem: UnitSystem) {
-  const size = `${feetToDisplay(INITIAL_ROOM.width, unitSystem)} × ${feetToDisplay(INITIAL_ROOM.height, unitSystem)}`;
+  const size = `${feetToDisplay(START_SIZE.width, unitSystem)} × ${feetToDisplay(START_SIZE.height, unitSystem)}`;
   return [
     { start: 'sample', label: 'New plan', hint: 'Start from the sample bedroom', Icon: Home },
     { start: 'blank', label: 'Start blank', hint: `An empty ${size} room`, Icon: Square },

@@ -64,7 +64,23 @@ export default function LinkProblemDialog({
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const [updating, setUpdating] = useState(false);
-  const newer = problem.kind === 'newer';
+  // Both are fixed by updating: a newer build reads the plan.
+  const newer = problem.kind !== 'damaged';
+  const stored = problem.kind !== 'damaged' && problem.where === 'storage';
+  const title =
+    problem.kind === 'damaged'
+      ? 'This link is damaged'
+      : stored
+        ? 'Your plan needs a newer Room Planner'
+        : 'This plan needs a newer Room Planner';
+  const text =
+    problem.kind === 'damaged'
+      ? 'The plan in this link could not be read. Links are sometimes cut short or changed when they are copied or sent: ask for the link again, or copy all of it. Your own plan is open, unchanged.'
+      : stored
+        ? 'The plan you were working on was last saved by a newer version of Room Planner than this one. Update to keep working on it. It has not been changed, and this version will not write over it.'
+        : problem.kind === 'newer'
+          ? 'The link holds a plan made with a newer version of Room Planner than this one. Update to open it; the link stays in the address bar. Your own plans are not changed.'
+          : 'The link holds a plan with something this version of Room Planner cannot show yet (several rooms, a room that is not a rectangle, or pieces that are not rectangles or not placed). Update to open it; the link stays in the address bar. Your own plans are not changed.';
 
   useEffect(() => {
     const dialog = ref.current;
@@ -77,17 +93,14 @@ export default function LinkProblemDialog({
       aria-labelledby={titleId}
       data-testid="link-problem"
       data-kind={problem.kind}
+      data-where={problem.kind === 'damaged' ? undefined : (problem.where ?? 'link')}
       onClose={onClose}
       className="m-auto w-[calc(100%-2rem)] max-w-md rounded-xl bg-white p-6 shadow-2xl backdrop:bg-slate-900/50"
     >
       <h2 id={titleId} className="font-bold text-slate-800 mb-3">
-        {newer ? 'This plan needs a newer Room Planner' : 'This link is damaged'}
+        {title}
       </h2>
-      <p className="text-sm text-slate-600 mb-5">
-        {newer
-          ? 'The link holds a plan made with a newer version of Room Planner than this one. Update to open it; the link stays in the address bar. Your own plans are not changed.'
-          : 'The plan in this link could not be read. Links are sometimes cut short or changed when they are copied or sent: ask for the link again, or copy all of it. Your own plan is open, unchanged.'}
-      </p>
+      <p className="text-sm text-slate-600 mb-5">{text}</p>
       <form method="dialog" className="flex justify-end gap-2">
         {newer ? (
           <>

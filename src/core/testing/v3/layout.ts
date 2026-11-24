@@ -1,3 +1,8 @@
+/**
+ * Test reference, frozen: how the v3 app read layouts (core/layout.ts before the app held plans):
+ * normalisation of stored and imported data, and the v3 share/JSON form. Never edited: the
+ * equivalence and golden tests compare what the plan pipeline reads with what this read.
+ */
 import type {
   Door,
   FurnitureItem,
@@ -9,15 +14,15 @@ import type {
   Wall,
 } from './types';
 import {
-  DOOR_TYPES,
+  DOOR_TYPE_VALUES,
   INITIAL_DOORS,
   INITIAL_ITEMS,
   INITIAL_ROOM,
   INITIAL_WINDOWS,
   WALL_OPTIONS,
 } from './constants';
-import { migrateColor } from './colors';
-import { feetToUnitValue, unitValueToFeet } from './units';
+import { migrateColor } from '../../colors';
+import { feetToUnitValue, unitValueToFeet } from '../../units';
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -61,7 +66,7 @@ export const normalizeRoomDims = (raw: unknown, fallback: RoomDims = INITIAL_ROO
 
 export const normalizeDoor = (raw: unknown, index = 0): Door | null => {
   if (!isObject(raw)) return null;
-  const type = DOOR_TYPES.some((t) => t.value === raw.type)
+  const type = DOOR_TYPE_VALUES.some((t) => t === raw.type)
     ? (raw.type as Door['type'])
     : 'swing-in';
   const hinge: Hinge = raw.hinge === 'right' ? 'right' : 'left';

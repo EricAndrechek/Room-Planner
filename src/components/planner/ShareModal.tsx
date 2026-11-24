@@ -2,19 +2,23 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Copy, Download, Mail, MonitorSmartphone, Share, Upload } from 'lucide-react';
 import { captureError, track } from '../../lib/analytics';
 import { copyText } from '../../lib/browser';
-import { isShareConfig, type ShareConfig } from '../../core/layout';
-import { NEWER_PLAN_MESSAGE, newerPlanVersion } from '../../lib/planVersion';
+import { readSharedPlan } from '../../lib/boot';
+import { NEWER_PLAN_MESSAGE, UNSUPPORTED_PLAN_MESSAGE } from '../../lib/planVersion';
+import { unitFor } from '../../lib/plans';
 import { makeQr, qrPath, type QrMatrix } from '../../lib/qr';
-import { buildShareUrl } from '../../core/share/link';
+import { buildPlanUrl } from '../../core/share/plan';
+import { fromFeet } from '../../core/units';
+import type { ImportedPlan } from '../../hooks/useProjectActions';
+import type { Plan } from '../../types';
 import { Modal } from './Modal';
 
 interface ShareModalProps {
   isOpen: boolean;
   onClose: () => void;
-  /** The current layout in the portable format (current unit system). */
-  config: ShareConfig;
-  /** Load a pasted config; return an error message or null on success. */
-  onImport: (config: ShareConfig) => void;
+  /** The current plan, with its name and display units. */
+  plan: Plan;
+  /** Load a pasted plan (it replaces the working one). */
+  onImport: (plan: ImportedPlan) => void;
   /** Wide screen (not the phone layout): offer a QR code a phone can scan off the screen. */
   showQr: boolean;
 }
@@ -54,12 +58,16 @@ function QrCode({ code }: { code: QrMatrix }) {
 }
 
 /** Share link + JSON export/import. */
-export function ShareModal({ isOpen, onClose, config, onImport, showQr }: ShareModalProps) {
-  const [shareUrl, setShareUrl] = useState<{ for: ShareConfig; url: string } | null>(null);
+export function ShareModal({ isOpen, onClose, plan, onImport, showQr }: ShareModalProps) {
+  const [shareUrl, setShareUrl] = useState<{ for: Plan; url: string } | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<'url' | 'json' | null>(null);
   const [importText, setImportText] = useState('');
   const [importError, setImportError] = useState<string | null>(null);
-  const json = useMemo(() => JSON.stringify(config, null, 2), [config]);
+  // The plan in the unit it is shown in, as an agent or a person would write it.
+  const json = useMemo(
+    () => JSON.stringify(fromFeet(plan, unitFor(plan.settings?.unitSystem ?? 'ft-in')), null, 2),
+    [plan],
+  );
   const trackedThisOpen = useRef(false);
 
   // Encoding is async (CompressionStream), so build the link when the dialog opens.
@@ -69,10 +77,10 @@ export function ShareModal({ isOpen, onClose, config, onImport, showQr }: ShareM
       return;
     }
     let cancelled = false;
-    buildShareUrl(window.location.href, config)
+    buildPlanUrl(window.location.href, plan)
       .then((url) => {
         if (cancelled) return;
-        setShareUrl({ for: config, url });
+        setShareUrl({ for: plan, url });
         if (!trackedThisOpen.current) {
           trackedThisOpen.current = true;
           track('share_link_created', { compressed: url.includes('#s=') });
@@ -82,9 +90,9 @@ export function ShareModal({ isOpen, onClose, config, onImport, showQr }: ShareM
     return () => {
       cancelled = true;
     };
-  }, [isOpen, config]);
+  }, [isOpen, plan]);
 
-  const url = shareUrl?.for === config ? shareUrl.url : '';
+  const url = shareUrl?.for === plan ? shareUrl.url : '';
   const shareable = !!url && canShareLink(url);
 
   // The QR code (wide screens only), generated lazily once the link is ready; null: too long.
@@ -112,7 +120,7 @@ export function ShareModal({ isOpen, onClose, config, onImport, showQr }: ShareM
   }, [isOpen]);
   const qrCode = qr?.for === url ? qr.code : undefined;
 
-  const planName = typeof config.name === 'string' && config.name ? config.name : 'Floor plan';
+  const planName = plan.name || 'Floor plan';
   const mailto = url
     ? `mailto:?subject=${encodeURIComponent(`Room Planner: ${planName}`)}&body=${encodeURIComponent(
         `Open this link to continue the plan on this device:\n\n${url}\n`,
@@ -146,13 +154,13 @@ export function ShareModal({ isOpen, onClose, config, onImport, showQr }: ShareM
 
   const handleImport = () => {
     try {
-      const parsed: unknown = JSON.parse(importText);
-      if (newerPlanVersion(parsed) !== null) {
-        setImportError(NEWER_PLAN_MESSAGE);
+      const read = readSharedPlan(JSON.parse(importText) as unknown);
+      if (!read.ok && read.problem !== 'invalid') {
+        setImportError(read.problem === 'newer' ? NEWER_PLAN_MESSAGE : UNSUPPORTED_PLAN_MESSAGE);
         return;
       }
-      if (!isShareConfig(parsed)) throw new Error('Invalid Config');
-      onImport(parsed);
+      if (!read.ok) throw new Error('Invalid Config');
+      onImport(read);
       setImportText('');
       setImportError(null);
       onClose();

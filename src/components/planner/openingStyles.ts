@@ -1,13 +1,15 @@
 /**
- * The canvas's drawing of doors and windows: inline styles for the wall gap, jambs, panes and drag
- * handles, and SVG path data for door leaves and swings, in canvas pixels. The shapes come from
- * `doorGeometry` in core/openings.ts (the same shapes the export draws).
+ * The canvas's drawing of doors and windows on a rectangular room: inline styles for the wall
+ * gap, jambs, panes and drag handles, and SVG path data for door leaves and swings, in canvas
+ * pixels. The shapes come from `openingDoorGeometry` in core/geometry/doors.ts (the same shapes
+ * the export draws).
  */
 import type { CSSProperties } from 'react';
 import { PIXELS_PER_UNIT as P } from '../../lib/constants';
 import { isHorizontalWall, type Point } from '../../core/geometry';
-import { WALL_FRAMES, doorGeometry, onWall } from '../../core/openings';
-import type { Door, RoomDims, RoomWindow, Wall } from '../../types';
+import { openingDoorGeometry } from '../../core/geometry/doors';
+import { openingPlace, roomSize } from '../../lib/plans';
+import type { Opening, Room, RoomDims, Wall } from '../../types';
 
 const WALL_THICKNESS = 4;
 const JAMB_LENGTH = 12;
@@ -121,10 +123,10 @@ const handleStyle = (
 export const SWING_ARC_STROKE = { stroke: '#94a3b8', strokeWidth: 2, strokeDasharray: '4 3' };
 const LEAF_THICKNESS = 4;
 
-export const doorStyles = (door: Door, room: RoomDims): OpeningStyles => {
-  const wall = door.wall || 'bottom';
-  const pos = onWall(door, room, wall);
-  const widthPx = door.width * P;
+export const doorStyles = (door: Opening, plan: Pick<Room, 'outline'>): OpeningStyles => {
+  const room = roomSize(plan);
+  const { wall, position: pos, width } = openingPlace(plan, door);
+  const widthPx = width * P;
   const [jamb1, jamb2] = jambStyles(wall, pos, widthPx, room);
   return {
     gap: gapStyle(wall, pos, widthPx, room),
@@ -158,8 +160,8 @@ const barPath = (a: Point, b: Point, towards: Point, thickPx: number) => {
 };
 
 /** The canvas drawing of a door, from `doorGeometry` (the same shapes the export draws). */
-export const doorSvg = (door: Door, room: RoomDims): DoorSvg => {
-  const g = doorGeometry(door, room);
+export const doorSvg = (door: Opening, room: Pick<Room, 'outline'>): DoorSvg => {
+  const g = openingDoorGeometry(room, door);
   const arcs = g.leaves.map((l) => {
     const r = +(l.radius * P).toFixed(2);
     return `M ${px(l.closedEnd)} A ${r} ${r} 0 0 ${l.sweep} ${px(l.openEnd)}`;
@@ -186,7 +188,7 @@ export const doorSvg = (door: Door, room: RoomDims): DoorSvg => {
     pocket: g.pocket
       ? (() => {
           // In the middle of the canvas's 4px wall, so it reads as a cavity inside the wall.
-          const { inward } = WALL_FRAMES[g.wall](room);
+          const { inward } = g.frame;
           const k = -WALL_THICKNESS / 2 / P;
           const shift = (p: Point) => ({ x: p.x + inward.x * k, y: p.y + inward.y * k });
           return `M ${px(shift(g.pocket.from))} L ${px(shift(g.pocket.to))}`;
@@ -197,10 +199,10 @@ export const doorSvg = (door: Door, room: RoomDims): DoorSvg => {
   };
 };
 
-export const windowStyles = (win: RoomWindow, room: RoomDims): WindowStyles => {
-  const wall = win.wall || 'top';
-  const pos = onWall(win, room, wall);
-  const widthPx = win.width * P;
+export const windowStyles = (win: Opening, plan: Pick<Room, 'outline'>): WindowStyles => {
+  const room: RoomDims = roomSize(plan);
+  const { wall, position: pos, width } = openingPlace(plan, win);
+  const widthPx = width * P;
   const [jamb1, jamb2] = jambStyles(wall, pos, widthPx, room);
   const paneBase = {
     position: 'absolute',

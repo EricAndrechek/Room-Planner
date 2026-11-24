@@ -29,29 +29,23 @@ import type { BootState } from '../../lib/boot';
 import { migrateColor } from '../../core/colors';
 import { DESIGN_MODES } from '../../lib/constants';
 import { normalizeDegrees } from '../../core/geometry';
-import { moveInside, piecesOutside } from '../../core/adapter';
-import { computeLayoutWarnings } from '../../core/openings';
-import { toShareConfig } from '../../core/layout';
+import { piecesOutside } from '../../core/placement';
+import { movePiecesInside, resizeRoom } from '../../lib/edits';
+import {
+  doorsOf,
+  itemWarnings,
+  mainRoom,
+  openingPlace,
+  roomSize,
+  snapPieces,
+  windowsOf,
+  withDoc,
+} from '../../lib/plans';
 import { HELP_PATH } from '../../lib/paths';
 import { sheetSummary } from '../../lib/sheet';
 import { nudgeStep } from '../../core/units';
-import {
-  loadSnapPreference,
-  saveDesignMode,
-  saveLayout,
-  saveSnapPreference,
-  saveUnitSystem,
-  type StorageLike,
-} from '../../lib/storage';
-import type {
-  DesignMode,
-  FurnitureItem,
-  Id,
-  Layout,
-  RoomDims,
-  UnitSystem,
-  Wall,
-} from '../../types';
+import { loadSnapPreference, saveSnapPreference, type PlanStore } from '../../lib/storage';
+import type { DesignMode, Id, Item, Plan, RoomDims, UnitSystem, Wall } from '../../types';
 import { ColorPicker } from './ColorPicker';
 import { ExportModal } from './ExportModal';
 import { FileBrowserModal } from './FileBrowserModal';
@@ -79,7 +73,7 @@ const FLOATING_ROW_INSET = 60;
 const NO_INSETS: ViewInsets = { top: 0, bottom: 0 };
 
 interface PlannerProps {
-  storage: StorageLike;
+  store: PlanStore;
   initial: BootState;
 }
 
@@ -87,9 +81,14 @@ interface PlannerProps {
  * The room planner application (everything inside the island): composes the
  * state hooks and renders the header, sidebar, canvas and modals.
  */
-export function Planner({ storage, initial }: PlannerProps) {
-  const history = useHistory<Layout>(initial.layout);
-  const { present: layout, commit } = history;
+export function Planner({ store, initial }: PlannerProps) {
+  const storage = store.storage;
+  const history = useHistory<Plan>(initial.plan);
+  const { present: plan, commit } = history;
+  const room = mainRoom(plan);
+  const roomDims = useMemo(() => roomSize({ outline: room.outline }), [room.outline]);
+  const doors = useMemo(() => doorsOf(room), [room]);
+  const windows = useMemo(() => windowsOf(room), [room]);
   const [unitSystem, setUnitSystem] = useState<UnitSystem>(initial.unitSystem);
   const [designMode, setDesignMode] = useState<DesignMode>(initial.designMode);
 
@@ -117,7 +116,7 @@ export function Planner({ storage, initial }: PlannerProps) {
   );
   const { zoom, zoomRef, pan, zoomIn, zoomOut, fitToView, reveal } = usePanZoom(
     containerRef,
-    layout.roomDims,
+    roomDims,
     isMobile,
     viewInsets,
   );
@@ -139,39 +138,48 @@ export function Planner({ storage, initial }: PlannerProps) {
   const [popoverRoot, setPopoverRoot] = useState<HTMLDivElement | null>(null);
 
   const projects = useProjects({
-    storage,
+    store,
     initialProjects: initial.projects,
+    initialLocked: initial.locked,
     initialProjectId: initial.currentProjectId,
     initialSaved: initial.saveStatus === 'saved',
     initialSavedAt: initial.lastSavedAt,
-    doc: { layout, designMode, unitSystem },
+    doc: { plan, designMode, unitSystem },
   });
-  const projectName = projects.currentProject?.name ?? 'Untitled';
-
-  // --- Persistence of the working state (same keys/format as before) ---------
-  useEffect(() => saveLayout(storage, layout), [storage, layout]);
-  useEffect(() => saveUnitSystem(storage, unitSystem), [storage, unitSystem]);
-  useEffect(() => saveDesignMode(storage, designMode), [storage, designMode]);
-
-  const isRoomSetup = designMode === DESIGN_MODES.ROOM_SETUP;
-  const warnings = useMemo(
-    () =>
-      computeLayoutWarnings({
-        items: layout.items,
-        doors: layout.doors,
-        roomDims: layout.roomDims,
-      }),
-    [layout.items, layout.doors, layout.roomDims],
-  );
-  const live = useAnnouncements(layout, warnings, unitSystem, projects.saveStatus);
-  const shareConfig = useMemo(
-    () => toShareConfig(layout, projectName, unitSystem),
-    [layout, projectName, unitSystem],
+  const projectName = projects.currentProject?.plan.name ?? 'Untitled';
+  /** The plan as it is stored, shared and exported: with its name and display units. */
+  const doc = useMemo(
+    () => withDoc(plan, projectName, unitSystem),
+    [plan, projectName, unitSystem],
   );
 
   // --- Notices (bottom toasts) -----------------------------------------------------
   const notices = useNotice();
   const { show: showNotice, dismiss: dismissNotice } = notices;
+
+  // --- Persistence of the working state ---------------------------------------------
+  useEffect(() => void store.saveWorking(doc), [store, doc]);
+  useEffect(
+    () => void store.saveUi({ currentPlanId: projects.currentProjectId, designMode }),
+    [store, projects.currentProjectId, designMode],
+  );
+  // Storage full or blocked: the plan stays in this tab only. Said once.
+  const [storageFailed, setStorageFailed] = useState(() => store.hasFailed());
+  useEffect(() => store.onFailure(() => setStorageFailed(true)), [store]);
+  useEffect(() => {
+    if (!storageFailed) return;
+    showNotice({
+      key: 'storage-failed',
+      message:
+        "This browser isn't saving your changes (its storage is full or blocked). They stay in this tab: export your plans to keep a copy.",
+      action: { label: 'My Floor Plans', onClick: () => setFilesOpen(true) },
+    });
+  }, [storageFailed, showNotice]);
+
+  const isRoomSetup = designMode === DESIGN_MODES.ROOM_SETUP;
+  const warnings = useMemo(() => itemWarnings(plan), [plan]);
+  const live = useAnnouncements(plan, warnings, unitSystem, projects.saveStatus);
+  const pieces = useMemo(() => snapPieces({ items: plan.items }), [plan.items]);
 
   // --- Modes & units ----------------------------------------------------------
   const changeDesignMode = useCallback(
@@ -190,7 +198,7 @@ export function Planner({ storage, initial }: PlannerProps) {
    */
   const lastLockedPrompt = useRef(0);
   const promptLockedPiece = useCallback(
-    (item: FurnitureItem, input: 'pointer' | 'keyboard') => {
+    (item: Item, input: 'pointer' | 'keyboard') => {
       const now = Date.now();
       if (now - lastLockedPrompt.current < LOCKED_PROMPT_THROTTLE_MS) return;
       lastLockedPrompt.current = now;
@@ -212,11 +220,11 @@ export function Planner({ storage, initial }: PlannerProps) {
     [changeDesignMode, dismissNotice, setSelection, showNotice],
   );
   const onLockedPointerPress = useCallback(
-    (item: FurnitureItem) => promptLockedPiece(item, 'pointer'),
+    (item: Item) => promptLockedPiece(item, 'pointer'),
     [promptLockedPiece],
   );
   const onLockedKeyPress = useCallback(
-    (item: FurnitureItem) => promptLockedPiece(item, 'keyboard'),
+    (item: Item) => promptLockedPiece(item, 'keyboard'),
     [promptLockedPiece],
   );
 
@@ -254,7 +262,7 @@ export function Planner({ storage, initial }: PlannerProps) {
   );
   /** Tapping a piece on a phone opens a collapsed sheet to half and shows its card. */
   const onPieceTap = useCallback(
-    (item: FurnitureItem) => {
+    (item: Item) => {
       revealCard('item', item.id);
       expandSheet();
     },
@@ -326,19 +334,19 @@ export function Planner({ storage, initial }: PlannerProps) {
   });
 
   // --- Room size: offer to bring pieces back inside a room that shrank -----------------------
-  const layoutRef = useRef(layout);
+  const planRef = useRef(plan);
   useEffect(() => {
-    layoutRef.current = layout;
+    planRef.current = plan;
   });
   const outsideCount = useMemo(
-    () => piecesOutside(layout.items, layout.roomDims).length,
-    [layout.items, layout.roomDims],
+    () => piecesOutside({ items: plan.items, rooms: plan.rooms }).length,
+    [plan.items, plan.rooms],
   );
   const changeRoomDims = (dims: RoomDims) => {
-    const prev = layout.roomDims;
+    const prev = roomDims;
     const next = openings.updateRoomDims(dims);
     if (!next || (next.width >= prev.width && next.height >= prev.height)) return;
-    const outside = piecesOutside(layout.items, next).length;
+    const outside = piecesOutside(resizeRoom(plan, next)).length;
     if (outside === 0) return;
     const one = outside === 1;
     showNotice({
@@ -347,12 +355,8 @@ export function Planner({ storage, initial }: PlannerProps) {
       action: {
         label: one ? 'Move it inside' : 'Move them inside',
         onClick: () => {
-          const cur = layoutRef.current;
-          const count = piecesOutside(cur.items, cur.roomDims).length;
-          history.apply((l) => ({
-            ...l,
-            items: l.items.map((i) => (i.visible === false ? i : moveInside(i, l.roomDims))),
-          }));
+          const count = piecesOutside(planRef.current).length;
+          history.apply(movePiecesInside);
           dismissNotice('outside-room');
           live.announce(`${count === 1 ? '1 piece' : `${count} pieces`} moved inside the room`);
           track('pieces_moved_inside', { count });
@@ -371,19 +375,20 @@ export function Planner({ storage, initial }: PlannerProps) {
       dismissNotice('wall-full');
       return;
     }
-    const list: { id: Id; wall: Wall }[] = type === 'door' ? layout.doors : layout.windows;
+    const list = type === 'door' ? doors : windows;
     const index = list.findIndex((o) => o.id === id);
     const name = `${type === 'door' ? 'Door' : 'Window'} ${index + 1}`;
+    const current = list[index] ? openingPlace(room, list[index]).wall : undefined;
     showNotice({
       key: 'wall-full',
-      message: `${name} doesn't fit on the ${wall} wall, so it stays on the ${list[index]?.wall} wall.`,
+      message: `${name} doesn't fit on the ${wall} wall, so it stays on the ${current} wall.`,
       timeoutMs: 6000,
     });
   };
 
   // --- New plan (the current one is kept) -------------------------------------------------
   const startNewPlan = (start: NewPlanStart) => {
-    const previous = projects.currentProject?.name;
+    const previous = projects.currentProject?.plan.name;
     projectActions.newProject(start);
     const kept = previous ? `"${previous}" is` : 'Your previous plan is';
     // The notice is in the polite toast region, so it is announced too.
@@ -396,7 +401,7 @@ export function Planner({ storage, initial }: PlannerProps) {
 
   // --- Keyboard ----------------------------------------------------------------------
   const selectedItem =
-    selection?.type === 'item' ? layout.items.find((i) => i.id === selection.id) : undefined;
+    selection?.type === 'item' ? plan.items.find((i) => i.id === selection.id) : undefined;
   const canEditSelected = !!selectedItem && !isRoomSetup && !selectedItem.locked;
 
   // The sheet now covers the plan: focus there would be out of sight, so it moves to the handle.
@@ -454,7 +459,7 @@ export function Planner({ storage, initial }: PlannerProps) {
         }
         if (!canEditSelected) return false;
         furniture.changeItem(selectedItem.id, {
-          rotation: normalizeDegrees(selectedItem.rotation + degrees),
+          rotation: normalizeDegrees((selectedItem.placement?.rotation ?? 0) + degrees),
         });
         return true;
       },
@@ -472,7 +477,7 @@ export function Planner({ storage, initial }: PlannerProps) {
   // --- Render --------------------------------------------------------------------------------
   const colorPickerItem =
     isMobile && colorPickerItemId !== null
-      ? layout.items.find((i) => i.id === colorPickerItemId)
+      ? plan.items.find((i) => i.id === colorPickerItemId)
       : undefined;
 
   // Adding something while the sheet covers the plan lowers it to half, so the new thing shows.
@@ -488,7 +493,7 @@ export function Planner({ storage, initial }: PlannerProps) {
     openings.addWindow();
     lowerSheet();
   };
-  const summary = sheetSummary(layout, designMode, selection, unitSystem);
+  const summary = sheetSummary(plan, designMode, selection, unitSystem);
   const sheetAction = selection
     ? {
         label: 'Edit',
@@ -543,7 +548,7 @@ export function Planner({ storage, initial }: PlannerProps) {
         </a>
         <Header
           projectName={projectName}
-          roomDims={layout.roomDims}
+          roomDims={roomDims}
           unitSystem={unitSystem}
           saveStatus={projects.saveStatus}
           lastSavedAt={projects.lastSavedAt}
@@ -600,9 +605,9 @@ export function Planner({ storage, initial }: PlannerProps) {
               onToggleExpanded={() => setRoomSetupExpanded((v) => !v)}
               onActivate={() => changeDesignMode(DESIGN_MODES.ROOM_SETUP)}
               onContinue={() => changeDesignMode(DESIGN_MODES.FURNITURE)}
-              roomDims={layout.roomDims}
-              doors={layout.doors}
-              windows={layout.windows}
+              room={room}
+              doors={doors}
+              windows={windows}
               unitSystem={unitSystem}
               onRoomDimsChange={changeRoomDims}
               onAddDoor={addDoor}
@@ -624,12 +629,12 @@ export function Planner({ storage, initial }: PlannerProps) {
               expanded={furnitureExpanded}
               onToggleExpanded={() => setFurnitureExpanded((v) => !v)}
               onActivate={() => changeDesignMode(DESIGN_MODES.FURNITURE)}
-              items={layout.items}
+              items={plan.items}
               warnings={warnings}
               selection={selection}
               isMobile={isMobile}
               colorPickerItemId={colorPickerItemId}
-              roomDims={layout.roomDims}
+              roomDims={roomDims}
               unitSystem={unitSystem}
               onAddItem={addItem}
               onClearRoom={furniture.clearRoom}
@@ -651,7 +656,7 @@ export function Planner({ storage, initial }: PlannerProps) {
 
           <RoomCanvas
             containerRef={containerRef}
-            layout={layout}
+            plan={plan}
             warnings={warnings}
             selection={selection}
             designMode={designMode}
@@ -671,8 +676,8 @@ export function Planner({ storage, initial }: PlannerProps) {
             overlay={
               overlayItemId !== undefined && (
                 <SnapOverlay
-                  items={layout.items}
-                  room={layout.roomDims}
+                  items={pieces}
+                  room={roomDims}
                   zoom={zoom}
                   unitSystem={unitSystem}
                   itemId={overlayItemId}
@@ -689,7 +694,7 @@ export function Planner({ storage, initial }: PlannerProps) {
         <ShareModal
           isOpen={shareOpen}
           onClose={() => setShareOpen(false)}
-          config={shareConfig}
+          plan={doc}
           onImport={projectActions.importConfig}
           showQr={!isMobile}
         />
@@ -697,7 +702,7 @@ export function Planner({ storage, initial }: PlannerProps) {
         <ExportModal
           isOpen={exportOpen}
           onClose={() => setExportOpen(false)}
-          layout={layout}
+          plan={plan}
           unitSystem={unitSystem}
           projectName={projectName}
         />
@@ -706,6 +711,7 @@ export function Planner({ storage, initial }: PlannerProps) {
           isOpen={filesOpen}
           onClose={() => setFilesOpen(false)}
           projects={projects.projects}
+          locked={projects.locked}
           currentProjectId={projects.currentProjectId}
           unitSystem={unitSystem}
           onNew={startNewPlan}

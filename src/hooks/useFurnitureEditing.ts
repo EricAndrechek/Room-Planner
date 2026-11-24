@@ -9,8 +9,7 @@ import {
 import { track } from '../lib/analytics';
 import { randomPresetColor } from '../core/colors';
 import { PIXELS_PER_UNIT } from '../lib/constants';
-import type { AngleSnap } from '../core/geometry';
-import { findFurnitureSpot } from '../core/adapter';
+import { normalizeDegrees, type AngleSnap } from '../core/geometry';
 import {
   SNAP_THRESHOLD_PX,
   SNAP_THRESHOLD_TOUCH_PX,
@@ -21,7 +20,17 @@ import {
   thresholdFeet,
   type SnapResult,
 } from '../core/snapping';
-import type { FurnitureItem, Id, Layout } from '../types';
+import {
+  addPiece,
+  changePiece,
+  clearPieces,
+  deletePiece,
+  toggleHidden,
+  toggleLock as toggleLockEdit,
+} from '../lib/edits';
+import { boxOf, mainRoom, roomSize, snapPieces, type PiecePatch } from '../lib/plans';
+import { addItem as addItemOp } from '../core/ops';
+import type { Id, Item, Plan } from '../types';
 import { nextCardSeq, type CardRef } from './useCardHighlight';
 import type { History } from './useHistory';
 import type { usePointerDrag } from './usePointerDrag';
@@ -31,13 +40,8 @@ import type { useSelection } from './useSelection';
 /** A press that moves less than this (px) and is let go is a tap (it may still nudge the piece). */
 const TAP_SLOP_PX = 8;
 
-export const patchItem = (l: Layout, id: Id, patch: Partial<FurnitureItem>): Layout => ({
-  ...l,
-  items: l.items.map((i) => (i.id === id ? { ...i, ...patch } : i)),
-});
-
 interface Options {
-  history: History<Layout>;
+  history: History<Plan>;
   selection: ReturnType<typeof useSelection>;
   /** Room setup locks furniture: selectable, but not movable. */
   isRoomSetup: boolean;
@@ -53,9 +57,9 @@ interface Options {
   /** Speak a message in the live region. */
   announce: (text: string) => void;
   /** A piece was pressed while room setup locks all furniture (to explain why it does not move). */
-  onLockedPress?: (item: FurnitureItem) => void;
+  onLockedPress?: (item: Item) => void;
   /** A piece was tapped (pressed and let go without moving it) while furniture is editable. */
-  onTap?: (item: FurnitureItem) => void;
+  onTap?: (item: Item) => void;
 }
 
 /** What the canvas draws while a piece is being rotated with its handle. */
@@ -85,13 +89,13 @@ export function useFurnitureEditing({
   onLockedPress,
   onTap,
 }: Options) {
-  const { present: layout, set: setLayout, apply: applyLayout, commit } = history;
+  const { present: plan, set: setPlan, apply: applyPlan, commit } = history;
   const { setSelection, forgetItem, clearSelection } = selection;
   // Read at drag start / per move without re-creating the (memoized) pointer handlers.
-  const layoutRef = useRef(layout);
+  const planRef = useRef(plan);
   const snapRef = useRef(snapEnabled);
   useEffect(() => {
-    layoutRef.current = layout;
+    planRef.current = plan;
     snapRef.current = snapEnabled;
   });
 
@@ -100,60 +104,39 @@ export function useFurnitureEditing({
 
   /** A new piece goes to the free spot nearest the middle of the room, and is selected. */
   const addItem = () => {
-    const size = { width: 3, height: 2 };
-    const spot = findFurnitureSpot(layout, size);
-    const newItem: FurnitureItem = {
-      id: Date.now(),
-      label: 'New Item',
-      ...size,
-      ...spot,
-      rotation: 0,
-      color: randomPresetColor(),
-      visible: true,
-    };
-    applyLayout((l) => ({ ...l, items: [...l.items, newItem] }));
+    const { item: newItem } = addPiece(plan, randomPresetColor());
+    applyPlan((p) => addItemOp(p, newItem));
     setSelection({ id: newItem.id, type: 'item' });
     setLastAdded({ type: 'item', id: newItem.id, seq: nextCardSeq() });
-    track('furniture_added', { count: layout.items.length + 1 });
+    track('furniture_added', { count: plan.items.length + 1 });
   };
 
   const deleteItem = useCallback(
     (id: Id) => {
-      applyLayout((l) => ({ ...l, items: l.items.filter((i) => i.id !== id) }));
+      applyPlan((p) => deletePiece(p, id));
       forgetItem(id);
       track('furniture_removed');
     },
-    [applyLayout, forgetItem],
+    [applyPlan, forgetItem],
   );
 
   const changeItem = useCallback(
-    (id: Id, patch: Partial<FurnitureItem>, shouldCommit = true) =>
-      (shouldCommit ? applyLayout : setLayout)((l) => patchItem(l, id, patch)),
-    [applyLayout, setLayout],
+    (id: Id, patch: PiecePatch, shouldCommit = true) =>
+      (shouldCommit ? applyPlan : setPlan)((p) => changePiece(p, id, patch)),
+    [applyPlan, setPlan],
   );
 
   const clearRoom = useCallback(() => {
-    track('room_cleared', { count: layout.items.length });
-    applyLayout((l) => ({ ...l, items: [] }));
+    track('room_cleared', { count: plan.items.length });
+    applyPlan(clearPieces);
     clearSelection();
-  }, [applyLayout, layout.items.length, clearSelection]);
+  }, [applyPlan, plan.items.length, clearSelection]);
 
-  const toggleLock = useCallback(
-    (id: Id) =>
-      applyLayout((l) => ({
-        ...l,
-        items: l.items.map((i) => (i.id === id ? { ...i, locked: !i.locked } : i)),
-      })),
-    [applyLayout],
-  );
+  const toggleLock = useCallback((id: Id) => applyPlan((p) => toggleLockEdit(p, id)), [applyPlan]);
 
   const toggleVisibility = useCallback(
-    (id: Id) =>
-      applyLayout((l) => ({
-        ...l,
-        items: l.items.map((i) => (i.id === id ? { ...i, visible: !(i.visible !== false) } : i)),
-      })),
-    [applyLayout],
+    (id: Id) => applyPlan((p) => toggleHidden(p, id)),
+    [applyPlan],
   );
 
   /**
@@ -163,27 +146,29 @@ export function useFurnitureEditing({
    */
   const moveItem = useCallback(
     (id: Id, dx: number, dy: number, snap = true) => {
-      const l = layoutRef.current;
-      const item = l.items.find((i) => i.id === id);
-      if (!item) return;
-      let x = item.x + dx;
-      let y = item.y + dy;
+      const p = planRef.current;
+      const item = p.items.find((i) => i.id === id);
+      if (!item?.placement) return;
+      const box = boxOf(item);
+      let x = box.x + dx;
+      let y = box.y + dy;
       let said = '';
       if (snap && snapRef.current) {
         const threshold = thresholdFeet(SNAP_THRESHOLD_PX, zoomRef.current, PIXELS_PER_UNIT);
-        const r = snapNudge(item, dx, dy, buildSnapCandidates(l.items, l.roomDims, id), threshold);
+        const candidates = buildSnapCandidates(snapPieces(p), roomSize(mainRoom(p)), id);
+        const r = snapNudge(box, dx, dy, candidates, threshold);
         x = r.x;
         y = r.y;
         said = describeSnap(r);
       }
-      applyLayout((cur) => patchItem(cur, id, { x, y }));
+      applyPlan((cur) => changePiece(cur, id, { x, y }));
       if (said) announce(said);
     },
-    [applyLayout, announce, zoomRef],
+    [applyPlan, announce, zoomRef],
   );
 
   const onItemPointerDown = useCallback(
-    (e: ReactPointerEvent<HTMLDivElement>, item: FurnitureItem) => {
+    (e: ReactPointerEvent<HTMLDivElement>, item: Item) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       setSelection({ id: item.id, type: 'item' });
       // If focus is elsewhere (a sidebar control), bring it back to the canvas so arrows, R and
@@ -201,12 +186,17 @@ export function useFurnitureEditing({
       }
       e.stopPropagation();
       e.preventDefault();
-      const { items, roomDims } = layoutRef.current;
+      const current = planRef.current;
       // The other pieces stay put during the drag: collect their lines once.
-      const candidates = buildSnapCandidates(items, roomDims, item.id);
+      const candidates = buildSnapCandidates(
+        snapPieces(current),
+        roomSize(mainRoom(current)),
+        item.id,
+      );
       const thresholdPx = e.pointerType === 'touch' ? SNAP_THRESHOLD_TOUCH_PX : SNAP_THRESHOLD_PX;
+      const box = boxOf(item);
       // Where the pointer alone would put the piece; snapping is applied on top each frame.
-      const raw = { x: item.x, y: item.y };
+      const raw = { x: box.x, y: box.y };
       let last = { x: e.clientX, y: e.clientY };
       let snap: SnapResult | null = null;
       // Furthest the pointer got from where it went down (a tap wobbles a little).
@@ -222,7 +212,7 @@ export function useFurnitureEditing({
           snap =
             snapRef.current && !ev.altKey
               ? snapItem(
-                  { ...item, x: raw.x, y: raw.y },
+                  { ...box, x: raw.x, y: raw.y },
                   candidates,
                   thresholdFeet(thresholdPx, zoomRef.current, PIXELS_PER_UNIT),
                 )
@@ -230,7 +220,7 @@ export function useFurnitureEditing({
           const pos = snap ?? raw;
           const x = pos.x;
           const y = pos.y;
-          setLayout((l) => patchItem(l, item.id, { x, y }));
+          setPlan((p) => changePiece(p, item.id, { x, y }));
           onDragFrame({ id: item.id, snap: snap && (snap.snapX || snap.snapY) ? snap : null });
         },
         onEnd: (end) => {
@@ -239,7 +229,7 @@ export function useFurnitureEditing({
           const said = snap ? describeSnap(snap) : '';
           if (said) announce(said);
           // A press without a move is a selection, not a move.
-          if (raw.x !== item.x || raw.y !== item.y) {
+          if (raw.x !== box.x || raw.y !== box.y) {
             track('item_moved', {
               snapped: !!(snap && (snap.snapX || snap.snapY)),
               input: e.pointerType,
@@ -253,7 +243,7 @@ export function useFurnitureEditing({
       isRoomSetup,
       startDrag,
       zoomRef,
-      setLayout,
+      setPlan,
       commit,
       setSelection,
       onDragFrame,
@@ -264,7 +254,7 @@ export function useFurnitureEditing({
   );
 
   const onRotatePointerDown = useCallback(
-    (e: ReactPointerEvent<HTMLDivElement>, item: FurnitureItem) => {
+    (e: ReactPointerEvent<HTMLDivElement>, item: Item) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       e.stopPropagation();
       e.preventDefault();
@@ -273,25 +263,26 @@ export function useFurnitureEditing({
       // The rotated element's bounding box shares its center with the item.
       const rect = piece.getBoundingClientRect();
       let lastAngle: AngleSnap | null = null;
+      const start = item.placement?.rotation ?? 0;
       startRotation(e, {
         center: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
-        startRotation: item.rotation,
+        startRotation: start,
         snapEnabled: () => snapRef.current,
         onRotate: (angle) => {
           lastAngle = angle;
-          setLayout((l) => patchItem(l, item.id, { rotation: angle.deg }));
+          setPlan((p) => changePiece(p, item.id, { rotation: angle.deg }));
           onRotateFrame({ id: item.id, angle });
         },
         onEnd: (deg) => {
-          applyLayout((l) => patchItem(l, item.id, { rotation: deg }));
+          applyPlan((p) => changePiece(p, item.id, { rotation: deg }));
           onRotateFrame(null);
-          if (deg !== item.rotation) {
+          if (normalizeDegrees(deg) !== start) {
             track('item_rotated', { snapped: lastAngle?.snapped != null, input: e.pointerType });
           }
         },
       });
     },
-    [startRotation, setLayout, applyLayout, onRotateFrame],
+    [startRotation, setPlan, applyPlan, onRotateFrame],
   );
 
   return {

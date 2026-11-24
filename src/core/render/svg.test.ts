@@ -1,11 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { INITIAL_DOORS, INITIAL_ITEMS, INITIAL_ROOM, INITIAL_WINDOWS } from '../constants';
-import { doorSwingGeometry } from '../openings';
+import { openingDoorGeometry } from '../geometry/doors';
+import { loadPlan } from '../load';
+import {
+  INITIAL_DOORS,
+  INITIAL_ITEMS,
+  INITIAL_ROOM,
+  INITIAL_WINDOWS,
+} from '../testing/v3/constants';
+import type { Door, FurnitureItem, Layout, RoomWindow, Wall } from '../testing/v3/types';
 import { FEET_PER_METER } from '../units';
-import type { Door, FurnitureItem, Layout, RoomWindow, Wall } from '../types';
-import { escapeXml } from './svg';
-import { buildLayoutScene as buildPlanScene, planSvg, type PlanInput } from '../adapter/scene';
-import { scaleBarFeet, type GroupNode, type SceneNode } from './scene';
+import { mainRoom } from '../../lib/plans';
+import { escapeXml, planSvg } from './svg';
+import {
+  buildPlanScene,
+  scaleBarFeet,
+  type GroupNode,
+  type SceneInput,
+  type SceneNode,
+} from './scene';
 
 const date = new Date('2026-11-13T12:00:00Z');
 const sample: Layout = {
@@ -14,8 +26,14 @@ const sample: Layout = {
   windows: INITIAL_WINDOWS,
   items: INITIAL_ITEMS,
 };
-const input = (layout: Layout, extra: Partial<PlanInput> = {}): PlanInput => ({
-  layout,
+/** The plan the app holds for a v3 layout (what the storage migration makes of it). */
+const toPlan = (layout: Layout) => {
+  const r = loadPlan(layout, 'strict', { lengthsInFeet: true });
+  if (!r.ok) throw new Error(JSON.stringify(r));
+  return r.plan;
+};
+const input = (layout: Layout, extra: Partial<SceneInput> = {}): SceneInput => ({
+  plan: toPlan(layout),
   unitSystem: 'ft-in',
   title: 'Bedroom',
   date,
@@ -209,13 +227,15 @@ describe('planSvg', () => {
     const [hingePt, , , openPt] = pts(leaf.d);
     // The arc starts at the open leaf's tip and ends one door width from the hinge, along the wall.
     expect(arcStart).toEqual(openPt);
-    const g = doorSwingGeometry(door, roomDims)!;
+    const plan = toPlan({ roomDims, doors: [door], windows: [], items: [] });
+    const room = mainRoom(plan);
+    const g = openingDoorGeometry(room, room.openings[0]!).leaves[0]!;
     const wallDir = [g.closedEnd.x - g.hinge.x, g.closedEnd.y - g.hinge.y];
     expect(arcEnd[0]! - hingePt![0]!).toBeCloseTo(wallDir[0]! * s, 1);
     expect(arcEnd[1]! - hingePt![1]!).toBeCloseTo(wallDir[1]! * s, 1);
     // The leaf points the same way as the editor's (into the room for swing-in).
-    expect(Math.sign(openPt![0]! - hingePt![0]!)).toBe(Math.sign(g.normal.x));
-    expect(Math.sign(openPt![1]! - hingePt![1]!)).toBe(Math.sign(g.normal.y));
+    expect(Math.sign(openPt![0]! - hingePt![0]!)).toBe(Math.sign(g.v.x));
+    expect(Math.sign(openPt![1]! - hingePt![1]!)).toBe(Math.sign(g.v.y));
     // Swing-in doors hinge on the interior face, exactly where the editor puts the hinge.
     if (type === 'swing-in') {
       expect(hingePt![0]).toBeCloseTo(floor.x + g.hinge.x * s, 1);

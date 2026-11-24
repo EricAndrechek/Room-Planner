@@ -1,11 +1,13 @@
 /**
- * Example layouts shown on the guide pages. Each one is an ordinary planner layout (lengths in
- * feet, the room interior from (0,0) to (width,height), `y` growing towards the bottom wall), so
- * the page draws it with the export pipeline and links to it with a real share link.
+ * Example plans shown on the guide pages. Each one is an ordinary planner plan (one rectangular
+ * room from (0,0), lengths in feet, `y` growing towards the bottom wall), so the page draws it with
+ * the export pipeline and links to it with a real share link. They are written the way the
+ * planner's fields show a room: doors and windows on a named wall at a position from its left (or
+ * top) end, pieces by the top-left corner of their box; `examplePlan` turns that into the plan.
  * examples.test.ts checks that none of them has a warning the planner would show and that the
  * clearances the captions quote are true.
  */
-import type { Door, FurnitureItem, Layout, RoomWindow, UnitSystem } from '../../types';
+import type { Item, Opening, Plan, UnitSystem, Wall } from '../../types';
 
 export interface Example {
   id: string;
@@ -16,7 +18,7 @@ export interface Example {
   /** What to notice, one sentence each; shown under the drawing. */
   notes: string[];
   unitSystem: UnitSystem;
-  layout: Layout;
+  plan: Plan;
 }
 
 /** Inches -> feet (the model's unit). */
@@ -35,42 +37,113 @@ const C = {
   pink: '#f9a8d4',
 };
 
-let nextId = 1;
+interface PieceSpec {
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  depth: number;
+  color: string;
+}
+interface OpeningSpec {
+  wall: Wall;
+  position: number;
+  width: number;
+  hinge?: 'left' | 'right';
+  type?: Opening['type'];
+}
+interface RoomSpec {
+  roomDims: { width: number; height: number };
+  doors: OpeningSpec[];
+  windows: OpeningSpec[];
+  items: PieceSpec[];
+}
+
 const item = (
   label: string,
   x: number,
   y: number,
   width: number,
-  height: number,
+  depth: number,
   color: string,
-): FurnitureItem => ({
-  id: nextId++,
-  label,
-  x,
-  y,
-  width,
-  height,
-  rotation: 0,
-  color,
-  visible: true,
-});
+): PieceSpec => ({ label, x, y, width, depth, color });
 
 const door = (
-  wall: Door['wall'],
+  wall: Wall,
   position: number,
   width: number,
-  hinge: Door['hinge'] = 'left',
-  type: Door['type'] = 'swing-in',
-): Door => ({ id: nextId++, wall, position, width, hinge, type });
+  hinge: 'left' | 'right' = 'left',
+  type: Opening['type'] = 'swing-in',
+): OpeningSpec => ({ wall, position, width, hinge, type });
 
-const win = (wall: RoomWindow['wall'], position: number, width: number): RoomWindow => ({
-  id: nextId++,
+const win = (wall: Wall, position: number, width: number): OpeningSpec => ({
   wall,
   position,
   width,
 });
 
-export const EXAMPLES: Example[] = [
+const WALLS: Wall[] = ['top', 'right', 'bottom', 'left'];
+
+/**
+ * The plan of a room written as above. A clockwise outline runs right to left along the bottom
+ * wall and bottom to top along the left one, so there the offset is measured from the other end
+ * and the hinge side swaps (as the 3 -> 4 migration maps them).
+ */
+const examplePlan = (name: string, unitSystem: UnitSystem, spec: RoomSpec): Plan => {
+  const { width: w, height: h } = spec.roomDims;
+  const counters = { door: 0, window: 0 };
+  const opening = (o: OpeningSpec, kind: 'door' | 'window'): Opening => {
+    const wall = WALLS.indexOf(o.wall);
+    const len = wall % 2 === 0 ? w : h;
+    const reversed = wall >= 2;
+    const width = Math.min(o.width, len);
+    const position = Math.min(Math.max(o.position, 0), Math.max(0, len - width));
+    return {
+      id: `${kind}-${++counters[kind]}`,
+      kind,
+      wall,
+      offset: reversed ? Math.max(0, len - position - width) : position,
+      width,
+      type: o.type ?? 'swing-in',
+      hinge: kind === 'door' && (o.hinge === 'right') !== reversed ? 'end' : 'start',
+    };
+  };
+  const piece = (p: PieceSpec, n: number): Item => ({
+    id: `item-${n + 1}`,
+    label: p.label,
+    color: p.color,
+    shape: 'rect',
+    width: p.width,
+    depth: p.depth,
+    placement: { x: p.x + p.width / 2, y: p.y + p.depth / 2, rotation: 0 },
+  });
+  return {
+    version: 4,
+    name,
+    unit: 'ft',
+    rooms: [
+      {
+        id: 'room-1',
+        outline: [
+          { x: 0, y: 0 },
+          { x: w, y: 0 },
+          { x: w, y: h },
+          { x: 0, y: h },
+        ],
+        openings: [
+          ...spec.doors.map((d) => opening(d, 'door')),
+          ...spec.windows.map((o) => opening(o, 'window')),
+        ],
+      },
+    ],
+    items: spec.items.map(piece),
+    settings: { unitSystem },
+  };
+};
+
+type ExampleSpec = Omit<Example, 'plan'> & { room: RoomSpec };
+
+const SPECS: ExampleSpec[] = [
   // --- Bedroom ---------------------------------------------------------------------------
   {
     id: 'queen-bedroom-10x12',
@@ -82,7 +155,7 @@ export const EXAMPLES: Example[] = [
       'The door swings into the corner, clear of every piece.',
     ],
     unitSystem: 'ft-in',
-    layout: {
+    room: {
       roomDims: { width: 10, height: 12 },
       doors: [door('bottom', 7, i(32), 'right')],
       windows: [win('top', 3, 4)],
@@ -103,7 +176,7 @@ export const EXAMPLES: Example[] = [
       'A bench at the foot of the bed and a long dresser on the opposite wall keep 50 in (127 cm) of open floor between them.',
     ],
     unitSystem: 'ft-in',
-    layout: {
+    room: {
       roomDims: { width: 13, height: 14 },
       doors: [door('bottom', 9.5, i(32), 'right')],
       windows: [win('left', 4, 4), win('right', 4, 4)],
@@ -125,7 +198,7 @@ export const EXAMPLES: Example[] = [
       'A shared nightstand goes between the headboards, under the window.',
     ],
     unitSystem: 'ft-in',
-    layout: {
+    room: {
       roomDims: { width: 12, height: 12 },
       doors: [door('bottom', 8, i(32), 'right')],
       windows: [win('top', 4.5, 3)],
@@ -149,7 +222,7 @@ export const EXAMPLES: Example[] = [
       'The armchair is 15 in (38 cm) from the end of the coffee table, so both seats can use it.',
     ],
     unitSystem: 'ft-in',
-    layout: {
+    room: {
       roomDims: { width: 13, height: 15 },
       doors: [door('left', 11.5, 3, 'right')],
       windows: [win('right', 4, 5)],
@@ -171,7 +244,7 @@ export const EXAMPLES: Example[] = [
       'The wide opening into the room stays clear: no piece sits in the doorway.',
     ],
     unitSystem: 'ft-in',
-    layout: {
+    room: {
       roomDims: { width: 14, height: 16 },
       doors: [door('bottom', 9, 4, 'left', 'opening')],
       windows: [win('top', 8, 4)],
@@ -196,7 +269,7 @@ export const EXAMPLES: Example[] = [
       'A pocket door to the bathroom needs no swing space, so the dining chairs can sit close to it.',
     ],
     unitSystem: 'ft-in',
-    layout: {
+    room: {
       roomDims: { width: 15, height: 20 },
       doors: [door('bottom', 1, 3, 'left'), door('right', 11, i(30), 'left', 'pocket')],
       windows: [win('top', 1, 3), win('right', 3, 4)],
@@ -224,7 +297,7 @@ export const EXAMPLES: Example[] = [
       'The door swings into the middle of the room, which stays clear.',
     ],
     unitSystem: 'ft-in',
-    layout: {
+    room: {
       roomDims: { width: 12, height: 15 },
       doors: [door('bottom', 6 - i(16), i(32), 'left')],
       windows: [win('top', 4, 4)],
@@ -252,7 +325,7 @@ export const EXAMPLES: Example[] = [
       'A reading chair fills the corner by the window, clear of the door swing.',
     ],
     unitSystem: 'ft-in',
-    layout: {
+    room: {
       roomDims: { width: 9, height: 10 },
       doors: [door('bottom', 5.5, i(32), 'right')],
       windows: [win('left', 3, 4)],
@@ -274,7 +347,7 @@ export const EXAMPLES: Example[] = [
       'The sofa bed sits on the opposite wall, so guests and the desk chair do not compete for space.',
     ],
     unitSystem: 'ft-in',
-    layout: {
+    room: {
       roomDims: { width: 11, height: 12 },
       doors: [door('bottom', 5, i(32), 'right')],
       windows: [win('top', 6, 4)],
@@ -288,5 +361,10 @@ export const EXAMPLES: Example[] = [
     },
   },
 ];
+
+export const EXAMPLES: Example[] = SPECS.map(({ room, ...e }) => ({
+  ...e,
+  plan: examplePlan(e.name, e.unitSystem, room),
+}));
 
 export const examplesFor = (guide: string): Example[] => EXAMPLES.filter((e) => e.guide === guide);
