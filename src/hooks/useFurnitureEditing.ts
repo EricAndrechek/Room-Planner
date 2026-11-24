@@ -25,6 +25,8 @@ import {
   changePiece,
   clearPieces,
   deletePiece,
+  placePiece,
+  takeOutPiece,
   toggleHidden,
   toggleLock as toggleLockEdit,
 } from '../lib/edits';
@@ -39,6 +41,18 @@ import type { useSelection } from './useSelection';
 
 /** A press that moves less than this (px) and is let go is a tap (it may still nudge the piece). */
 const TAP_SLOP_PX = 8;
+
+/** Where a piece dragged with the mouse can be dropped to go to the inventory (the tray). */
+export const INVENTORY_DROP_SELECTOR = '[data-inventory-drop]';
+/** Set on the drop target while a piece is dragged over it. */
+const DROP_ACTIVE = 'dropActive';
+
+/** How a piece went to, or came from, the inventory (analytics `input`). */
+export type InventoryInput = 'card' | 'canvas' | 'keyboard' | 'drag' | 'tray';
+
+/** The inventory drop target under a point, if any. */
+const dropTargetAt = (x: number, y: number): HTMLElement | null =>
+  document.elementFromPoint(x, y)?.closest<HTMLElement>(INVENTORY_DROP_SELECTOR) ?? null;
 
 interface Options {
   history: History<Plan>;
@@ -60,6 +74,8 @@ interface Options {
   onLockedPress?: (item: Item) => void;
   /** A piece was tapped (pressed and let go without moving it) while furniture is editable. */
   onTap?: (item: Item) => void;
+  /** A piece was dragged onto the inventory tray (desktop) and is now in the inventory. */
+  onDroppedInInventory?: (item: Item) => void;
 }
 
 /** What the canvas draws while a piece is being rotated with its handle. */
@@ -88,6 +104,7 @@ export function useFurnitureEditing({
   announce,
   onLockedPress,
   onTap,
+  onDroppedInInventory,
 }: Options) {
   const { present: plan, set: setPlan, apply: applyPlan, commit } = history;
   const { setSelection, forgetItem, clearSelection } = selection;
@@ -137,6 +154,33 @@ export function useFurnitureEditing({
   const toggleVisibility = useCallback(
     (id: Id) => applyPlan((p) => toggleHidden(p, id)),
     [applyPlan],
+  );
+
+  /** Take a piece out of the room into the inventory (one undo step). */
+  const takeOutItem = useCallback(
+    (id: Id, input: InventoryInput) => {
+      if (!planRef.current.items.some((i) => i.id === id && i.placement)) return false;
+      applyPlan((p) => takeOutPiece(p, id));
+      forgetItem(id);
+      track('item_to_inventory', { input });
+      return true;
+    },
+    [applyPlan, forgetItem],
+  );
+
+  /**
+   * Put a piece from the inventory back at the free spot nearest the middle of the room; it is
+   * selected and its card highlighted, as a new piece is.
+   */
+  const placeItem = useCallback(
+    (id: Id) => {
+      if (!planRef.current.items.some((i) => i.id === id && !i.placement)) return;
+      applyPlan((p) => placePiece(p, id));
+      setSelection({ id, type: 'item' });
+      setLastAdded({ type: 'item', id, seq: nextCardSeq() });
+      track('item_placed_from_inventory', { input: 'tray' });
+    },
+    [applyPlan, setSelection],
   );
 
   /**
@@ -202,8 +246,18 @@ export function useFurnitureEditing({
       // Furthest the pointer got from where it went down (a tap wobbles a little).
       let travel = 0;
       const down = { x: e.clientX, y: e.clientY };
+      // With a mouse, the piece can be dropped on the inventory tray (lit while it is over it).
+      const canDrop = e.pointerType === 'mouse';
+      let dropTarget: HTMLElement | null = null;
+      const setDropTarget = (el: HTMLElement | null) => {
+        if (el === dropTarget) return;
+        if (dropTarget) delete dropTarget.dataset[DROP_ACTIVE];
+        if (el) el.dataset[DROP_ACTIVE] = '';
+        dropTarget = el;
+      };
       startDrag(e, {
         onMove: (ev) => {
+          if (canDrop) setDropTarget(dropTargetAt(ev.clientX, ev.clientY));
           const scale = PIXELS_PER_UNIT * zoomRef.current;
           raw.x += (ev.clientX - last.x) / scale;
           raw.y += (ev.clientY - last.y) / scale;
@@ -224,6 +278,18 @@ export function useFurnitureEditing({
           onDragFrame({ id: item.id, snap: snap && (snap.snapX || snap.snapY) ? snap : null });
         },
         onEnd: (end) => {
+          const dropped = !!end && !!dropTarget;
+          setDropTarget(null);
+          if (dropped) {
+            // Dropped on the tray: one undo step from where it was to the inventory.
+            setPlan((p) => takeOutPiece(p, item.id));
+            commit();
+            onDragFrame(null);
+            forgetItem(item.id);
+            track('item_to_inventory', { input: 'drag' });
+            onDroppedInInventory?.(item);
+            return;
+          }
           commit();
           onDragFrame(null);
           const said = snap ? describeSnap(snap) : '';
@@ -250,6 +316,8 @@ export function useFurnitureEditing({
       announce,
       onLockedPress,
       onTap,
+      forgetItem,
+      onDroppedInInventory,
     ],
   );
 
@@ -293,6 +361,8 @@ export function useFurnitureEditing({
     clearRoom,
     toggleLock,
     toggleVisibility,
+    takeOutItem,
+    placeItem,
     moveItem,
     onItemPointerDown,
     onRotatePointerDown,
