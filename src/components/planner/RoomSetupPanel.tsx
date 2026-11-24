@@ -199,7 +199,10 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
         >
           <RoomsList plan={plan} unitSystem={unitSystem} {...props.rooms} />
           {several && (
-            <h2 className="-mb-3 text-sm font-semibold text-slate-800" data-testid="editing-room">
+            <h2
+              className="flex items-center gap-2 text-sm font-semibold text-slate-800 border-t border-slate-100 pt-4"
+              data-testid="editing-room"
+            >
               {name}
             </h2>
           )}

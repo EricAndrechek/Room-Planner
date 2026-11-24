@@ -11,7 +11,7 @@
  */
 import { getBorderColor, migrateColor } from '../colors';
 import { leafPoint, openingDoorGeometry } from '../geometry/doors';
-import { itemParts } from '../geometry/shapes';
+import { itemParts, partsBounds } from '../geometry/shapes';
 import { isRectangle, outlineArea, roomBounds } from '../geometry/walls';
 import { neighbourOf, roomName, sharedWalls } from '../floor';
 import type { Opening, Plan, Room } from '../schema';
@@ -348,9 +348,11 @@ export const buildPlanScene = (input: SceneInput): Scene => {
     planNodes.push(doorCutNode(room, door, s, T, connects));
   }
   if (several) {
+    // Labels keep clear of the furniture where the room has space for them.
+    const boxes = items.map((i) => partsBounds(itemParts(i)));
     for (const room of rooms) {
       const name = roomName({ rooms }, room);
-      planNodes.push(roomLabelNode(room, name, areaText(outlineArea(room), unitSystem), s));
+      planNodes.push(roomLabelNode(room, name, areaText(outlineArea(room), unitSystem), s, boxes));
     }
   }
   for (const item of items) planNodes.push(itemNode(item, unitSystem, s));

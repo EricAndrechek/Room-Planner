@@ -426,7 +426,12 @@ export const sharedWallNode = (sw: SharedWall, s: number, T: number): GroupNode 
  * its bounding box when that is inside the outline, otherwise the sample point (on a coarse grid)
  * farthest from the outline's edges.
  */
-export const labelSpot = (room: Room): { x: number; y: number; width: number } => {
+export const labelSpot = (
+  room: Room,
+  /** Boxes the label should keep clear of (the furniture), and the label's own half-size. */
+  avoid: { left: number; top: number; right: number; bottom: number }[] = [],
+  half: { w: number; h: number } = { w: 0, h: 0 },
+): { x: number; y: number; width: number } => {
   const poly = room.outline;
   const b = roomBounds(room);
   const centre = { x: (b.left + b.right) / 2, y: (b.top + b.bottom) / 2 };
@@ -443,8 +448,37 @@ export const labelSpot = (room: Room): { x: number; y: number; width: number } =
     }
     return best;
   };
+  const clear = (p: Point) =>
+    !avoid.some(
+      (a) =>
+        p.x - half.w < a.right &&
+        p.x + half.w > a.left &&
+        p.y - half.h < a.bottom &&
+        p.y + half.h > a.top,
+    );
   let at = centre;
-  if (!pointInPolygon(centre, poly)) {
+  let found = pointInPolygon(centre, poly) && clear(centre);
+  if (!found && avoid.length) {
+    // The free spot nearest the middle, with room for the label inside the walls.
+    const N = 24;
+    let best = Infinity;
+    for (let i = 0; i < N; i++) {
+      for (let j = 0; j < N; j++) {
+        const p = {
+          x: b.left + ((i + 0.5) / N) * (b.right - b.left),
+          y: b.top + ((j + 0.5) / N) * (b.bottom - b.top),
+        };
+        if (!pointInPolygon(p, poly) || !clear(p) || edgeDist(p) < half.h) continue;
+        const d = Math.hypot(p.x - centre.x, p.y - centre.y);
+        if (d < best) {
+          best = d;
+          at = p;
+          found = true;
+        }
+      }
+    }
+  }
+  if (!found && !pointInPolygon(centre, poly)) {
     const N = 24;
     let best = -1;
     for (let i = 0; i < N; i++) {
@@ -478,8 +512,16 @@ export const labelSpot = (room: Room): { x: number; y: number; width: number } =
 };
 
 /** A room's name and area, centred in it (drawn under the furniture). */
-export const roomLabelNode = (room: Room, name: string, area: string, s: number): GroupNode => {
-  const spot = labelSpot(room);
+export const roomLabelNode = (
+  room: Room,
+  name: string,
+  area: string,
+  s: number,
+  avoid: { left: number; top: number; right: number; bottom: number }[] = [],
+): GroupNode => {
+  // About 7 px a character at 12 px bold; two lines, 28 px.
+  const half = { w: (Math.max(name.length, area.length) * 7 + 8) / 2 / s, h: 16 / s };
+  const spot = labelSpot(room, avoid, half);
   const cx = spot.x * s;
   const cy = spot.y * s;
   const maxW = Math.max(0, spot.width * s - 12);

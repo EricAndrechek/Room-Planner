@@ -38,7 +38,7 @@ interface StoredItem {
 export interface StoredPlan {
   version: number;
   name: string;
-  rooms: { id: string; outline: Point[]; openings: StoredOpening[] }[];
+  rooms: { id: string; name?: string; outline: Point[]; openings: StoredOpening[] }[];
   items: StoredItem[];
   settings?: { unitSystem?: string };
 }

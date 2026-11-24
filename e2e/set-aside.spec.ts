@@ -193,7 +193,7 @@ test('touch: drag a set-aside piece by its grip onto the plan', async ({ page, b
   const g = (await grip.boundingBox())!;
   const to = await screenAt(page, 4.5, 9);
   const cdp = await page.context().newCDPSession(page);
-  const touch = (type: string, x: number, y: number) =>
+  const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', x: number, y: number) =>
     cdp.send('Input.dispatchTouchEvent', {
       type,
       touchPoints: type === 'touchEnd' ? [] : [{ x: Math.round(x), y: Math.round(y) }],
