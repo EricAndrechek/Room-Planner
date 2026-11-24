@@ -4,7 +4,7 @@ import { Tooltip } from './Tooltip';
 interface SnapToggleProps {
   on: boolean;
   onToggle: () => void;
-  /** `header`: in the desktop zoom group; `floating`: a chip on the canvas (phones). */
+  /** `header`: in the desktop zoom group; `floating`: a chip riding on the phone sheet. */
   variant: 'header' | 'floating';
 }
 
@@ -37,7 +37,7 @@ export function SnapToggle({ on, onToggle, variant }: SnapToggleProps) {
       type="button"
       onClick={onToggle}
       aria-pressed={on}
-      className={`absolute top-16 right-3 z-20 flex items-center gap-1.5 pl-3 pr-3.5 py-2 rounded-full shadow-lg text-xs font-semibold backdrop-blur-xs transition-colors animate-fade-in ${
+      className={`pointer-events-auto shrink-0 flex items-center gap-1.5 pl-3 pr-3.5 py-2 rounded-full shadow-lg text-xs font-semibold backdrop-blur-xs transition-colors animate-fade-in ${
         on ? 'bg-indigo-600/95 text-white' : 'bg-white/95 text-slate-700 ring-1 ring-slate-300'
       }`}
       data-testid="snap-toggle"

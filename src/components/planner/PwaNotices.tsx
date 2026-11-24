@@ -43,7 +43,7 @@ export function PwaNotices({ notice, onDismissNotice, firstVisit = false }: PwaN
   return (
     // The dock is always mounted and is the polite live region, so a toast appearing inside it is
     // announced (a region inserted together with its text often is not). Toasts never take focus.
-    // On phones the dock sits above the floating zoom pill and Edit button (see .toast-dock).
+    // On phones the dock sits above the sheet and the controls riding on it (see .toast-dock).
     <div
       className="toast-dock fixed inset-x-0 bottom-0 z-[70] flex flex-col items-center gap-2 px-3 pointer-events-none"
       role="status"

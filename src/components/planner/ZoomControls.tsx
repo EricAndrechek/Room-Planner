@@ -63,7 +63,7 @@ export function HeaderZoomControls({
   );
 }
 
-/** Zoom pill in the phone bottom bar (laid out next to the editor button by the planner). */
+/** Zoom pill riding on top of the phone sheet (next to the Snap chip). */
 export function FloatingZoomControls({ zoom, onZoomIn, onZoomOut, onFit }: ZoomControlsProps) {
   return (
     <div

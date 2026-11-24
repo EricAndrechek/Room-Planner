@@ -22,11 +22,14 @@ import {
   type SnapResult,
 } from '../lib/snapping';
 import type { FurnitureItem, Id, Layout } from '../types';
-import type { CardRef } from './useCardHighlight';
+import { nextCardSeq, type CardRef } from './useCardHighlight';
 import type { History } from './useHistory';
 import type { usePointerDrag } from './usePointerDrag';
 import type { useRotationDrag } from './useRotationDrag';
 import type { useSelection } from './useSelection';
+
+/** A press that moves less than this (px) and is let go is a tap (it may still nudge the piece). */
+const TAP_SLOP_PX = 8;
 
 export const patchItem = (l: Layout, id: Id, patch: Partial<FurnitureItem>): Layout => ({
   ...l,
@@ -38,9 +41,6 @@ interface Options {
   selection: ReturnType<typeof useSelection>;
   /** Room setup locks furniture: selectable, but not movable. */
   isRoomSetup: boolean;
-  isMobile: boolean;
-  /** Mobile: close the sidebar sheet so the new piece is visible. */
-  closeMobileSidebar: () => void;
   startDrag: ReturnType<typeof usePointerDrag>;
   startRotation: ReturnType<typeof useRotationDrag>;
   zoomRef: RefObject<number>;
@@ -54,6 +54,8 @@ interface Options {
   announce: (text: string) => void;
   /** A piece was pressed while room setup locks all furniture (to explain why it does not move). */
   onLockedPress?: (item: FurnitureItem) => void;
+  /** A piece was tapped (pressed and let go without moving it) while furniture is editable. */
+  onTap?: (item: FurnitureItem) => void;
 }
 
 /** What the canvas draws while a piece is being rotated with its handle. */
@@ -73,8 +75,6 @@ export function useFurnitureEditing({
   history,
   selection,
   isRoomSetup,
-  isMobile,
-  closeMobileSidebar,
   startDrag,
   startRotation,
   zoomRef,
@@ -83,6 +83,7 @@ export function useFurnitureEditing({
   onRotateFrame,
   announce,
   onLockedPress,
+  onTap,
 }: Options) {
   const { present: layout, set: setLayout, apply: applyLayout, commit } = history;
   const { setSelection, forgetItem, clearSelection } = selection;
@@ -112,9 +113,8 @@ export function useFurnitureEditing({
     };
     applyLayout((l) => ({ ...l, items: [...l.items, newItem] }));
     setSelection({ id: newItem.id, type: 'item' });
-    setLastAdded({ type: 'item', id: newItem.id });
+    setLastAdded({ type: 'item', id: newItem.id, seq: nextCardSeq() });
     track('furniture_added', { count: layout.items.length + 1 });
-    if (isMobile) closeMobileSidebar();
   };
 
   const deleteItem = useCallback(
@@ -195,7 +195,10 @@ export function useFurnitureEditing({
         onLockedPress?.(item);
         return;
       }
-      if (item.locked) return;
+      if (item.locked) {
+        onTap?.(item);
+        return;
+      }
       e.stopPropagation();
       e.preventDefault();
       const { items, roomDims } = layoutRef.current;
@@ -206,12 +209,16 @@ export function useFurnitureEditing({
       const raw = { x: item.x, y: item.y };
       let last = { x: e.clientX, y: e.clientY };
       let snap: SnapResult | null = null;
+      // Furthest the pointer got from where it went down (a tap wobbles a little).
+      let travel = 0;
+      const down = { x: e.clientX, y: e.clientY };
       startDrag(e, {
         onMove: (ev) => {
           const scale = PIXELS_PER_UNIT * zoomRef.current;
           raw.x += (ev.clientX - last.x) / scale;
           raw.y += (ev.clientY - last.y) / scale;
           last = { x: ev.clientX, y: ev.clientY };
+          travel = Math.max(travel, Math.hypot(ev.clientX - down.x, ev.clientY - down.y));
           snap =
             snapRef.current && !ev.altKey
               ? snapItem(
@@ -226,7 +233,7 @@ export function useFurnitureEditing({
           setLayout((l) => patchItem(l, item.id, { x, y }));
           onDragFrame({ id: item.id, snap: snap && (snap.snapX || snap.snapY) ? snap : null });
         },
-        onEnd: () => {
+        onEnd: (end) => {
           commit();
           onDragFrame(null);
           const said = snap ? describeSnap(snap) : '';
@@ -238,6 +245,7 @@ export function useFurnitureEditing({
               input: e.pointerType,
             });
           }
+          if (end && travel < TAP_SLOP_PX) onTap?.(item);
         },
       });
     },
@@ -251,6 +259,7 @@ export function useFurnitureEditing({
       onDragFrame,
       announce,
       onLockedPress,
+      onTap,
     ],
   );
 

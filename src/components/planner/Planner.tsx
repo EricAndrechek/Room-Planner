@@ -1,6 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Home, Sofa } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { ArrowRight, Pencil, Plus } from 'lucide-react';
 import { useAnnouncements } from '../../hooks/useAnnouncements';
+import { useBottomSheet } from '../../hooks/useBottomSheet';
+import {
+  SHEET_SETTLE_MS,
+  latestCard,
+  nextCardSeq,
+  type CardRef,
+} from '../../hooks/useCardHighlight';
 import {
   useFurnitureEditing,
   type DragFrame,
@@ -11,7 +18,7 @@ import { useIsMobile } from '../../hooks/useIsMobile';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useNotice } from '../../hooks/useNotice';
 import { useOpenings } from '../../hooks/useOpenings';
-import { usePanZoom } from '../../hooks/usePanZoom';
+import { usePanZoom, type ViewInsets } from '../../hooks/usePanZoom';
 import { usePointerDrag } from '../../hooks/usePointerDrag';
 import { useProjectActions, type NewPlanStart } from '../../hooks/useProjectActions';
 import { useProjects } from '../../hooks/useProjects';
@@ -26,6 +33,7 @@ import { moveInside, piecesOutside } from '../../lib/placement';
 import { computeLayoutWarnings } from '../../lib/openings';
 import { toShareConfig } from '../../lib/layout';
 import { HELP_PATH } from '../../lib/paths';
+import { sheetSummary } from '../../lib/sheet';
 import { nudgeStep } from '../../lib/units';
 import {
   loadSnapPreference,
@@ -64,6 +72,12 @@ import { FloatingZoomControls } from './ZoomControls';
 const LOCKED_PROMPT_THROTTLE_MS = 3000;
 const LOCKED_PROMPT_MS = 6000;
 
+/** Phones: the mode badge covers the top of the plan (px)... */
+const BADGE_INSET = 40;
+/** ...and the zoom pill and Snap chip ride this far above the sheet (px, with their gap). */
+const FLOATING_ROW_INSET = 60;
+const NO_INSETS: ViewInsets = { top: 0, bottom: 0 };
+
 interface PlannerProps {
   storage: StorageLike;
   initial: BootState;
@@ -79,10 +93,11 @@ export function Planner({ storage, initial }: PlannerProps) {
   const [unitSystem, setUnitSystem] = useState<UnitSystem>(initial.unitSystem);
   const [designMode, setDesignMode] = useState<DesignMode>(initial.designMode);
 
+  // Phones (below md): the editor is a bottom sheet over the plan, at peek, half or full height.
   const isMobile = useIsMobile();
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const sidebarOpen = !isMobile || mobileSidebarOpen;
-  const closeMobileSidebar = useCallback(() => setMobileSidebarOpen(false), []);
+  const sheet = useBottomSheet(isMobile);
+  const { detent, expand: expandSheet, lower: lowerSheet } = sheet;
+  const canvasCovered = isMobile && detent === 'full';
 
   const sel = useSelection();
   const { selection, setSelection, selectItem, colorPickerItemId } = sel;
@@ -94,10 +109,17 @@ export function Planner({ storage, initial }: PlannerProps) {
   const [furnitureExpanded, setFurnitureExpanded] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const { zoom, zoomRef, pan, zoomIn, zoomOut, fitToView } = usePanZoom(
+  // The part of the plan that shows (fitting, revealing a piece): not under the badge or the sheet.
+  const sheetInset = isMobile && detent !== 'full' ? sheet.heights[detent] + FLOATING_ROW_INSET : 0;
+  const viewInsets = useMemo(
+    () => (isMobile ? { top: BADGE_INSET, bottom: sheetInset } : NO_INSETS),
+    [isMobile, sheetInset],
+  );
+  const { zoom, zoomRef, pan, zoomIn, zoomOut, fitToView, reveal } = usePanZoom(
     containerRef,
     layout.roomDims,
     isMobile,
+    viewInsets,
   );
   const startDrag = usePointerDrag();
   const startRotation = useRotationDrag();
@@ -222,13 +244,57 @@ export function Planner({ storage, initial }: PlannerProps) {
     track('redo');
   }, [history, live]);
 
+  // --- Phone sheet: cards and pieces follow each other --------------------------------------
+  // A card to bring to the top of the sheet (a piece tapped on the plan, or Edit).
+  const [revealedCard, setRevealedCard] = useState<CardRef | null>(null);
+  const revealCard = useCallback(
+    (type: CardRef['type'], id: Id) =>
+      setRevealedCard({ type, id, seq: nextCardSeq(), align: 'start' }),
+    [],
+  );
+  /** Tapping a piece on a phone opens a collapsed sheet to half and shows its card. */
+  const onPieceTap = useCallback(
+    (item: FurnitureItem) => {
+      revealCard('item', item.id);
+      expandSheet();
+    },
+    [revealCard, expandSheet],
+  );
+  /** Pan just enough that a piece is not under the sheet (or off the edge). */
+  const revealPiece = useCallback(
+    (id: Id) => {
+      const el = containerRef.current?.querySelector(`[data-item-id="${id}"]`);
+      if (el) reveal(el);
+    },
+    [reveal],
+  );
+  const selectedItemId = selection?.type === 'item' ? selection.id : null;
+  const selectedItemRef = useRef(selectedItemId);
+  useEffect(() => {
+    selectedItemRef.current = selectedItemId;
+  });
+  // The sheet settled at another height: keep the selected piece in sight above it.
+  useEffect(() => {
+    if (!isMobile || detent === 'full') return;
+    const timer = setTimeout(() => {
+      if (selectedItemRef.current !== null) revealPiece(selectedItemRef.current);
+    }, SHEET_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [isMobile, detent, revealPiece]);
+  /** A card was picked in the list: select its piece and keep it in sight on the plan. */
+  const selectCard = useCallback(
+    (id: Id) => {
+      selectItem(id);
+      if (isMobile && detent !== 'full') requestAnimationFrame(() => revealPiece(id));
+    },
+    [selectItem, isMobile, detent, revealPiece],
+  );
+
   // --- Editing ------------------------------------------------------------------------
   const furniture = useFurnitureEditing({
     history,
     selection: sel,
     isRoomSetup,
-    isMobile,
-    closeMobileSidebar,
     startDrag,
     startRotation,
     zoomRef,
@@ -237,6 +303,7 @@ export function Planner({ storage, initial }: PlannerProps) {
     onRotateFrame: setRotateFrame,
     announce: live.announce,
     onLockedPress: onLockedPointerPress,
+    onTap: isMobile ? onPieceTap : undefined,
   });
   const openings = useOpenings({
     history,
@@ -332,6 +399,13 @@ export function Planner({ storage, initial }: PlannerProps) {
     selection?.type === 'item' ? layout.items.find((i) => i.id === selection.id) : undefined;
   const canEditSelected = !!selectedItem && !isRoomSetup && !selectedItem.locked;
 
+  // The sheet now covers the plan: focus there would be out of sight, so it moves to the handle.
+  useEffect(() => {
+    if (canvasCovered && containerRef.current?.contains(document.activeElement)) {
+      sheet.handleRef.current?.focus({ preventScroll: true });
+    }
+  }, [canvasCovered, sheet.handleRef]);
+
   /** Return keyboard focus to the canvas (e.g. after the focused piece is deselected or removed). */
   const focusCanvas = useCallback(() => {
     const canvas = containerRef.current;
@@ -401,14 +475,67 @@ export function Planner({ storage, initial }: PlannerProps) {
       ? layout.items.find((i) => i.id === colorPickerItemId)
       : undefined;
 
+  // Adding something while the sheet covers the plan lowers it to half, so the new thing shows.
+  const addItem = () => {
+    furniture.addItem();
+    lowerSheet();
+  };
+  const addDoor = () => {
+    openings.addDoor();
+    lowerSheet();
+  };
+  const addWindow = () => {
+    openings.addWindow();
+    lowerSheet();
+  };
+  const summary = sheetSummary(layout, designMode, selection, unitSystem);
+  const sheetAction = selection
+    ? {
+        label: 'Edit',
+        icon: <Pencil className="w-4 h-4" aria-hidden="true" />,
+        tone: isRoomSetup ? ('room' as const) : ('furniture' as const),
+        onClick: () => {
+          revealCard(selection.type, selection.id);
+          expandSheet('tap');
+        },
+      }
+    : isRoomSetup
+      ? {
+          label: 'Next: Items',
+          icon: <ArrowRight className="w-4 h-4" aria-hidden="true" />,
+          tone: 'furniture' as const,
+          onClick: () => changeDesignMode(DESIGN_MODES.FURNITURE),
+        }
+      : {
+          label: 'Add item',
+          icon: <Plus className="w-4 h-4" aria-hidden="true" />,
+          tone: 'furniture' as const,
+          onClick: addItem,
+        };
+  // Toasts stack above the sheet and the controls riding on it (over the sheet when it is full).
+  const toastBottom = isMobile
+    ? sheet.keyboard + (detent === 'full' ? 12 : sheet.visibleHeight + FLOATING_ROW_INSET + 4)
+    : null;
+  const rootStyle =
+    toastBottom === null ? undefined : ({ '--toast-bottom': `${toastBottom}px` } as CSSProperties);
+
   return (
     <PopoverRootContext value={popoverRoot}>
-      <div className="flex flex-col h-full bg-slate-50 text-slate-800 font-sans overflow-hidden relative">
+      <div
+        className="flex flex-col h-full bg-slate-50 text-slate-800 font-sans overflow-hidden relative"
+        style={rootStyle}
+      >
         <a
           href="#floor-plan"
           onClick={(e) => {
             e.preventDefault();
-            containerRef.current?.focus();
+            if (canvasCovered) {
+              // Uncover the plan first (it is inert under a full sheet), then focus it.
+              sheet.setDetent('half');
+              requestAnimationFrame(() => containerRef.current?.focus());
+            } else {
+              containerRef.current?.focus();
+            }
           }}
           className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[200] focus:px-3 focus:py-2 focus:bg-white focus:text-indigo-700 focus:rounded-lg focus:shadow-lg focus:font-medium"
         >
@@ -440,22 +567,32 @@ export function Planner({ storage, initial }: PlannerProps) {
         />
 
         <div className="flex flex-1 overflow-hidden relative">
-          {isMobile && mobileSidebarOpen && (
-            <div
-              className="fixed top-12 sm:top-16 bottom-0 left-0 right-0 bg-slate-900/50 z-40 md:hidden animate-fade-in"
-              onClick={closeMobileSidebar}
-              aria-hidden="true"
-            />
-          )}
-
           <Sidebar
-            open={sidebarOpen}
             designMode={designMode}
             unitSystem={unitSystem}
             helpHref={HELP_PATH}
             onUnitSystemChange={changeUnitSystem}
             onDesignModeChange={changeDesignMode}
-            onClose={closeMobileSidebar}
+            sheet={
+              isMobile
+                ? {
+                    sheet,
+                    summary,
+                    action: sheetAction,
+                    floating: (
+                      <>
+                        <FloatingZoomControls
+                          zoom={zoom}
+                          onZoomIn={zoomIn}
+                          onZoomOut={zoomOut}
+                          onFit={fitToView}
+                        />
+                        <SnapToggle variant="floating" on={snapOn} onToggle={toggleSnap} />
+                      </>
+                    ),
+                  }
+                : undefined
+            }
           >
             <RoomSetupPanel
               isActiveMode={isRoomSetup}
@@ -468,14 +605,19 @@ export function Planner({ storage, initial }: PlannerProps) {
               windows={layout.windows}
               unitSystem={unitSystem}
               onRoomDimsChange={changeRoomDims}
-              onAddDoor={openings.addDoor}
+              onAddDoor={addDoor}
               onUpdateDoor={openings.updateDoor}
               onDeleteDoor={openings.deleteDoor}
-              onAddWindow={openings.addWindow}
+              onAddWindow={addWindow}
               onUpdateWindow={openings.updateWindow}
               onDeleteWindow={openings.deleteWindow}
               onChangeWall={changeOpeningWall}
-              highlight={openings.lastAdded}
+              highlight={latestCard(
+                openings.lastAdded,
+                revealedCard?.type === 'door' || revealedCard?.type === 'window'
+                  ? { ...revealedCard, type: revealedCard.type }
+                  : null,
+              )}
             />
             <FurniturePanel
               isActiveMode={!isRoomSetup}
@@ -489,9 +631,9 @@ export function Planner({ storage, initial }: PlannerProps) {
               colorPickerItemId={colorPickerItemId}
               roomDims={layout.roomDims}
               unitSystem={unitSystem}
-              onAddItem={furniture.addItem}
+              onAddItem={addItem}
               onClearRoom={furniture.clearRoom}
-              onSelectItem={selectItem}
+              onSelectItem={selectCard}
               onChangeItem={furniture.changeItem}
               onCommit={commit}
               onToggleLock={furniture.toggleLock}
@@ -499,52 +641,13 @@ export function Planner({ storage, initial }: PlannerProps) {
               onDeleteItem={furniture.deleteItem}
               onToggleColorPicker={sel.toggleColorPicker}
               onCloseColorPicker={sel.closeColorPicker}
-              highlight={furniture.lastAdded}
+              highlight={latestCard(
+                furniture.lastAdded,
+                revealedCard?.type === 'item' ? revealedCard : null,
+              )}
             />
           </Sidebar>
           <div ref={setPopoverRoot} className="contents" data-popover-root />
-
-          {/* Phones: one bottom bar (zoom pill left, editor button right) laid out together, so
-              the two can never overlap however narrow the screen. */}
-          {isMobile && !mobileSidebarOpen && (
-            <div
-              className="fixed inset-x-0 bottom-0 z-40 flex items-end justify-between gap-2 px-3 pointer-events-none md:hidden"
-              style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
-              data-testid="mobile-bottom-bar"
-            >
-              <FloatingZoomControls
-                zoom={zoom}
-                onZoomIn={zoomIn}
-                onZoomOut={zoomOut}
-                onFit={fitToView}
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileSidebarOpen(true);
-                  setSelection(null);
-                }}
-                className={`pointer-events-auto shrink-0 text-white rounded-full px-4 py-3 shadow-lg flex items-center gap-2 transition-all active:scale-95 animate-fade-in ${
-                  isRoomSetup
-                    ? 'bg-indigo-600 hover:bg-indigo-700'
-                    : 'bg-emerald-700 hover:bg-emerald-800'
-                }`}
-                aria-label={isRoomSetup ? 'Edit room settings' : 'Edit furniture'}
-                data-testid="mobile-edit-button"
-              >
-                {isRoomSetup ? (
-                  <Home className="w-5 h-5" aria-hidden="true" />
-                ) : (
-                  <Sofa className="w-5 h-5" aria-hidden="true" />
-                )}
-                {/* Narrow phones: just "Edit" (the icon and color say which); wider: "Edit Room". */}
-                <span className="text-sm font-medium whitespace-nowrap">
-                  Edit
-                  <span className="max-[419px]:hidden">{isRoomSetup ? ' Room' : ' Furniture'}</span>
-                </span>
-              </button>
-            </div>
-          )}
 
           <RoomCanvas
             containerRef={containerRef}
@@ -556,7 +659,8 @@ export function Planner({ storage, initial }: PlannerProps) {
             zoom={zoom}
             pan={pan}
             onSelectOpening={(type, id) => setSelection({ id, type })}
-            showModeBadge={!(isMobile && sidebarOpen)}
+            showModeBadge={!canvasCovered}
+            covered={canvasCovered}
             onItemPointerDown={furniture.onItemPointerDown}
             onRotatePointerDown={furniture.onRotatePointerDown}
             onSelectItem={(item) => selectItem(item.id)}
@@ -576,9 +680,6 @@ export function Planner({ storage, initial }: PlannerProps) {
                   rotation={rotateFrame?.id === overlayItemId ? rotateFrame.angle : null}
                 />
               )
-            }
-            controls={
-              !sidebarOpen && <SnapToggle variant="floating" on={snapOn} onToggle={toggleSnap} />
             }
           />
         </div>
