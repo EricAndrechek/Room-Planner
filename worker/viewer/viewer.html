@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Room Planner plan</title>
+    <!--
+      The Room Planner plan viewer: an MCP Apps view (SEP-1865, protocol 2026-01-26), served by the
+      MCP server as ui://room-planner/plan-viewer.html. The host draws it in a sandboxed iframe and
+      sends it the result of create_plan or read_plan; the drawing is the SVG the server made, so
+      nothing is rasterised on the server. Self-contained: no fetches, no external files. The
+      postMessage protocol is spoken by hand (a few dozen lines) instead of with the ext-apps
+      `App` class, whose browser bundle is 129 KB gzip.
+    -->
+    <style>
+      :root {
+        --bg: var(--color-background-primary, #ffffff);
+        --panel: var(--color-background-secondary, #f8fafc);
+        --text: var(--color-text-primary, #0f172a);
+        --muted: var(--color-text-secondary, #475569);
+        --line: var(--color-border-secondary, #e2e8f0);
+        --accent: #4f46e5;
+        --accent-text: #ffffff;
+        --error: #dc2626;
+        --warning: #b45309;
+        --info: #2563eb;
+        --radius: var(--border-radius-lg, 12px);
+        --font: var(
+          --font-sans,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Roboto,
+          'Helvetica Neue',
+          Arial,
+          sans-serif
+        );
+        color-scheme: light;
+      }
+      :root[data-theme='dark'] {
+        --bg: var(--color-background-primary, #0f172a);
+        --panel: var(--color-background-secondary, #1e293b);
+        --text: var(--color-text-primary, #f1f5f9);
+        --muted: var(--color-text-secondary, #cbd5e1);
+        --line: var(--color-border-secondary, #334155);
+        --accent: #818cf8;
+        --accent-text: #0f172a;
+        --error: #f87171;
+        --warning: #fbbf24;
+        --info: #93c5fd;
+        color-scheme: dark;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme]) {
+          --bg: #0f172a;
+          --panel: #1e293b;
+          --text: #f1f5f9;
+          --muted: #cbd5e1;
+          --line: #334155;
+          --accent: #818cf8;
+          --accent-text: #0f172a;
+          --error: #f87171;
+          --warning: #fbbf24;
+          --info: #93c5fd;
+          color-scheme: dark;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.45 var(--font);
+      }
+      main {
+        padding: 12px;
+        display: grid;
+        gap: 10px;
+      }
+      h1 {
+        font-size: 16px;
+        margin: 0;
+        line-height: 1.3;
+        overflow-wrap: anywhere;
+      }
+      p {
+        margin: 0;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .sheet {
+        /* The drawing is a white sheet of paper in either theme: its colours are the app's export. */
+        background: #ffffff;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+      .sheet svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        max-height: 70vh;
+      }
+      /* Issues on the drawing: the pieces and doors an issue names. */
+      g[data-role='item'].hl-error > :first-child {
+        stroke: #dc2626;
+        stroke-width: 3.5px;
+      }
+      g[data-role='item'].hl-warning > :first-child {
+        stroke: #d97706;
+        stroke-width: 3.5px;
+      }
+      g[data-role='door'].hl-warning path,
+      g[data-role='door'].hl-error path {
+        stroke: #d97706;
+        stroke-width: 2.5px;
+      }
+      g[data-role='window'].hl-warning rect,
+      g[data-role='window'].hl-error rect,
+      g[data-role='window'].hl-warning path,
+      g[data-role='window'].hl-error path {
+        stroke: #dc2626;
+      }
+      svg.focusing g[data-role='item']:not(.focus) {
+        opacity: 0.35;
+      }
+      g.focus > :first-child,
+      g[data-role='door'].focus path {
+        stroke: #4f46e5 !important;
+        stroke-width: 4px !important;
+      }
+      ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 6px;
+      }
+      .issue {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+        width: 100%;
+        text-align: left;
+        font: inherit;
+        color: inherit;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 10px;
+        cursor: pointer;
+      }
+      .issue[aria-pressed='true'] {
+        border-color: var(--accent);
+        box-shadow: inset 0 0 0 1px var(--accent);
+      }
+      .issue:focus-visible,
+      .open:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .badge {
+        flex: none;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        border-radius: 999px;
+        padding: 1px 7px;
+        margin-top: 1px;
+        border: 1px solid currentColor;
+      }
+      .badge.error {
+        color: var(--error);
+      }
+      .badge.warning {
+        color: var(--warning);
+      }
+      .badge.info {
+        color: var(--info);
+      }
+      .ok {
+        color: var(--muted);
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      .open {
+        font: inherit;
+        font-weight: 600;
+        border: 0;
+        border-radius: 8px;
+        padding: 9px 14px;
+        min-height: 40px;
+        background: var(--accent);
+        color: var(--accent-text);
+        cursor: pointer;
+      }
+      .note {
+        font-size: 13px;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .issue,
+        g[data-role='item'] {
+          transition:
+            opacity 0.15s,
+            border-color 0.15s;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1 id="title">Room Planner</h1>
+        <p id="summary" class="muted">Loading the plan…</p>
+      </header>
+      <div id="sheet" class="sheet" hidden></div>
+      <section id="issues-section" aria-labelledby="issues-title" hidden>
+        <h2 id="issues-title" class="muted" style="font-size: 13px; margin: 0 0 6px">Issues</h2>
+        <ul id="issues"></ul>
+      </section>
+      <div class="actions">
+        <button id="open" class="open" type="button" hidden>Open in Room Planner</button>
+        <p id="note" class="note muted" role="status"></p>
+      </div>
+    </main>
+    <script>
+      (() => {
+        'use strict';
+        // Where the server puts the drawing in a tool result (`_meta`, never shown to the model).
+        const VIEW_KEY = 'com.andrechek.room-planner/view';
+        const PROTOCOL = '2026-01-26';
+        const $ = (id) => document.getElementById(id);
+        const host = window.parent !== window ? window.parent : null;
+        let nextId = 1;
+        const pending = new Map();
+        let connected = false;
+        let url = null;
+
+        // --- JSON-RPC over postMessage to the host -----------------------------------------
+        const post = (msg) => host && host.postMessage({ jsonrpc: '2.0', ...msg }, '*');
+        const request = (method, params) =>
+          new Promise((resolve, reject) => {
+            const id = nextId++;
+            pending.set(id, { resolve, reject });
+            post({ id, method, params });
+          });
+        const notify = (method, params) => post({ method, params });
+
+        window.addEventListener('message', (event) => {
+          if (host && event.source !== host) return;
+          const msg = event.data;
+          if (!msg || msg.jsonrpc !== '2.0') return;
+          if ('id' in msg && !('method' in msg)) {
+            const p = pending.get(msg.id);
+            if (!p) return;
+            pending.delete(msg.id);
+            if (msg.error) p.reject(msg.error);
+            else p.resolve(msg.result);
+            return;
+          }
+          const params = msg.params || {};
+          switch (msg.method) {
+            case 'ui/notifications/tool-result':
+              show(params);
+              break;
+            case 'ui/notifications/tool-input':
+              $('summary').textContent = 'Checking the plan…';
+              break;
+            case 'ui/notifications/tool-cancelled':
+              $('summary').textContent = 'The request was cancelled.';
+              break;
+            case 'ui/notifications/host-context-changed':
+              applyContext(params);
+              break;
+            case 'ui/resource-teardown':
+            case 'ping':
+              if ('id' in msg) post({ id: msg.id, result: {} });
+              break;
+            default:
+              if ('id' in msg) {
+                post({ id: msg.id, error: { code: -32601, message: 'Method not found' } });
+              }
+          }
+        });
+
+        // --- Host context: theme, the host's colours and fonts, safe areas -----------------
+        const applyContext = (ctx) => {
+          if (!ctx) return;
+          const root = document.documentElement;
+          if (ctx.theme === 'dark' || ctx.theme === 'light') root.dataset.theme = ctx.theme;
+          const vars = ctx.styles && ctx.styles.variables;
+          if (vars) {
+            for (const [k, v] of Object.entries(vars)) {
+              if (k.startsWith('--') && typeof v === 'string') root.style.setProperty(k, v);
+            }
+          }
+          const inset = ctx.safeAreaInsets;
+          if (inset) {
+            const main = document.querySelector('main');
+            main.style.paddingTop = `${12 + (inset.top || 0)}px`;
+            main.style.paddingRight = `${12 + (inset.right || 0)}px`;
+            main.style.paddingBottom = `${12 + (inset.bottom || 0)}px`;
+            main.style.paddingLeft = `${12 + (inset.left || 0)}px`;
+          }
+        };
+
+        // --- Size: tell the host how tall the view is --------------------------------------
+        let lastHeight = 0;
+        const reportSize = () => {
+          const height = Math.ceil(document.documentElement.scrollHeight);
+          if (!connected || height === lastHeight) return;
+          lastHeight = height;
+          notify('ui/notifications/size-changed', {
+            width: Math.ceil(document.documentElement.scrollWidth),
+            height,
+          });
+        };
+        new ResizeObserver(() => requestAnimationFrame(reportSize)).observe(document.body);
+
+        // --- Drawing a result --------------------------------------------------------------
+        const text = (result) =>
+          (result.content || [])
+            .filter((c) => c && c.type === 'text')
+            .map((c) => c.text)
+            .join('\n');
+
+        const show = (result) => {
+          const view = result._meta && result._meta[VIEW_KEY];
+          const data = result.structuredContent || {};
+          if (result.isError) {
+            $('title').textContent = 'Room Planner';
+            $('summary').textContent = text(result) || 'The plan could not be shown.';
+            $('sheet').hidden = true;
+            $('issues-section').hidden = true;
+            $('open').hidden = true;
+            return;
+          }
+          const issues = (view && view.issues) || data.issues || [];
+          $('title').textContent = (view && view.title) || (data.plan && data.plan.name) || 'Plan';
+          $('summary').textContent = (view && view.summary) || data.summary || '';
+          url = (view && view.url) || data.url || null;
+          $('open').hidden = !url;
+          $('note').textContent = '';
+
+          const sheet = $('sheet');
+          sheet.replaceChildren();
+          let svg = null;
+          if (view && typeof view.svg === 'string') {
+            const doc = new DOMParser().parseFromString(view.svg, 'image/svg+xml');
+            const root = doc.documentElement;
+            if (root && root.nodeName === 'svg') {
+              svg = document.importNode(root, true);
+              svg.removeAttribute('width');
+              svg.removeAttribute('height');
+              sheet.append(svg);
+            }
+          }
+          sheet.hidden = !svg;
+          if (!svg)
+            $('note').textContent =
+              'This client did not pass the drawing; open the plan to see it.';
+          renderIssues(issues, svg);
+        };
+
+        const entities = (svg, ids) =>
+          svg
+            ? ids.flatMap((id) => [...svg.querySelectorAll(`g[data-id="${CSS.escape(id)}"]`)])
+            : [];
+
+        const renderIssues = (issues, svg) => {
+          // Errors and warnings are marked on the drawing; info (tight gaps) only on request.
+          for (const issue of issues) {
+            if (issue.severity === 'info') continue;
+            for (const el of entities(svg, issue.ids || [])) {
+              el.classList.add(issue.severity === 'error' ? 'hl-error' : 'hl-warning');
+            }
+          }
+          const list = $('issues');
+          list.replaceChildren();
+          $('issues-section').hidden = false;
+          if (!issues.length) {
+            const li = document.createElement('li');
+            li.className = 'ok';
+            li.textContent = 'No layout issues found.';
+            list.append(li);
+            return;
+          }
+          const order = { error: 0, warning: 1, info: 2 };
+          const sorted = [...issues].sort((a, b) => order[a.severity] - order[b.severity]);
+          let active = null;
+          const focus = (button, issue) => {
+            if (!svg) return;
+            for (const el of svg.querySelectorAll('.focus')) el.classList.remove('focus');
+            svg.classList.remove('focusing');
+            for (const b of list.querySelectorAll('button'))
+              b.setAttribute('aria-pressed', 'false');
+            if (!issue) return;
+            const found = entities(svg, issue.ids || []);
+            for (const el of found) el.classList.add('focus');
+            svg.classList.toggle('focusing', found.length > 0);
+            button.setAttribute('aria-pressed', 'true');
+          };
+          for (const issue of sorted) {
+            const li = document.createElement('li');
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'issue';
+            button.setAttribute('aria-pressed', 'false');
+            const badge = document.createElement('span');
+            badge.className = `badge ${issue.severity}`;
+            badge.textContent = issue.severity;
+            const msg = document.createElement('span');
+            msg.textContent = issue.message;
+            button.append(badge, msg);
+            button.addEventListener('click', () => {
+              active = active === issue ? null : issue;
+              focus(button, active);
+            });
+            li.append(button);
+            list.append(li);
+          }
+        };
+
+        // --- Open in Room Planner ----------------------------------------------------------
+        $('open').addEventListener('click', async () => {
+          if (!url) return;
+          if (!connected) {
+            window.open(url, '_blank', 'noopener');
+            return;
+          }
+          try {
+            const result = await request('ui/open-link', { url });
+            if (result && result.isError) throw new Error('refused');
+          } catch {
+            $('note').textContent = `Could not open the link here. Copy it: ${url}`;
+          }
+        });
+
+        // --- Handshake ---------------------------------------------------------------------
+        if (!host) {
+          $('summary').textContent = 'Open this view from an MCP client to see a plan.';
+          return;
+        }
+        request('ui/initialize', {
+          protocolVersion: PROTOCOL,
+          appInfo: { name: 'room-planner-plan-viewer', version: '1.0.0' },
+          appCapabilities: {},
+        })
+          .then((result) => {
+            connected = true;
+            applyContext(result && result.hostContext);
+            notify('ui/notifications/initialized', {});
+            reportSize();
+          })
+          .catch(() => {
+            $('summary').textContent = 'This client could not start the plan viewer.';
+          });
+      })();
+    </script>
+  </body>
+</html>

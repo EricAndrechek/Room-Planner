@@ -12,7 +12,7 @@
     "dev": "astro dev",
     "build": "astro build && node scripts/csp-hashes.mjs",
     "preview": "astro preview",
-    "check": "astro check",
+    "check": "astro check && tsc -p worker",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -29,6 +29,7 @@
   "dependencies": {
     "@astrojs/react": "^7.1.9",
     "@astrojs/sitemap": "^3.7.6",
+    "@modelcontextprotocol/server": "2.4.0",
     "@tailwindcss/vite": "^4.3.5",
     "astro": "^7.4.13",
     "lean-qr": "2.7.4",
@@ -41,8 +42,10 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.12",
     "@axe-core/playwright": "^4.14.0",
+    "@cloudflare/workers-types": "5.20261107.1",
     "@eslint/js": "^10.0.1",
     "@fontsource/inter": "^5.3.0",
+    "@modelcontextprotocol/client": "2.4.0",
     "@playwright/test": "^1.65.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
