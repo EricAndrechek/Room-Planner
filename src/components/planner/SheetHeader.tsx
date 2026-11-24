@@ -28,7 +28,7 @@ interface SheetHeaderProps extends SheetParts {
   summary: string;
   /** Shown only while collapsed (at peek); at half and full the controls are in view. */
   action?: SheetAction;
-  /** The selected piece's actions (Rotate, Duplicate, Set aside, Delete), at every height. */
+  /** The selected piece's actions (Rotate, Duplicate, Set aside, Delete): a second row, at every height. */
   actions?: ReactNode;
   /** Id of the scrolling content the handle resizes. */
   contentId: string;
@@ -104,8 +104,7 @@ export function SheetHeader({
         >
           {summary}
         </p>
-        {actions}
-        {collapsed && action && !actions && (
+        {collapsed && action && (
           <button
             type="button"
             onClick={action.onClick}
@@ -121,6 +120,8 @@ export function SheetHeader({
           </button>
         )}
       </div>
+      {/* A second row with the selected piece's actions (clear of the handle's middle). */}
+      {actions && <div className="relative -mt-1 px-3 pb-2 pointer-events-none">{actions}</div>}
     </div>
   );
 }

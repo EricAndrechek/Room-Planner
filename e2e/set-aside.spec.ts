@@ -71,7 +71,7 @@ test('the toggle and the selection bar: Set aside with Undo, kept across a reloa
   await pick(page, 'Chair');
   await expect(bar(page)).toBeVisible();
   await expect(bar(page)).toHaveAttribute('data-variant', isNarrow(page) ? 'sheet' : 'canvas');
-  await bar(page).getByRole('button', { name: 'Set Chair aside' }).click();
+  await bar(page).getByRole('button', { name: 'Set aside Chair' }).click();
   await expect(piece(page, 'Chair')).toHaveCount(0);
   await expect(page.getByTestId('set-aside-count')).toHaveText('1');
   await expect(notice(page)).toContainText('Chair set aside.');
@@ -84,7 +84,7 @@ test('the toggle and the selection bar: Set aside with Undo, kept across a reloa
   await expect(page.getByTestId('set-aside-count')).toHaveText('0');
 
   await pick(page, 'Chair');
-  await bar(page).getByRole('button', { name: 'Set Chair aside' }).click();
+  await bar(page).getByRole('button', { name: 'Set aside Chair' }).click();
   await tab(page, 'aside').click();
   await expect(tab(page, 'aside')).toHaveAttribute('aria-selected', 'true');
   expect(await asideNames(page)).toEqual(['Chair']);
@@ -182,7 +182,7 @@ test('touch: drag a set-aside piece by its grip onto the plan', async ({ page, b
   await ready(page);
   await openStep(page, 'furniture');
   await pick(page, 'Chair');
-  await bar(page).getByRole('button', { name: 'Set Chair aside' }).click();
+  await bar(page).getByRole('button', { name: 'Set aside Chair' }).click();
   await setDetent(page, 'half');
   await tab(page, 'aside').click();
   const grip = page
@@ -217,7 +217,7 @@ test('tap to place: an outline follows, Cancel and Escape stop, a tap puts it th
   await ready(page);
   await openStep(page, 'furniture');
   await pick(page, 'Chair');
-  await bar(page).getByRole('button', { name: 'Set Chair aside' }).click();
+  await bar(page).getByRole('button', { name: 'Set aside Chair' }).click();
   await tab(page, 'aside').click();
 
   const place = page.getByRole('button', { name: 'Place Chair' });
@@ -295,7 +295,7 @@ test('a share link carries the pieces set aside', async ({ page, browser }) => {
   await ready(page);
   await openStep(page, 'furniture');
   await pick(page, 'Bed');
-  await bar(page).getByRole('button', { name: 'Set Bed aside' }).click();
+  await bar(page).getByRole('button', { name: 'Set aside Bed' }).click();
   await saved(page);
   await page.getByRole('button', { name: 'Share / Save' }).click();
   const shareInput = page.locator('#share-url');
@@ -336,9 +336,9 @@ test.describe('accessibility', () => {
     };
     await pick(page, 'Desk');
     await scan('[data-testid="selection-actions"]');
-    await bar(page).getByRole('button', { name: 'Set Desk aside' }).click();
+    await bar(page).getByRole('button', { name: 'Set aside Desk' }).click();
     await pick(page, 'Chair');
-    await bar(page).getByRole('button', { name: 'Set Chair aside' }).click();
+    await bar(page).getByRole('button', { name: 'Set aside Chair' }).click();
     if (isNarrow(page)) await setDetent(page, 'full');
     await scan('[data-testid="sidebar"]');
     await tab(page, 'aside').click();

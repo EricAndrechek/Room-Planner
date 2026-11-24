@@ -478,7 +478,6 @@ export function Planner({ store, initial }: PlannerProps) {
     announce: live.announce,
     startDrag,
     zoomRef,
-    containerRef,
     keepView,
     onDeleted: (name, n) =>
       offerUndo(

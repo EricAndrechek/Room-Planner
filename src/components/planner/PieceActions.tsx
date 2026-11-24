@@ -47,7 +47,7 @@ export function pieceActions(item: Item, h: PieceActionHandlers, iconClass: stri
     {
       key: 'aside',
       label: 'Set aside',
-      name: `Set ${name} aside`,
+      name: `Set aside ${name}`,
       icon: <Archive className={iconClass} aria-hidden="true" />,
       run: h.onSetAside,
     },
@@ -88,7 +88,7 @@ export function SelectionToolbar({
       <div
         role="toolbar"
         aria-label={`${pieceName(item)} actions`}
-        className="pointer-events-auto shrink-0 flex items-center"
+        className="pointer-events-auto grid grid-flow-col auto-cols-fr gap-1 p-1 rounded-2xl bg-slate-100/80"
         data-testid="selection-actions"
         data-variant="sheet"
       >
@@ -97,15 +97,16 @@ export function SelectionToolbar({
             key={a.key}
             type="button"
             onClick={a.run}
-            className={`flex items-center justify-center w-11 h-11 rounded-full transition-colors active:scale-95 ${
+            className={`flex items-center justify-center gap-1.5 min-h-11 px-1 rounded-xl text-xs font-medium transition-colors active:scale-95 ${
               a.danger
-                ? 'text-slate-600 hover:text-red-700 hover:bg-red-50'
-                : 'text-slate-700 hover:bg-slate-100'
+                ? 'text-red-700 hover:bg-red-50 active:bg-red-50'
+                : 'text-slate-700 hover:bg-white active:bg-white'
             }`}
             aria-label={a.name}
             data-action={a.key}
           >
             {a.icon}
+            <span className="truncate">{a.key === 'rotate' ? 'Rotate' : a.label}</span>
           </button>
         ))}
       </div>

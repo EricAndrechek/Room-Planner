@@ -219,7 +219,7 @@ test('move a piece to another room: through the doorway by dragging, and by sett
   // Set aside, then placed with the keyboard in the room picked with the chips.
   await page
     .getByTestId('selection-actions')
-    .getByRole('button', { name: 'Set Chair aside' })
+    .getByRole('button', { name: 'Set aside Chair' })
     .click();
   await page.getByTestId('room-chips').getByRole('button', { name: 'Kitchen' }).click();
   await page.getByRole('tab', { name: /^Set aside/ }).click();
@@ -287,8 +287,8 @@ test('export draws the whole floor with room names; a share link carries it', as
 
   await expect(page.getByTestId('save-status')).toContainText('Saved');
   await page.getByRole('button', { name: 'Share / Save' }).click();
+  await expect(page.locator('#share-url')).toHaveValue(/#s=[A-Za-z0-9_-]+$/);
   const url = await page.locator('#share-url').inputValue();
-  expect(url).toMatch(/#s=/);
   const fresh = await browser.newContext(test.info().project.use);
   const other = await fresh.newPage();
   await other.goto(url);

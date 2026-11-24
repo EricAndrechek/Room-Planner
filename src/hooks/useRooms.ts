@@ -43,7 +43,6 @@ interface Options {
   announce: (text: string) => void;
   startDrag: ReturnType<typeof usePointerDrag>;
   zoomRef: RefObject<number>;
-  containerRef: RefObject<HTMLElement | null>;
   /** Keep the plan where it is on screen while the floor's box changes. */
   keepView: (prev: Bounds, next: Bounds) => void;
   /** A room was deleted (its name, how many pieces were set aside): offer to undo. */
@@ -75,7 +74,6 @@ export function useRooms({
   announce,
   startDrag,
   zoomRef,
-  containerRef,
   keepView,
   onDeleted,
 }: Options) {
@@ -109,23 +107,18 @@ export function useRooms({
     applyPlan(() => after);
   };
 
-  const floorPoint = (clientX: number, clientY: number) => {
-    const origin = containerRef.current?.querySelector('[data-floor-origin]');
-    if (!origin) return null;
-    const r = origin.getBoundingClientRect();
-    const scale = PIXELS_PER_UNIT * zoomRef.current;
-    return { x: (clientX - r.left) / scale, y: (clientY - r.top) / scale };
-  };
-
   /** Drag a room (its floor or its name on the plan), with the pieces in it. */
   const startRoomDrag = (e: ReactPointerEvent<HTMLElement>, id: Id) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault();
     setActiveRoomId(id);
-    const start = floorPoint(e.clientX, e.clientY);
+    // Moves are measured from the pointer's own travel on screen: the floor's box changes while the
+    // room moves (and the view is panned to keep it still), so positions read back from the page
+    // would lag a frame behind.
+    const start = { x: e.clientX, y: e.clientY };
     const base = planRef.current;
-    if (!start || !base.rooms.some((r) => r.id === id)) return;
+    if (!base.rooms.some((r) => r.id === id)) return;
     const thresholdPx = e.pointerType === 'touch' ? SNAP_THRESHOLD_TOUCH_PX : SNAP_THRESHOLD_PX;
     const input = e.pointerType;
     let latest = base;
@@ -136,10 +129,9 @@ export function useRooms({
     setDrag({ id, guides: [], overlap: false });
     startDrag(e, {
       onMove: (ev) => {
-        const p = floorPoint(ev.clientX, ev.clientY);
-        if (!p) return;
-        const dx = p.x - start.x;
-        const dy = p.y - start.y;
+        const scale = PIXELS_PER_UNIT * zoomRef.current;
+        const dx = (ev.clientX - start.x) / scale;
+        const dy = (ev.clientY - start.y) / scale;
         const s =
           snapEnabled && !ev.altKey
             ? snapRoomMove(
