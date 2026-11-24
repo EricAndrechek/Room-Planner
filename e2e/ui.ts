@@ -29,12 +29,15 @@ export async function viewPlan(page: Page): Promise<void> {
  * are ignored.
  */
 export async function animationsSettled(page: Page): Promise<void> {
-  await page.evaluate(() =>
-    Promise.all(
+  await page.evaluate(async () => {
+    // Two frames first: a transition triggered by the last click (a step button's colors) only
+    // exists once styles are recalculated; collected too early it would be missed.
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await Promise.all(
       document
         .getAnimations()
         .filter((a) => a.effect?.getComputedTiming().endTime !== Infinity)
         .map((a) => a.finished.catch(() => undefined)),
-    ),
-  );
+    );
+  });
 }
