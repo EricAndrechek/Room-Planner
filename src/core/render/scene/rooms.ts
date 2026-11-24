@@ -1,13 +1,14 @@
 /**
- * The room in the exported plan: the floor and its grid, the wall band, and the doors and windows
- * in it. Geometry follows the editor exactly: the room interior is (0,0)-(width,height) in feet,
- * doors and windows sit at `position` along their wall (clamped onto it as in core/openings.ts),
- * and walls are drawn OUTSIDE the interior so interior dimensions stay true.
+ * The rooms in the exported plan: each floor and its grid, the wall band, and the doors and
+ * windows in it, in floor coordinates times the scale `s`. Walls are drawn OUTSIDE the interior
+ * so interior dimensions stay true. Doors and windows are drawn in their wall's drawing frame
+ * (core/geometry/walls.ts), which for a rectangle is the frame the v3 app drew in, so a
+ * rectangular room draws exactly as it always has.
  */
-import type { Door, RoomDims, RoomWindow, Wall } from '../../types';
+import { leafPoint, openingDoorGeometry, type DoorLeaf } from '../../geometry/doors';
 import type { Point } from '../../geometry';
-import { doorGeometry, leafPoint, onWall, type DoorLeaf } from '../../openings';
-import { wallLength } from '../../geometry';
+import { isRectangle, openingInFrame, roomBounds, type WallFrame } from '../../geometry/walls';
+import type { Opening, Room } from '../../schema';
 import {
   DOOR_FILL,
   DOOR_STROKE,
@@ -22,30 +23,80 @@ import {
   type SceneNode,
 } from './nodes';
 
+const WALL_NAMES = ['top', 'right', 'bottom', 'left'];
+
+/** The wall's name in the drawing's data attributes: top/right/bottom/left on a rectangle. */
+const wallAttr = (room: Room, wall: number) =>
+  isRectangle(room) ? WALL_NAMES[wall]! : String(wall);
+
+/**
+ * A room as drawn: a rectangle no smaller than half a foot each way (as the v3 export clamped
+ * its room), any other outline as it is.
+ */
+export const drawableRoom = (room: Room): Room => {
+  const o = room.outline;
+  if (o.length !== 4) return room;
+  const [a, b, c, d] = o as [Point, Point, Point, Point];
+  if (!(a.y === b.y && b.x === c.x && c.y === d.y && d.x === a.x)) return room;
+  const w = Math.max(0.5, b.x - a.x || 0);
+  const h = Math.max(0.5, c.y - b.y || 0);
+  return {
+    ...room,
+    outline: [
+      { x: a.x, y: a.y },
+      { x: a.x + w, y: a.y },
+      { x: a.x + w, y: a.y + h },
+      { x: a.x, y: a.y + h },
+    ],
+  };
+};
+
 /**
  * Floor (with a grid every `grid` plan units, when that is at least 10) inside the wall band, `T`
- * thick, for a `W` x `H` interior.
+ * thick. A rectangle is two rectangles, as it always was; any other outline is its path, with the
+ * wall band as a stroke twice `T` wide that the floor then covers on the inside.
  */
-export const roomNode = (
-  room: RoomDims,
-  W: number,
-  H: number,
-  T: number,
-  grid: number,
-): GroupNode => {
+export const roomNode = (room: Room, s: number, T: number, grid: number): GroupNode => {
+  const b = roomBounds(room);
+  const width = b.right - b.left;
+  const height = b.bottom - b.top;
+  const attrs = { width: String(width), height: String(height) };
+  if (!isRectangle(room)) {
+    const d: PathCommand[] = [
+      ...room.outline.map((p, i): PathCommand => [i === 0 ? 'M' : 'L', p.x * s, p.y * s]),
+      ['Z'],
+    ];
+    return {
+      kind: 'group',
+      role: 'room',
+      attrs,
+      children: [
+        { kind: 'path', d, fill: WALL, stroke: WALL, strokeWidth: 2 * T },
+        { kind: 'path', d, fill: '#ffffff' },
+      ],
+    };
+  }
+  const x0 = b.left * s;
+  const y0 = b.top * s;
+  const W = width * s;
+  const H = height * s;
   const gridPath: PathCommand[] = [];
   if (grid >= 10) {
-    for (let gx = grid; gx < W - 0.5; gx += grid) gridPath.push(['M', gx, 0], ['L', gx, H]);
-    for (let gy = grid; gy < H - 0.5; gy += grid) gridPath.push(['M', 0, gy], ['L', W, gy]);
+    for (let gx = grid; gx < W - 0.5; gx += grid) {
+      gridPath.push(['M', x0 + gx, y0], ['L', x0 + gx, y0 + H]);
+    }
+    for (let gy = grid; gy < H - 0.5; gy += grid) {
+      gridPath.push(['M', x0, y0 + gy], ['L', x0 + W, y0 + gy]);
+    }
   }
   return {
     kind: 'group',
     role: 'room',
-    attrs: { width: String(room.width), height: String(room.height) },
+    attrs,
     children: [
       // Wall band: outer rectangle in wall color, interior floor on top.
-      { kind: 'rect', x: -T, y: -T, w: W + 2 * T, h: H + 2 * T, fill: WALL },
-      { kind: 'rect', x: 0, y: 0, w: W, h: H, fill: '#ffffff' },
+      { kind: 'rect', x: x0 - T, y: y0 - T, w: W + 2 * T, h: H + 2 * T, fill: WALL },
+      { kind: 'rect', x: x0, y: y0, w: W, h: H, fill: '#ffffff' },
       ...(gridPath.length
         ? [{ kind: 'path', d: gridPath, stroke: GRID, strokeWidth: 0.75 } as PathNode]
         : []),
@@ -53,29 +104,16 @@ export const roomNode = (
   };
 };
 
-interface Vec {
-  x: number;
-  y: number;
-}
-
 /**
- * A wall's local frame: `a` runs along the wall from its start (left end of
- * top/bottom, top end of left/right - the same origin `position` uses), `d`
- * points into the room from the interior face (negative = into the wall/outside).
+ * A wall's frame in plan units: `a` along the wall from the start of its drawing frame, `d` into
+ * the room from the interior face (negative = into the wall/outside).
  */
-const wallFrame = (wall: Wall, room: RoomDims, s: number) => {
-  const W = room.width * s;
-  const H = room.height * s;
-  const frames: Record<Wall, { o: Vec; u: Vec; n: Vec }> = {
-    top: { o: { x: 0, y: 0 }, u: { x: 1, y: 0 }, n: { x: 0, y: 1 } },
-    bottom: { o: { x: 0, y: H }, u: { x: 1, y: 0 }, n: { x: 0, y: -1 } },
-    left: { o: { x: 0, y: 0 }, u: { x: 0, y: 1 }, n: { x: 1, y: 0 } },
-    right: { o: { x: W, y: 0 }, u: { x: 0, y: 1 }, n: { x: -1, y: 0 } },
-  };
-  const { o, u, n } = frames[wall];
+const scaled = (f: WallFrame, s: number) => {
+  const ox = f.origin.x * s;
+  const oy = f.origin.y * s;
   return (a: number, d: number): [number, number] => [
-    o.x + u.x * a + n.x * d,
-    o.y + u.y * a + n.y * d,
+    ox + f.along.x * a + f.inward.x * d,
+    oy + f.along.y * a + f.inward.y * d,
   ];
 };
 
@@ -95,15 +133,15 @@ const line = (pt: Pt, a0: number, d0: number, a1: number, d1: number): PathComma
 ];
 
 /** The wall gap for a door (drawn with the walls, under the furniture). */
-export const doorCutNode = (door: Door, room: RoomDims, s: number, T: number): GroupNode => {
-  const wall = door.wall || 'bottom';
-  const pt = wallFrame(wall, room, s);
-  const w = Math.min(door.width, wallLength(room, wall)) * s;
-  const p = onWall(door, room, wall) * s;
+export const doorCutNode = (room: Room, door: Opening, s: number, T: number): GroupNode => {
+  const { frame, position, width } = openingInFrame(room, door);
+  const pt = scaled(frame, s);
+  const w = width * s;
+  const p = position * s;
   return {
     kind: 'group',
     role: 'door-opening',
-    attrs: { wall },
+    attrs: { wall: wallAttr(room, door.wall) },
     // Slightly over-drawn so no hairline of wall remains.
     children: [{ kind: 'path', d: quad(pt, p, p + w, 0.6, -T - 0.6), fill: '#ffffff' }],
   };
@@ -166,12 +204,11 @@ const panelPath = (a: Point, b: Point, side: Point, thick: number, s: number): P
  * swing arcs and open leaves (one or two, 90 or 180 degrees), a half-folded bi-fold, sliding
  * panels along the inside face, a pocket in the wall, or nothing for a plain opening.
  */
-export const doorNode = (door: Door, room: RoomDims, s: number, T: number): GroupNode => {
-  const wall = door.wall || 'bottom';
+export const doorNode = (room: Room, door: Opening, s: number, T: number): GroupNode => {
   const type = door.type || 'swing-in';
-  const pt = wallFrame(wall, room, s);
   // Outward swings hinge on the exterior face, a wall thickness (T) outside the interior.
-  const g = doorGeometry(door, room, T / s);
+  const g = openingDoorGeometry(room, door, T / s);
+  const pt = scaled(g.frame, s);
   const p = g.position * s;
   const w = g.width * s;
   const children: SceneNode[] = [];
@@ -212,7 +249,9 @@ export const doorNode = (door: Door, room: RoomDims, s: number, T: number): Grou
   }
   if (g.pocket) {
     // The cavity in the wall, and the door's edge showing at the mouth of the pocket.
-    const along = (q: Point) => (wall === 'top' || wall === 'bottom' ? q.x : q.y) * s;
+    const f = g.frame;
+    const along = (q: Point) =>
+      ((q.x - f.origin.x) * f.along.x + (q.y - f.origin.y) * f.along.y) * s;
     const from = along(g.pocket.from);
     const to = along(g.pocket.to);
     children.push({
@@ -232,18 +271,25 @@ export const doorNode = (door: Door, room: RoomDims, s: number, T: number): Grou
       strokeWidth: 1,
     });
   }
-  return { kind: 'group', role: 'door', attrs: { wall, type, hinge: door.hinge }, children };
+  // `hinge` is named in the drawing frame (left = its start), as the v3 app named it.
+  const hinge = openingInFrame(room, door).hingeAtEnd ? 'right' : 'left';
+  return {
+    kind: 'group',
+    role: 'door',
+    attrs: { wall: wallAttr(room, door.wall), type, hinge },
+    children,
+  };
 };
 
-export const windowNode = (win: RoomWindow, room: RoomDims, s: number, T: number): GroupNode => {
-  const wall = win.wall || 'top';
-  const pt = wallFrame(wall, room, s);
-  const w = Math.min(win.width, wallLength(room, wall)) * s;
-  const p = onWall(win, room, wall) * s;
+export const windowNode = (room: Room, win: Opening, s: number, T: number): GroupNode => {
+  const { frame, position, width } = openingInFrame(room, win);
+  const pt = scaled(frame, s);
+  const w = width * s;
+  const p = position * s;
   return {
     kind: 'group',
     role: 'window',
-    attrs: { wall },
+    attrs: { wall: wallAttr(room, win.wall) },
     children: [
       { kind: 'path', d: quad(pt, p, p + w, 0.6, -T - 0.6), fill: '#ffffff' },
       { kind: 'path', d: quad(pt, p, p + w, 0, -T), fill: GLASS_FILL },

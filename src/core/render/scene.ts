@@ -1,15 +1,18 @@
 /**
  * The exported floor plan as a list of drawing primitives ("scene"), built
- * purely from the model. Both the SVG (PNG, print) and the PDF writer render
+ * purely from a plan. Both the SVG (PNG, print) and the PDF writer render
  * this same scene, so every output matches.
  *
- * This file lays out the page (title, plan, dimensions, footer); the room with its doors and
- * windows is drawn by scene/rooms.ts and the furniture by scene/items.ts.
+ * This file lays out the page (title, plan, dimensions, footer); the rooms with their doors and
+ * windows are drawn by scene/rooms.ts and the furniture by scene/items.ts. Pieces in the
+ * inventory and hidden pieces are not drawn.
  */
-import type { Layout, RoomDims, UnitSystem } from '../types';
-import { getRotatedCorners } from '../geometry';
-import { doorGeometry, leafPoint } from '../openings';
-import { FEET_PER_METER, clamp, feetToDisplay, formatArea, roundNum } from '../units';
+import { leafPoint, openingDoorGeometry } from '../geometry/doors';
+import { itemParts } from '../geometry/shapes';
+import { isRectangle, outlineArea, roomBounds } from '../geometry/walls';
+import type { Plan } from '../schema';
+import type { UnitSystem } from '../types';
+import { FEET_PER_METER, clamp, feetToDisplay, roundNum } from '../units';
 import { fitText } from './fontMetrics';
 import { itemNode } from './scene/items';
 import {
@@ -24,7 +27,7 @@ import {
   type Scene,
   type SceneNode,
 } from './scene/nodes';
-import { doorCutNode, doorNode, roomNode, windowNode } from './scene/rooms';
+import { doorCutNode, doorNode, drawableRoom, roomNode, windowNode } from './scene/rooms';
 
 export type {
   GroupNode,
@@ -39,11 +42,12 @@ export type {
 
 // --- Input -------------------------------------------------------------------------
 
-export interface PlanInput {
-  layout: Layout;
-  unitSystem: UnitSystem;
-  /** Project name, used as the plan title. */
-  title: string;
+export interface SceneInput {
+  plan: Plan;
+  /** Display units. Default: the plan's setting, else feet and inches. */
+  unitSystem?: UnitSystem;
+  /** Title. Default: the plan's name. */
+  title?: string;
   /** Date printed in the footer (defaults to now). */
   date?: Date;
   /** Locale for the footer date (defaults to the runtime's). */
@@ -67,10 +71,11 @@ const FONT_FOOT = 10.5;
 
 const isMetric = (u: UnitSystem) => u === 'm' || u === 'cm';
 
-const areaText = (room: RoomDims, unitSystem: UnitSystem): string =>
+/** An area given in square feet, in square metres for metric units. */
+const areaText = (sqft: number, unitSystem: UnitSystem): string =>
   isMetric(unitSystem)
-    ? `${roundNum((room.width * room.height) / (FEET_PER_METER * FEET_PER_METER), 1)} m²`
-    : formatArea(room.width, room.height);
+    ? `${roundNum(sqft / (FEET_PER_METER * FEET_PER_METER), 1)} m²`
+    : `${roundNum(sqft, 1)} sq ft`;
 
 /** A "nice" scale-bar length in feet, at least 130 scene units long. */
 export const scaleBarFeet = (s: number, unitSystem: UnitSystem): number => {
@@ -189,28 +194,39 @@ export const formatPlanDate = (date: Date, locale?: string): string => {
   }
 };
 
-/** Build the printable floor plan scene for a layout. */
-export const buildPlanScene = (input: PlanInput): Scene => {
-  const { layout, unitSystem } = input;
-  const room: RoomDims = {
-    width: Math.max(0.5, layout.roomDims.width || 0),
-    height: Math.max(0.5, layout.roomDims.height || 0),
+/** Build the printable floor plan scene for a plan (in feet). */
+export const buildPlanScene = (input: SceneInput): Scene => {
+  const { plan } = input;
+  const unitSystem = input.unitSystem ?? plan.settings?.unitSystem ?? 'ft-in';
+  const rooms = plan.rooms.map(drawableRoom);
+  const boxes = rooms.map(roomBounds);
+  const floor = {
+    left: Math.min(...boxes.map((b) => b.left)),
+    top: Math.min(...boxes.map((b) => b.top)),
+    right: Math.max(...boxes.map((b) => b.right)),
+    bottom: Math.max(...boxes.map((b) => b.bottom)),
   };
-  const items = layout.items.filter((i) => i.visible !== false);
-  const s = clamp(TARGET_SPAN / Math.max(room.width, room.height), 4, 80);
-  const W = room.width * s;
-  const H = room.height * s;
+  const floorW = floor.right - floor.left;
+  const floorH = floor.bottom - floor.top;
+  const items = plan.items.filter((i) => i.placement && !i.hidden);
+  const s = clamp(TARGET_SPAN / Math.max(floorW, floorH), 4, 80);
   // Walls ~4" thick, kept legible at any scale.
   const T = clamp(0.33 * s, 6, 15);
 
-  // Everything the plan draws, in plan coordinates (interior top-left = 0,0).
+  // Everything the plan draws, in plan coordinates (floor coordinates times s).
   const pts: [number, number][] = [
-    [-T, -T],
-    [W + T, H + T],
+    [floor.left * s - T, floor.top * s - T],
+    [floor.right * s + T, floor.bottom * s + T],
   ];
-  for (const door of layout.doors) {
+  const doors = rooms.flatMap((room) =>
+    room.openings.filter((o) => o.kind === 'door').map((door) => ({ room, door })),
+  );
+  const windows = rooms.flatMap((room) =>
+    room.openings.filter((o) => o.kind === 'window').map((win) => ({ room, win })),
+  );
+  for (const { room, door } of doors) {
     // Outward swings reach outside the walls: keep them in the drawing.
-    const g = doorGeometry(door, room, T / s);
+    const g = openingDoorGeometry(room, door, T / s);
     if (g.side !== 'outside') continue;
     for (const leaf of g.leaves) {
       for (let deg = 0; deg <= leaf.angle; deg += 15) {
@@ -220,7 +236,7 @@ export const buildPlanScene = (input: PlanInput): Scene => {
     }
   }
   for (const item of items) {
-    for (const c of getRotatedCorners(item)) pts.push([c.x * s, c.y * s]);
+    for (const part of itemParts(item)) for (const c of part) pts.push([c.x * s, c.y * s]);
   }
   const content = bounds(pts);
 
@@ -231,16 +247,30 @@ export const buildPlanScene = (input: PlanInput): Scene => {
 
   // Floor + grid (1 ft, or 0.5 m in metric).
   const grid = isMetric(unitSystem) ? 0.5 * FEET_PER_METER * s : s;
-  planNodes.push(roomNode(room, W, H, T, grid));
-  for (const win of layout.windows) planNodes.push(windowNode(win, room, s, T));
-  for (const door of layout.doors) planNodes.push(doorCutNode(door, room, s, T));
+  for (const room of rooms) planNodes.push(roomNode(room, s, T, grid));
+  for (const { room, win } of windows) planNodes.push(windowNode(room, win, s, T));
+  for (const { room, door } of doors) planNodes.push(doorCutNode(room, door, s, T));
   for (const item of items) planNodes.push(itemNode(item, unitSystem, s));
   // Door leaves and swings go over the furniture, so a rug or bed never hides
   // the clearance a door needs.
-  for (const door of layout.doors) planNodes.push(doorNode(door, room, s, T));
+  for (const { room, door } of doors) planNodes.push(doorNode(room, door, s, T));
   planNodes.push(
-    dimension(0, W, dimTop, -T - 3, feetToDisplay(room.width, unitSystem), false),
-    dimension(0, H, dimLeft, -T - 3, feetToDisplay(room.height, unitSystem), true),
+    dimension(
+      floor.left * s,
+      floor.right * s,
+      dimTop,
+      floor.top * s - T - 3,
+      feetToDisplay(floorW, unitSystem),
+      false,
+    ),
+    dimension(
+      floor.top * s,
+      floor.bottom * s,
+      dimLeft,
+      floor.left * s - T - 3,
+      feetToDisplay(floorH, unitSystem),
+      true,
+    ),
   );
   // Extension lines of the dimensions must reach past items that stick out of the room.
   const planBox = {
@@ -261,7 +291,12 @@ export const buildPlanScene = (input: PlanInput): Scene => {
   const oy = MARGIN + headerH - planBox.minY;
   const nodes: SceneNode[] = planNodes.map((n) => translateNode(n, ox, oy));
 
-  const title = input.title.trim() || 'Untitled';
+  const title = (input.title ?? plan.name).trim() || 'Untitled';
+  // One rectangle: its area as width x depth, as always; otherwise the outlines' total.
+  const area =
+    rooms.length === 1 && isRectangle(rooms[0]!)
+      ? floorW * floorH
+      : rooms.reduce((sum, r) => sum + outlineArea(r), 0);
   nodes.unshift({
     kind: 'group',
     role: 'title',
@@ -280,7 +315,7 @@ export const buildPlanScene = (input: PlanInput): Scene => {
         kind: 'text',
         x: MARGIN,
         y: MARGIN + FONT_TITLE + 8 + FONT_SUB * 0.8,
-        text: `${feetToDisplay(room.width, unitSystem)} × ${feetToDisplay(room.height, unitSystem)} · ${areaText(room, unitSystem)}`,
+        text: `${feetToDisplay(floorW, unitSystem)} × ${feetToDisplay(floorH, unitSystem)} · ${areaText(area, unitSystem)}`,
         size: FONT_SUB,
         anchor: 'start',
         fill: MUTED,

@@ -22,7 +22,7 @@ import type { BootState } from '../../lib/boot';
 import { migrateColor } from '../../core/colors';
 import { DESIGN_MODES } from '../../lib/constants';
 import { normalizeDegrees } from '../../core/geometry';
-import { moveInside, piecesOutside } from '../../core/placement';
+import { moveInside, piecesOutside } from '../../core/adapter';
 import { computeLayoutWarnings } from '../../core/openings';
 import { toShareConfig } from '../../core/layout';
 import { HELP_PATH } from '../../lib/paths';

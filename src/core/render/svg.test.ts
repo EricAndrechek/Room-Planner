@@ -3,14 +3,9 @@ import { INITIAL_DOORS, INITIAL_ITEMS, INITIAL_ROOM, INITIAL_WINDOWS } from '../
 import { doorSwingGeometry } from '../openings';
 import { FEET_PER_METER } from '../units';
 import type { Door, FurnitureItem, Layout, RoomWindow, Wall } from '../types';
-import { escapeXml, planSvg } from './svg';
-import {
-  buildPlanScene,
-  scaleBarFeet,
-  type GroupNode,
-  type PlanInput,
-  type SceneNode,
-} from './scene';
+import { escapeXml } from './svg';
+import { buildLayoutScene as buildPlanScene, planSvg, type PlanInput } from '../adapter/scene';
+import { scaleBarFeet, type GroupNode, type SceneNode } from './scene';
 
 const date = new Date('2026-11-13T12:00:00Z');
 const sample: Layout = {

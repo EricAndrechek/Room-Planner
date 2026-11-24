@@ -229,8 +229,9 @@ src/
 │                          # usePanZoom, usePointerDrag, useKeyboardShortcuts...
 ├── core/                  # pure document logic, no React/DOM (ESLint-enforced):
 │                          # schema (plan format v4), load + migrate/ (every old format),
-│                          # units, colors, layout, geometry/, openings, placement,
-│                          # snapping, share/ (link codec, compact form), render/
+│                          # units, colors, geometry/ (walls, shapes, doors), check,
+│                          # placement, ops, snapping, share/ (link codec, compact form),
+│                          # render/; adapter/ + openings + layout: v3 API until PR 5
 ├── lib/                   # app logic: storage, projects, boot, analytics facade,
 │                          # export/ (PNG/PDF), guides/ (example layouts, drawings, links)
 ├── styles/global.css      # Tailwind v4 + app styles
