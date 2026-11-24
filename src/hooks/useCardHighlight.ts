@@ -24,6 +24,8 @@ export const latestCard = <T extends CardRef>(a: T | null | undefined, b: T | nu
 const HIGHLIGHT_MS = 1500;
 /** The phone sheet's resize animation (300ms), and a little more. */
 export const SHEET_SETTLE_MS = 320;
+/** How long a requested card follows a resizing sheet (ms): the animation, with room to spare. */
+const SHEET_FOLLOW_MS = 1000;
 const cardKey = (o: CardRef) => `${o.type}:${o.id}`;
 
 /**
@@ -40,18 +42,24 @@ export function useCardHighlight(highlight: CardRef | null | undefined) {
   useEffect(() => {
     if (!key || !request) return;
     const card = cards.current.get(key);
-    const show = () =>
-      card?.scrollIntoView({ block, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
-    show();
-    // On a phone the sheet may be changing height at the same time (opening to show the card):
-    // once it has settled at another height, bring the card into view again.
+    card?.scrollIntoView({ block, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+    // On a phone the sheet may be changing height at the same time (opening to show the card, or
+    // lowering so a new piece shows): while it resizes, keep the card in view.
     const sheet = card?.closest<HTMLElement>('[data-sheet-content]');
-    const height = sheet?.clientHeight;
-    const settled = setTimeout(() => {
-      if (sheet && sheet.clientHeight !== height) show();
-    }, SHEET_SETTLE_MS);
+    let first = true;
+    const observer =
+      sheet && typeof ResizeObserver === 'function'
+        ? new ResizeObserver(() => {
+            if (first)
+              first = false; // the call on observe(), before any resize
+            else card?.scrollIntoView({ block });
+          })
+        : null;
+    if (sheet) observer?.observe(sheet);
+    const settled = setTimeout(() => observer?.disconnect(), SHEET_FOLLOW_MS);
     const timer = setTimeout(() => setFaded(request), HIGHLIGHT_MS);
     return () => {
+      observer?.disconnect();
       clearTimeout(settled);
       clearTimeout(timer);
     };
