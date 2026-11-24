@@ -258,6 +258,14 @@ export const snapPieces = (plan: Pick<Plan, 'items'>): SnapPiece[] =>
 export const shownPieces = (plan: Pick<Plan, 'items'>): Item[] =>
   plan.items.filter((i) => i.placement && !i.hidden);
 
+/** Pieces in the room (shown or not): the furniture list. */
+export const placedPieces = (plan: Pick<Plan, 'items'>): Item[] =>
+  plan.items.filter((i) => i.placement);
+
+/** Pieces in the inventory (no `placement`): the Inventory tray, in plan order. */
+export const inventoryPieces = (plan: Pick<Plan, 'items'>): Item[] =>
+  plan.items.filter((i) => !i.placement);
+
 // --- Warnings ----------------------------------------------------------------------------------
 
 const WARNING_CODES: IssueCode[] = [
@@ -327,15 +335,15 @@ export const samePlan = (a: Plan, b: Plan): boolean => planContent(a) === planCo
 /**
  * `plan` in the form the editor works on, or what keeps it from showing the plan. A single
  * rectangular room listed from any corner, anywhere, is turned to start at its top-left corner
- * and moved to the origin (with everything in it), which changes no drawing. Pieces of every
- * shape (rectangles, Ls and ellipses) are editable. Several rooms, another outline and pieces in
- * the inventory are in the format (section 3) but not yet in the editor (PRs 7b, 8, 9): such a
- * plan is not opened, so that no edit made here can damage it.
+ * and moved to the origin (with everything in it), which changes no drawing; pieces in the
+ * inventory (no `placement`) come along untouched. Pieces of every shape (rectangles, Ls and
+ * ellipses) are editable. Several rooms and another outline are in the format (section 3) but
+ * not yet in the editor (PRs 7b, 9): such a plan is not opened, so that no edit made here can
+ * damage it.
  */
 export function editablePlan(plan: Plan): { ok: true; plan: Plan } | { ok: false; why: string[] } {
   const why: string[] = [];
   if (plan.rooms.length !== 1) why.push('several rooms');
-  if (plan.items.some((i) => !i.placement)) why.push('pieces that are not placed in the room');
   const room = plan.rooms[0];
   if (!room) return { ok: false, why };
   const outline = room.outline;

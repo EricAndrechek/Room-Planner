@@ -251,14 +251,22 @@ export function furnitureSpotBox(
   return at(centre);
 }
 
-/** Where a new `width` x `depth` piece goes in `room`: its placement (centre, no rotation). */
+/**
+ * Where a new `width` x `depth` piece goes in `room` (by its true shape when given): its placement
+ * (centre, no rotation).
+ */
 export function findFurnitureSpot(
   plan: Pick<Plan, 'items' | 'rooms'>,
   room: Room,
-  size: { width: number; depth: number },
+  size: { width: number; depth: number } & Partial<Pick<Item, 'shape' | 'cut'>>,
   step = PLACEMENT_STEP,
 ): NonNullable<Item['placement']> {
-  const { x, y } = furnitureSpotBox(plan, room, { width: size.width, height: size.depth }, step);
+  const { x, y } = furnitureSpotBox(
+    plan,
+    room,
+    { width: size.width, height: size.depth, shape: size.shape, cut: size.cut },
+    step,
+  );
   return { x: x + size.width / 2, y: y + size.depth / 2, rotation: 0 };
 }
 

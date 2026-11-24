@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { loadPlan } from '../core/load';
 import type { FurnitureItem, Layout } from '../core/testing/v3/types';
-import { changePiece } from '../lib/edits';
+import { changePiece, placePiece, takeOutPiece } from '../lib/edits';
 import { itemWarnings } from '../lib/plans';
 import {
   describeLayoutChange,
@@ -34,6 +34,17 @@ const toPlan = (l: Layout) => {
 const plan = (items: FurnitureItem[]) => toPlan(layout(items));
 
 describe('describeLayoutChange', () => {
+  it('says when a piece goes to the inventory and comes back', () => {
+    const a = plan([item()]);
+    const out = takeOutPiece(a, 'item-1');
+    expect(describeLayoutChange(a, out, 'ft-in')).toBe('Bed moved to inventory');
+    expect(describeLayoutChange(out, placePiece(out, 'item-1'), 'ft-in')).toBe(
+      'Bed placed in the room',
+    );
+    // Undoing either says the same, from the other side.
+    expect(describeLayoutChange(out, a, 'ft-in')).toBe('Bed placed in the room');
+  });
+
   it('describes moves, rotations, adds and removals', () => {
     const a = plan([item()]);
     expect(describeLayoutChange(a, changePiece(a, 'item-1', { x: 3 }), 'ft-in')).toBe(

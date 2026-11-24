@@ -8,7 +8,15 @@ import { buildPlanUrl, readPlanLink } from '../core/share/plan';
 import { describeLayoutChange } from '../hooks/useAnnouncements';
 import type { Item, Plan } from '../types';
 import { readSharedPlan } from './boot';
-import { PIECE_PRESETS, addPiece, changePiece, toggleHidden, toggleLock } from './edits';
+import {
+  PIECE_PRESETS,
+  addPiece,
+  changePiece,
+  placePiece,
+  takeOutPiece,
+  toggleHidden,
+  toggleLock,
+} from './edits';
 import {
   blankPlan,
   boxOf,
@@ -121,14 +129,24 @@ describe('plans with shaped pieces', () => {
       piece({ id: 'item-2', label: 'Table', shape: 'ellipse', width: 4, depth: 3 }),
     );
 
-  it('open in the editor (L and round pieces are editable; the inventory is not yet)', () => {
+  it('open in the editor, placed or in the inventory', () => {
     const plan = shaped();
-    expect(editablePlan(plan)).toEqual({
-      ok: false,
-      why: ['pieces that are not placed in the room'],
-    });
+    expect(editablePlan(plan)).toEqual({ ok: true, plan });
     plan.items[0]!.placement = { x: 4.5, y: 3.5, rotation: 0 };
     expect(editablePlan(plan)).toEqual({ ok: true, plan });
+  });
+
+  it('an L taken out of the room keeps its cut, and goes back in by its true shape', () => {
+    // A chair in the middle of a 12' room: every 9' x 7' box in the room covers it, but an L
+    // with its notch around the chair fits.
+    const chair = piece({ id: 'item-9', label: 'Chair', width: 1, depth: 1 });
+    chair.placement = { x: 6, y: 6, rotation: 0 };
+    const { plan, item } = addPiece(planWith(chair), '#fca5a5', 'l-sofa');
+    const out = takeOutPiece(plan, item.id);
+    expect(out.items.find((i) => i.id === item.id)).toMatchObject({ shape: 'l', cut: item.cut });
+    const back = placePiece(out, item.id);
+    expect(itemWarnings(back).get(item.id)).toMatchObject({ outOfBounds: false, collision: false });
+    expect(itemWarnings(plan).get(item.id)).toMatchObject({ collision: false });
   });
 
   it('round-trip through a share link and JSON', async () => {

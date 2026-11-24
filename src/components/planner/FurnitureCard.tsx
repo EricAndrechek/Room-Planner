@@ -1,5 +1,5 @@
 import { memo, useId, useRef } from 'react';
-import { AlertTriangle, DoorOpen, Eye, EyeOff, Lock, Trash2, Unlock } from 'lucide-react';
+import { AlertTriangle, DoorOpen, EyeOff, Lock, PackagePlus, Trash2, Unlock } from 'lucide-react';
 import { migrateColor } from '../../core/colors';
 import { normalizeDegrees, warningText, type ItemWarning } from '../../core/geometry';
 import { clamp } from '../../core/units';
@@ -24,6 +24,7 @@ interface FurnitureCardProps {
   onCommit: () => void;
   onToggleLock: (id: Id) => void;
   onToggleVisibility: (id: Id) => void;
+  onMoveToInventory: (id: Id) => void;
   onDelete: (id: Id) => void;
   onToggleColorPicker: (id: Id) => void;
   onCloseColorPicker: () => void;
@@ -46,6 +47,7 @@ export const FurnitureCard = memo(function FurnitureCard({
   onCommit,
   onToggleLock,
   onToggleVisibility,
+  onMoveToInventory,
   onDelete,
   onToggleColorPicker,
   onCloseColorPicker,
@@ -134,17 +136,23 @@ export const FurnitureCard = memo(function FurnitureCard({
               {isItemLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
             </button>
           </Tooltip>
-          <Tooltip text={!hidden ? 'Hide' : 'Show'}>
+          {/* The inventory replaces hiding (PR 8): only a piece hidden before can be shown again. */}
+          <Tooltip text={hidden ? 'Show' : 'Move to inventory'}>
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                onToggleVisibility(item.id);
+                if (hidden) onToggleVisibility(item.id);
+                else onMoveToInventory(item.id);
               }}
               className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-sm transition-colors flex items-center justify-center"
-              aria-label={!hidden ? `Hide ${item.label}` : `Show ${item.label}`}
+              aria-label={hidden ? `Show ${item.label}` : `Move ${item.label} to inventory`}
             >
-              {!hidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+              {hidden ? (
+                <EyeOff className="w-3.5 h-3.5" />
+              ) : (
+                <PackagePlus className="w-3.5 h-3.5" />
+              )}
             </button>
           </Tooltip>
           <Tooltip text="Delete">
