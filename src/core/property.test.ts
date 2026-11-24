@@ -13,7 +13,7 @@ import { compact, roundLength, roundRotation } from './share/compact';
 import { buildPlanUrl, readPlanLink } from './share/plan';
 import { drawingDifferences } from './testing/equivalence';
 import { fromFeet, toFeet } from './units';
-import type { Layout } from './types';
+import type { Layout } from './testing/v3/types';
 
 const RUNS = { numRuns: 300 };
 

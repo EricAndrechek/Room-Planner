@@ -1,38 +1,18 @@
 /**
- * Doors and windows in v3 terms (a wall named top/right/bottom/left, `position` from its left or
- * top end, `hinge` left or right), for the app, which still holds v3 layouts. The shapes come
- * from core/geometry/doors.ts in the v3 wall frames, and the checks and spot finding from the
- * plan-based core through core/adapter.ts. The canvas's inline styles are in
- * components/planner/openingStyles.ts.
+ * Test reference, frozen: doors and windows in v3 terms (a wall named top/right/bottom/left,
+ * `position` from its left or top end, `hinge` left or right) as the v3 app drew them
+ * (core/openings.ts before the app held plans): the four wall frames over core/geometry/doors.ts.
  */
-import { wallLength, type Point } from './geometry';
+import { wallLength, type Point } from '../../geometry';
 import {
   doorGeometry as doorShape,
   sweptArea,
   type DoorGeometry as DoorShape,
-} from './geometry/doors';
+} from '../../geometry/doors';
 import type { Door, RoomDims, Wall } from './types';
-import { clamp } from './units';
+import { clamp } from '../../units';
 
-export {
-  DOORWAY_DEPTH,
-  SLIDING_DEPTH,
-  doorSwingAngle,
-  hasHingeSide,
-  isSwingDoor,
-  leafPoint,
-  type DoorLeaf,
-} from './geometry/doors';
-export { CORNER_MARGIN, OPENING_GAP, PLACEMENT_STEP } from './placement';
-export {
-  computeDoorBlocks,
-  computeLayoutWarnings,
-  doorBlockText,
-  findOpeningSpot,
-  findOpeningSpotOnWall,
-  type DoorBlock,
-  type OpeningSpotOptions,
-} from './adapter';
+export { hasHingeSide } from '../../geometry/doors';
 
 /** Position along the wall, kept on the wall even if the room shrank since. */
 export const onWall = (o: { position: number; width: number }, room: RoomDims, wall: Wall) =>

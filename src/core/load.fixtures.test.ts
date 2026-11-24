@@ -1,7 +1,8 @@
 /**
  * Every historical input (docs/design/plan-format.md, section 4, the fixture table) loads through
- * `loadPlan` into a plan that draws exactly what today's v3 reader shows for it. The SVG-level
- * comparison follows in PR 3, once the scene draws plans.
+ * `loadPlan` into a plan that draws exactly what the v3 reader (frozen in testing/v3/) showed for
+ * it. The SVG-level comparison is golden.test.ts; the app's own storage migration is tested in
+ * lib/storage.test.ts.
  */
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -16,15 +17,20 @@ import originalLinks from './__fixtures__/original-share-links.json';
 import fragmentLinks from './__fixtures__/fragment-links.json';
 import plansFile from './__fixtures__/plans-file.json';
 import bareFile from './__fixtures__/bare-layout-file.json';
-import { fromShareConfig, normalizeLayout, type ShareConfig } from './layout';
 import { loadPlan, type LoadResult } from './load';
 import type { Plan } from './schema';
-import { readShareLink } from './share/link';
 import { readPlanLink } from './share/plan';
 import { drawingDifferences } from './testing/equivalence';
-import { createMemoryStorage, loadPersistedState, migrateStorage } from '../lib/storage';
-import { parseProjectsImport } from '../lib/projects';
-import type { Layout, Project } from '../types';
+import { fromShareConfig, normalizeLayout, type ShareConfig } from './testing/v3/layout';
+import { parseProjectsImport } from './testing/v3/projects';
+import { readShareLink } from './testing/v3/share';
+import {
+  createMemoryStorage,
+  loadPersistedState,
+  migrateStorage,
+  type Project,
+} from './testing/v3/storage';
+import type { Layout } from './testing/v3/types';
 
 /** sha256 (first 16 hex digits) of every fixture file. A new fixture adds a line; none changes. */
 const FROZEN: Record<string, string> = {
@@ -49,7 +55,7 @@ const plan = (r: LoadResult | { ok: false }): Plan => {
 const raw = (f: { localStorage: Record<string, string> }) => f.localStorage;
 const json = (s: string | undefined) => (s === undefined ? undefined : (JSON.parse(s) as unknown));
 
-/** Today's reading of a storage fixture: the working layout and every saved plan. */
+/** The v3 app's reading of a storage fixture: the working layout and every saved plan. */
 const todayFromStorage = (ls: Record<string, string>) => {
   const s = createMemoryStorage(ls);
   migrateStorage(s);

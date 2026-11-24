@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import type { FurnitureItem } from './types';
 import { PIXELS_PER_UNIT } from '../lib/constants';
 import { getRotatedCorners } from './geometry';
 import {
@@ -15,9 +14,10 @@ import {
   snapNudge,
   thresholdFeet,
   type SnapLine,
+  type SnapPiece,
 } from './snapping';
 
-const item = (over: Partial<FurnitureItem>): FurnitureItem => ({
+const item = (over: Partial<SnapPiece>): SnapPiece => ({
   id: 1,
   label: 'Moving',
   width: 2,
@@ -25,7 +25,6 @@ const item = (over: Partial<FurnitureItem>): FurnitureItem => ({
   x: 0,
   y: 0,
   rotation: 0,
-  color: '#93c5fd',
   visible: true,
   ...over,
 });

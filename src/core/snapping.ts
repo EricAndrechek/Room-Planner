@@ -9,7 +9,7 @@
  * Cost: {@link buildSnapCandidates} is O(n) once per drag; {@link snapBounds} and
  * {@link measureClearances} are O(n) per pointer move, with no allocation beyond the result.
  */
-import type { FurnitureItem, Id, RoomDims } from './types';
+import type { Id, RoomDims } from './types';
 import { feetToDisplay } from './units';
 
 /** Snap distance in screen pixels: the same feel at every zoom. */
@@ -27,7 +27,16 @@ export interface Bounds {
   bottom: number;
 }
 
-type Box = Pick<FurnitureItem, 'x' | 'y' | 'width' | 'height' | 'rotation'>;
+/** A piece's unrotated box: top-left corner, size, and rotation about its centre (degrees). */
+type Box = { x: number; y: number; width: number; height: number; rotation: number };
+
+/** A piece as snapping and the measurements see it (`itemBox` of a plan's item, with its id). */
+export interface SnapPiece extends Box {
+  id: Id;
+  label: string;
+  /** False for a hidden piece, which is left out. */
+  visible?: boolean;
+}
 
 /** Axis-aligned bounds of a (possibly rotated) piece; exact for multiples of 90 degrees. */
 export const itemBounds = (item: Box): Bounds => {
@@ -80,7 +89,7 @@ export interface SnapCandidates {
  * (the other pieces do not move meanwhile).
  */
 export function buildSnapCandidates(
-  items: readonly FurnitureItem[],
+  items: readonly SnapPiece[],
   room: RoomDims,
   movingId: Id,
 ): SnapCandidates {
@@ -384,7 +393,7 @@ const MIN_GAP = 0.005;
  */
 export function measureClearances(
   bounds: Bounds,
-  items: readonly FurnitureItem[],
+  items: readonly SnapPiece[],
   room: RoomDims,
   movingId: Id,
 ): Measurement[] {

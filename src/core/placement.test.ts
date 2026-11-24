@@ -1,9 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import type { Door, FurnitureItem, Layout } from './types';
+import type { Door, FurnitureItem, Layout } from './testing/v3/types';
 import { isItemInBounds } from './geometry';
-import { defaultLayout } from './layout';
-import { computeDoorBlocks, computeLayoutWarnings } from './openings';
-import { findFurnitureSpot, moveInside, piecesOutside } from './adapter';
+import { loadPlan } from './load';
+import { defaultLayout } from './testing/v3/layout';
+import { furnitureSpotBox, moveInside, piecesOutside } from './placement';
+import { boxOf, itemWarnings, mainRoom } from '../lib/plans';
+
+const toPlan = (layout: Layout) => {
+  const r = loadPlan(layout, 'strict', { lengthsInFeet: true });
+  if (!r.ok) throw new Error(JSON.stringify(r));
+  return r.plan;
+};
+/** Where a new piece goes in a v3 layout: the top-left corner of its box. */
+const findFurnitureSpot = (
+  layout: Pick<Layout, 'roomDims' | 'items' | 'doors'> & Partial<Layout>,
+  size: { width: number; height: number },
+) => {
+  const plan = toPlan({ windows: [], ...layout });
+  return furnitureSpotBox(plan, mainRoom(plan), size);
+};
 
 const piece = (over: Partial<FurnitureItem>): FurnitureItem => ({
   id: 'p',
@@ -44,7 +59,7 @@ describe('findFurnitureSpot', () => {
       ...room(12, 12, [block, piece({ id: 'n', ...spot })]),
       windows: [],
     };
-    expect(computeLayoutWarnings(layout).get('n')).toMatchObject({
+    expect(itemWarnings(toPlan(layout)).get('item-n')).toMatchObject({
       collision: false,
       outOfBounds: false,
     });
@@ -63,7 +78,9 @@ describe('findFurnitureSpot', () => {
     // The middle (2, 2) reaches into the swing (y 3..6); the spot found does not.
     expect(spot).not.toEqual({ x: 2, y: 2 });
     const added = piece({ id: 'n', ...spot });
-    expect(computeDoorBlocks([added], [door], { width: 6, height: 6 }).size).toBe(0);
+    const w = itemWarnings(toPlan({ ...room(6, 6, [added], [door]), windows: [] })).get('item-n');
+    expect(w?.blocksDoor).toBeFalsy();
+    expect(w?.blocksDoorway).toBeFalsy();
   });
 
   it('in the sample room, lands in free floor: inside, no overlap, no door blocked', () => {
@@ -72,7 +89,7 @@ describe('findFurnitureSpot', () => {
     const added = piece({ id: 'new', width: 3, height: 2, ...spot });
     const next = { ...layout, items: [...layout.items, added] };
     expect(isItemInBounds(added, layout.roomDims)).toBe(true);
-    expect(computeLayoutWarnings(next).get('new')).toEqual({
+    expect(itemWarnings(toPlan(next)).get('item-new')).toEqual({
       outOfBounds: false,
       collision: false,
     });
@@ -98,35 +115,41 @@ describe('findFurnitureSpot', () => {
 
 describe('moveInside / piecesOutside', () => {
   const r = { width: 10, height: 8 };
+  /** The plan of one piece in the `r` room; `plan.items[0]` is the piece. */
+  const one = (p: FurnitureItem) => toPlan({ ...room(r.width, r.height, [p]), windows: [] });
+  const moved = (p: FurnitureItem) => {
+    const plan = one(p);
+    return moveInside(plan.items[0]!, mainRoom(plan));
+  };
 
   it('leaves a piece that is inside alone (same object)', () => {
-    const p = piece({ x: 1, y: 1 });
-    expect(moveInside(p, r)).toBe(p);
+    const plan = one(piece({ x: 1, y: 1 }));
+    expect(moveInside(plan.items[0]!, mainRoom(plan))).toBe(plan.items[0]);
   });
 
   it('shifts a piece back by the least amount, keeping size and rotation', () => {
-    expect(moveInside(piece({ x: 9, y: 7, width: 3, height: 2 }), r)).toMatchObject({
+    expect(boxOf(moved(piece({ x: 9, y: 7, width: 3, height: 2 })))).toMatchObject({
       x: 7,
       y: 6,
       width: 3,
       height: 2,
     });
-    expect(moveInside(piece({ x: -1, y: -0.5 }), r)).toMatchObject({ x: 0, y: 0 });
+    expect(boxOf(moved(piece({ x: -1, y: -0.5 })))).toMatchObject({ x: 0, y: 0 });
   });
 
   it('uses the rotated footprint', () => {
     // 4 x 2 turned 90deg: its footprint is 2 wide and 4 deep, centred on (x + 2, y + 1).
-    const turned = piece({ x: 8, y: 6, width: 4, height: 2, rotation: 90 });
-    const moved = moveInside(turned, r);
-    expect(isItemInBounds(moved, r)).toBe(true);
-    expect(moved.rotation).toBe(90);
+    const item = moved(piece({ x: 8, y: 6, width: 4, height: 2, rotation: 90 }));
+    const box = boxOf(item);
+    expect(isItemInBounds(box, r)).toBe(true);
+    expect(box.rotation).toBe(90);
     // Flush with the right and bottom walls.
-    expect(moved.x + 2 + 1).toBeCloseTo(10, 6);
-    expect(moved.y + 1 + 2).toBeCloseTo(8, 6);
+    expect(box.x + 2 + 1).toBeCloseTo(10, 6);
+    expect(box.y + 1 + 2).toBeCloseTo(8, 6);
   });
 
   it('aligns a piece bigger than the room with the top/left walls', () => {
-    expect(moveInside(piece({ x: 3, y: 3, width: 12, height: 2 }), r)).toMatchObject({
+    expect(boxOf(moved(piece({ x: 3, y: 3, width: 12, height: 2 })))).toMatchObject({
       x: 0,
       y: 3,
     });
@@ -138,6 +161,7 @@ describe('moveInside / piecesOutside', () => {
       piece({ id: 'out', x: 9, y: 1 }),
       piece({ id: 'hidden', x: 20, y: 1, visible: false }),
     ];
-    expect(piecesOutside(items, r).map((i) => i.id)).toEqual(['out']);
+    const plan = toPlan({ ...room(r.width, r.height, items), windows: [] });
+    expect(piecesOutside(plan).map((i) => i.id)).toEqual(['item-out']);
   });
 });

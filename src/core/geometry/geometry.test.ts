@@ -4,8 +4,6 @@ import {
   angleDelta,
   checkItemsCollision,
   computeFitZoom,
-  computeItemWarnings,
-  constrainOpening,
   getRotatedCorners,
   isItemInBounds,
   pointInPolygon,
@@ -15,7 +13,17 @@ import {
   type Point,
   wallLength,
 } from './index';
-import type { Door, FurnitureItem } from '../types';
+import { loadPlan } from '../load';
+import type { FurnitureItem, Layout } from '../testing/v3/types';
+import { itemWarnings } from '../../lib/plans';
+
+const toPlan = (layout: Layout) => {
+  const r = loadPlan(layout, 'strict', { lengthsInFeet: true });
+  if (!r.ok) throw new Error(JSON.stringify(r));
+  return r.plan;
+};
+const planOf = (items: FurnitureItem[]) =>
+  toPlan({ roomDims: { width: 12, height: 12 }, doors: [], windows: [], items });
 
 const item = (over: Partial<FurnitureItem>): FurnitureItem => ({
   id: 1,
@@ -118,51 +126,30 @@ describe('isItemInBounds', () => {
   });
 });
 
-describe('computeItemWarnings', () => {
+describe('itemWarnings', () => {
   it('ignores hidden items both ways', () => {
     const a = item({ id: 'a', x: 0 });
     const b = item({ id: 'b', x: 1, visible: false });
-    const warnings = computeItemWarnings([a, b], room);
-    expect(warnings.get('a')).toEqual({ outOfBounds: false, collision: false });
-    expect(warnings.has('b')).toBe(false);
+    const warnings = itemWarnings(planOf([a, b]));
+    expect(warnings.get('item-a')).toEqual({ outOfBounds: false, collision: false });
+    expect(warnings.has('item-b')).toBe(false);
   });
 
   it('flags overlaps and out-of-bounds', () => {
-    const warnings = computeItemWarnings(
-      [item({ id: 1, x: 0 }), item({ id: 2, x: 1 }), item({ id: 3, x: 11 })],
-      room,
+    const warnings = itemWarnings(
+      planOf([item({ id: 1, x: 0 }), item({ id: 2, x: 1 }), item({ id: 3, x: 11 })]),
     );
-    expect(warnings.get(1)).toEqual({ outOfBounds: false, collision: true });
-    expect(warnings.get(3)).toEqual({ outOfBounds: true, collision: false });
+    expect(warnings.get('item-1')).toEqual({ outOfBounds: false, collision: true });
+    expect(warnings.get('item-3')).toEqual({ outOfBounds: true, collision: false });
   });
 });
 
 describe('openings', () => {
-  const door: Door = {
-    id: 1,
-    width: 3,
-    position: 6,
-    wall: 'bottom',
-    hinge: 'left',
-    type: 'swing-in',
-  };
   const rect = { width: 14, height: 10 };
 
   it('wallLength', () => {
     expect(wallLength(rect, 'top')).toBe(14);
     expect(wallLength(rect, 'left')).toBe(10);
-  });
-
-  it('clamps width and position to the wall', () => {
-    expect(constrainOpening(door, { position: 20 }, rect).position).toBe(11);
-    expect(constrainOpening(door, { width: 50 }, rect)).toMatchObject({ width: 14, position: 0 });
-    expect(constrainOpening(door, { width: 0.2 }, rect).width).toBe(1);
-    expect(constrainOpening(door, { width: 0.2 }, rect, 0.5).width).toBe(0.5);
-    // moving to a shorter wall re-clamps the position
-    expect(constrainOpening({ ...door, position: 11 }, { wall: 'left' }, rect)).toMatchObject({
-      wall: 'left',
-      position: 7,
-    });
   });
 });
 
