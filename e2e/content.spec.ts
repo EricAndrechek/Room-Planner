@@ -9,7 +9,7 @@ const GUIDES = [
   '/guides/studio-and-dorm-layout/',
   '/guides/home-office-layout/',
 ];
-const CONTENT_PAGES = ['/guides/', ...GUIDES, '/faq/', '/help/'];
+const CONTENT_PAGES = ['/guides/', ...GUIDES, '/faq/', '/help/', '/agents/'];
 
 type Node = Record<string, unknown> & { '@type': string };
 
@@ -161,10 +161,13 @@ test('guide example: the drawing is inline, and "Open this layout" opens it as a
 test('llms.txt, llms-full.txt and the sitemap list the new pages', async ({ request }) => {
   const llms = await (await request.get('/llms.txt')).text();
   expect(llms).toMatch(/^# Room Planner\n\n> /);
-  for (const path of [...GUIDES, '/faq/', '/help/']) expect(llms).toContain(`${path})`);
+  for (const path of [...GUIDES, '/faq/', '/help/', '/agents/']) expect(llms).toContain(`${path})`);
+  expect(llms).toContain('## For AI agents');
+  expect(llms).toMatch(/server \(Streamable HTTP, no authentication\): https?:\/\/[^\s]+\/mcp\n/);
 
   const full = await (await request.get('/llms-full.txt')).text();
   expect(full).toContain('# Frequently asked questions');
+  expect(full).toContain('claude mcp add --transport http room-planner');
   expect(full).toContain('| Queen | 60 × 80 in (152 × 203 cm) |');
   expect(full).not.toMatch(/<[a-z]/i); // no HTML left (the page markers are <!-- comments -->)
   expect(full).not.toContain('#s=');

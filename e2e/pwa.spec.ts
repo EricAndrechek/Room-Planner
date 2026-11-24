@@ -146,6 +146,31 @@ test('the whole app works offline', async ({ page, context }) => {
   await context.setOffline(false);
 });
 
+test('the service worker never answers /mcp or the discovery files', async ({ page }) => {
+  await page.goto('/');
+  await ready(page);
+  await controlled(page);
+  const fromWorker: string[] = [];
+  page.on('response', (r) => {
+    if (r.fromServiceWorker()) fromWorker.push(new URL(r.url()).pathname);
+  });
+  // A navigation (the app shell must not stand in for it) and a fetch, as an installed app would.
+  const nav = await page.goto('/mcp');
+  expect(nav!.fromServiceWorker()).toBe(false);
+  await expect(page.getByTestId('room')).toHaveCount(0);
+  await page.goto('/');
+  await ready(page);
+  await page.evaluate(() =>
+    Promise.all([
+      fetch('/mcp', { method: 'POST', body: '{}' }),
+      fetch('/.well-known/ai-catalog.json'),
+    ]),
+  );
+  expect(fromWorker.filter((p) => p.startsWith('/mcp') || p.startsWith('/.well-known'))).toEqual(
+    [],
+  );
+});
+
 test('install button appears on beforeinstallprompt and hides once installed', async ({ page }) => {
   await page.goto('/');
   await ready(page);
