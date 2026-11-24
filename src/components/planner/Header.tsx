@@ -25,6 +25,8 @@ import { HeaderZoomControls } from './ZoomControls';
 interface HeaderProps {
   projectName: string;
   roomDims: RoomDims;
+  /** Several rooms: how many, and their total floor area (square feet). */
+  floor?: { rooms: number; area: number };
   unitSystem: UnitSystem;
   saveStatus: SaveStatus;
   lastSavedAt: Date | null;
@@ -116,11 +118,17 @@ export function Header(props: HeaderProps) {
           {/* Dimensions - hidden on mobile */}
           <div className="hidden sm:flex items-center gap-1 text-[10px] text-slate-500 -mt-0.5">
             <Maximize2 className="w-3 h-3 shrink-0" />
-            <span className="truncate">
-              {feetToDisplay(props.roomDims.width, props.unitSystem)} ×{' '}
-              {feetToDisplay(props.roomDims.height, props.unitSystem)} (
-              {formatArea(props.roomDims.width, props.roomDims.height)})
-            </span>
+            {props.floor ? (
+              <span className="truncate" data-testid="floor-summary">
+                {props.floor.rooms} rooms ({formatArea(props.floor.area, 1)})
+              </span>
+            ) : (
+              <span className="truncate">
+                {feetToDisplay(props.roomDims.width, props.unitSystem)} ×{' '}
+                {feetToDisplay(props.roomDims.height, props.unitSystem)} (
+                {formatArea(props.roomDims.width, props.roomDims.height)})
+              </span>
+            )}
           </div>
         </div>
       </div>

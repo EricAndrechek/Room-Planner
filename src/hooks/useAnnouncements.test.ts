@@ -34,10 +34,10 @@ const toPlan = (l: Layout) => {
 const plan = (items: FurnitureItem[]) => toPlan(layout(items));
 
 describe('describeLayoutChange', () => {
-  it('says when a piece goes to the inventory and comes back', () => {
+  it('says when a piece is set aside and comes back', () => {
     const a = plan([item()]);
     const out = takeOutPiece(a, 'item-1');
-    expect(describeLayoutChange(a, out, 'ft-in')).toBe('Bed moved to inventory');
+    expect(describeLayoutChange(a, out, 'ft-in')).toBe('Bed set aside');
     expect(describeLayoutChange(out, placePiece(out, 'item-1'), 'ft-in')).toBe(
       'Bed placed in the room',
     );

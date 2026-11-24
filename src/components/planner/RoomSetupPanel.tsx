@@ -1,4 +1,14 @@
-import { ArrowLeftRight, ArrowRight, Home, Plus, Trash2, Unlock } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeftRight,
+  ArrowRight,
+  DoorOpen,
+  Home,
+  Plus,
+  Trash2,
+  Unlock,
+} from 'lucide-react';
+import { doorConnections, neighbourOf, roomName, sharedLength } from '../../core/floor';
 import { useId } from 'react';
 import { glowClass, useCardHighlight } from '../../hooks/useCardHighlight';
 import type { AddedOpening } from '../../hooks/useOpenings';
@@ -12,8 +22,9 @@ import {
 } from '../../core/geometry/doors';
 import { feetToDisplay } from '../../core/units';
 import type { OpeningPatch, ShapeChoice } from '../../lib/edits';
-import { openingPlace, roomSize, wallLabel } from '../../lib/plans';
-import type { Id, Opening, Room, RoomDims, UnitSystem } from '../../types';
+import { areaText, floorArea, openingPlace, roomSize, wallLabel } from '../../lib/plans';
+import type { Id, Opening, Plan, Room, RoomDims, UnitSystem } from '../../types';
+import { RoomsList, type RoomsListProps } from './RoomsList';
 import { DimensionInput } from './DimensionInput';
 import { RoomShapeFields } from './RoomShapeFields';
 import { StepHeader } from './StepHeader';
@@ -25,6 +36,10 @@ interface RoomSetupPanelProps {
   onToggleExpanded: () => void;
   onActivate: () => void;
   onContinue: () => void;
+  /** The whole floor (for the rooms list and the doors between rooms). */
+  plan: Plan;
+  /** The rooms list and what it does. */
+  rooms: Omit<RoomsListProps, 'plan' | 'unitSystem'>;
   room: Room;
   doors: Opening[];
   windows: Opening[];
@@ -115,7 +130,11 @@ const plural = (n: number, word: string) => `${n} ${word}${n !== 1 ? 's' : ''}`;
 
 /** Step 1 group in the sidebar: room size, doors and windows. */
 export function RoomSetupPanel(props: RoomSetupPanelProps) {
-  const { isActiveMode, expanded, room, doors, windows, unitSystem } = props;
+  const { isActiveMode, expanded, room, doors, windows, unitSystem, plan } = props;
+  const several = plan.rooms.length > 1;
+  const name = roomName(plan, room);
+  // Doors listed by another room that open into this one (drawn once, edited in their room).
+  const incoming = several ? doorConnections(plan).filter((c) => c.other.id === room.id) : [];
   const roomDims: RoomDims = roomSize(room);
   const { register, isHighlighted } = useCardHighlight(props.highlight);
   const l = lShapeOf(room);
@@ -141,12 +160,18 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
         icon={<Home className="w-4 h-4" />}
         title="Room Setup"
         summary={
-          <>
-            {isRectangle(room) ? '' : l ? 'L-shape ' : `${room.outline.length} walls, `}
-            {feetToDisplay(roomDims.width, unitSystem)} ×{' '}
-            {feetToDisplay(roomDims.height, unitSystem)} • {plural(doors.length, 'door')} •{' '}
-            {plural(windows.length, 'window')}
-          </>
+          several ? (
+            <>
+              {plan.rooms.length} rooms • {areaText(floorArea(plan), unitSystem)}
+            </>
+          ) : (
+            <>
+              {isRectangle(room) ? '' : l ? 'L-shape ' : `${room.outline.length} walls, `}
+              {feetToDisplay(roomDims.width, unitSystem)} ×{' '}
+              {feetToDisplay(roomDims.height, unitSystem)} • {plural(doors.length, 'door')} •{' '}
+              {plural(windows.length, 'window')}
+            </>
+          )
         }
         activeIcon="bg-indigo-100 text-indigo-600"
         activeText="text-indigo-700"
@@ -172,6 +197,12 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
           className={`p-4 pt-2 space-y-6 border-t border-slate-100 ${!isActiveMode ? 'opacity-60 pointer-events-none' : ''}`}
           inert={!isActiveMode}
         >
+          <RoomsList plan={plan} unitSystem={unitSystem} {...props.rooms} />
+          {several && (
+            <h2 className="-mb-3 text-sm font-semibold text-slate-800" data-testid="editing-room">
+              {name}
+            </h2>
+          )}
           <RoomShapeFields
             room={room}
             shape={props.shape}
@@ -206,6 +237,13 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                 const wallLen = wallLength(room, place.wall);
                 const card = { type: 'door', id: door.id } as const;
                 const lit = isHighlighted(card);
+                const other = several ? neighbourOf(plan, room, door) : null;
+                const into =
+                  other && isSwingDoor(door.type)
+                    ? door.type === 'swing-out' || door.type === 'double-out'
+                      ? roomName(plan, other)
+                      : name
+                    : null;
                 return (
                   <div
                     key={door.id}
@@ -215,7 +253,17 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                     data-highlighted={lit || undefined}
                   >
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-xs font-medium text-slate-700">Door {index + 1}</span>
+                      <span className="flex items-center gap-1.5 min-w-0 text-xs font-medium text-slate-700">
+                        Door {index + 1}
+                        {other && (
+                          <span
+                            className="truncate rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700"
+                            data-testid="door-connects"
+                          >
+                            {name} ↔ {roomName(plan, other)}
+                          </span>
+                        )}
+                      </span>
                       <button
                         type="button"
                         onClick={() => props.onDeleteDoor(door.id)}
@@ -261,6 +309,14 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                           </option>
                         ))}
                       </select>
+                      {into && (
+                        <p
+                          className="mt-1 text-[10px] text-slate-600"
+                          data-testid="door-opens-into"
+                        >
+                          Opens into {into}
+                        </p>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 mb-2">
@@ -360,11 +416,30 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                 );
               })}
 
-              {doors.length === 0 && (
+              {doors.length === 0 && incoming.length === 0 && (
                 <div className="text-center py-3 text-slate-500 text-xs italic border-2 border-dashed border-slate-200 rounded-lg">
                   No doors added yet
                 </div>
               )}
+              {incoming.map((c) => (
+                <div
+                  key={c.door.id}
+                  className="flex items-center gap-2 p-2.5 rounded-lg border border-dashed border-slate-300 bg-slate-50 text-xs text-slate-600"
+                  data-testid="incoming-door"
+                >
+                  <DoorOpen className="w-3.5 h-3.5 shrink-0 text-slate-500" aria-hidden="true" />
+                  <span className="flex-1 min-w-0">
+                    A door from {roomName(plan, c.room)} opens here.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => props.rooms.onSelect(c.room.id)}
+                    className="shrink-0 px-2 py-1 rounded-sm font-medium text-indigo-700 hover:bg-indigo-50"
+                  >
+                    Edit in {roomName(plan, c.room)}
+                  </button>
+                </div>
+              ))}
             </div>
           </section>
 
@@ -396,6 +471,17 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                     data-testid="window-card"
                     data-highlighted={lit || undefined}
                   >
+                    {several && sharedLength(plan, room, win) > 1e-3 && (
+                      <p
+                        className="mb-2 flex items-start gap-1.5 rounded-sm border border-amber-300 bg-amber-50 px-2 py-1.5 text-[10px] text-amber-900"
+                        data-testid="window-shared-wall"
+                      >
+                        <AlertTriangle className="w-3 h-3 shrink-0 mt-px" aria-hidden="true" />
+                        This wall is shared with{' '}
+                        {roomName(plan, neighbourOf(plan, room, win) ?? room)}: windows belong on
+                        outside walls.
+                      </p>
+                    )}
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-xs font-medium text-slate-700">Window {index + 1}</span>
                       <button

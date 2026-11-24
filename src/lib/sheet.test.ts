@@ -124,10 +124,10 @@ describe('sheetSummary', () => {
       items: layout.items.map((i, k) => (k < n ? { ...i, placement: undefined } : i)),
     });
     expect(sheetSummary(stored(2), 'furniture', null, 'ft-in')).toBe(
-      '2. Items · 4 pieces · 2 in inventory',
+      '2. Items · 4 pieces · 2 set aside',
     );
     expect(sheetSummary(stored(6), 'furniture', null, 'ft-in')).toBe(
-      '2. Items · none in the room · 6 in inventory',
+      '2. Items · none in the room · 6 set aside',
     );
     expect(sheetSummary(noOpenings([]), 'room-setup', null, 'm')).toMatch(
       /^1\. Room · [\d.]+ m × [\d.]+ m$/,

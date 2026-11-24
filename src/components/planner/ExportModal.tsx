@@ -3,7 +3,7 @@ import { FileDown, ImageDown, LoaderCircle, Printer } from 'lucide-react';
 import { captureError, track } from '../../lib/analytics';
 import { defaultPaper, type Paper } from '../../lib/export/paper';
 import type { PlanInput } from '../../lib/export/exportPlan';
-import { doorsOf, mainRoom, shownPieces, windowsOf } from '../../lib/plans';
+import { doorsOf, shownPieces, windowsOf } from '../../lib/plans';
 import type { Plan, UnitSystem } from '../../types';
 import { Modal } from './Modal';
 
@@ -69,8 +69,9 @@ export function ExportModal({ isOpen, onClose, plan, unitSystem, projectName }: 
     const props = {
       units: unitSystem,
       items: shownPieces(plan).length,
-      doors: doorsOf(mainRoom(plan)).length,
-      windows: windowsOf(mainRoom(plan)).length,
+      doors: plan.rooms.reduce((n, r) => n + doorsOf(r).length, 0),
+      windows: plan.rooms.reduce((n, r) => n + windowsOf(r).length, 0),
+      rooms: plan.rooms.length,
     };
     try {
       const m = await loadExport();

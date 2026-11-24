@@ -320,13 +320,17 @@ test('every kind of edit undoes and redoes, one step each', async ({ page }) => 
   await snap();
   await page
     .getByTestId('furniture-card')
-    .getByRole('button', { name: 'Move New Item to inventory' })
+    .getByRole('button', { name: 'More actions for New Item' })
     .click();
+  await page.getByRole('menuitem', { name: 'Set aside' }).click();
   await snap();
-  await page.getByRole('button', { name: 'Place New Item in the room' }).click();
+  await page.getByRole('tab', { name: /^Set aside/ }).click();
+  // With the keyboard, Place puts it in a free spot.
+  await page.getByRole('button', { name: 'Place New Item' }).press('Enter');
   await snap();
   await page.getByRole('button', { name: 'Delete New Item' }).click();
   await snap();
+  await page.getByRole('tab', { name: /^In the room/ }).click();
   await page.getByRole('button', { name: /Clear room/ }).click();
   await page.getByRole('button', { name: 'Clear all' }).click();
   await snap();

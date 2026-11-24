@@ -80,7 +80,10 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
         keys: () => [['Delete'], ['Backspace']],
         action: 'Delete the selected piece (or, in Room Setup, door, window or corner)',
       },
-      { keys: () => [['I']], action: 'Move the selected piece to the inventory' },
+      {
+        keys: () => [['I']],
+        action: 'Set the selected piece aside (off the plan, kept for later)',
+      },
       { keys: () => [['Escape']], action: 'Deselect' },
     ],
   },

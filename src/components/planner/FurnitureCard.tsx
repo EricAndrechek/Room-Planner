@@ -1,12 +1,13 @@
 import { memo, useId, useRef } from 'react';
-import { AlertTriangle, DoorOpen, EyeOff, Lock, PackagePlus, Trash2, Unlock } from 'lucide-react';
+import { AlertTriangle, DoorOpen, EyeOff, Lock, Unlock } from 'lucide-react';
 import { migrateColor } from '../../core/colors';
 import { normalizeDegrees, warningText, type ItemWarning } from '../../core/geometry';
 import { clamp } from '../../core/units';
-import { boxOf, doorBlockText, type PiecePatch } from '../../lib/plans';
-import type { Id, Item, RoomDims, UnitSystem } from '../../types';
+import { boxOf, doorBlockText, type Frame, type PiecePatch } from '../../lib/plans';
+import type { Id, Item, UnitSystem } from '../../types';
 import { ColorPicker } from './ColorPicker';
 import { DimensionInput } from './DimensionInput';
+import { PieceMenu } from './PieceActions';
 import { PieceShapeFields } from './PieceShapeFields';
 import { Tooltip } from './Tooltip';
 
@@ -16,7 +17,8 @@ interface FurnitureCardProps {
   isSelected: boolean;
   isMobile: boolean;
   colorPickerOpen: boolean;
-  roomDims: RoomDims;
+  /** The box the position fields measure from (the piece's room, or the floor). */
+  frame: Frame;
   unitSystem: UnitSystem;
   onSelect: (id: Id) => void;
   /** `commit: false` for keystroke-level edits that are committed on blur. */
@@ -24,8 +26,10 @@ interface FurnitureCardProps {
   onCommit: () => void;
   onToggleLock: (id: Id) => void;
   onToggleVisibility: (id: Id) => void;
-  onMoveToInventory: (id: Id) => void;
+  onSetAside: (id: Id) => void;
   onDelete: (id: Id) => void;
+  onRotate: (id: Id) => void;
+  onDuplicate: (id: Id) => void;
   onToggleColorPicker: (id: Id) => void;
   onCloseColorPicker: () => void;
 }
@@ -40,15 +44,17 @@ export const FurnitureCard = memo(function FurnitureCard({
   isSelected,
   isMobile,
   colorPickerOpen,
-  roomDims,
+  frame,
   unitSystem,
   onSelect,
   onChange,
   onCommit,
   onToggleLock,
   onToggleVisibility,
-  onMoveToInventory,
+  onSetAside,
   onDelete,
+  onRotate,
+  onDuplicate,
   onToggleColorPicker,
   onCloseColorPicker,
 }: FurnitureCardProps) {
@@ -136,38 +142,29 @@ export const FurnitureCard = memo(function FurnitureCard({
               {isItemLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
             </button>
           </Tooltip>
-          {/* The inventory replaces hiding (PR 8): only a piece hidden before can be shown again. */}
-          <Tooltip text={hidden ? 'Show' : 'Move to inventory'}>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (hidden) onToggleVisibility(item.id);
-                else onMoveToInventory(item.id);
-              }}
-              className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-sm transition-colors flex items-center justify-center"
-              aria-label={hidden ? `Show ${item.label}` : `Move ${item.label} to inventory`}
-            >
-              {hidden ? (
+          {/* Set aside replaced hiding (PR 8): only a piece hidden before can be shown again. */}
+          {hidden && (
+            <Tooltip text="Show">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleVisibility(item.id);
+                }}
+                className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-sm transition-colors flex items-center justify-center"
+                aria-label={`Show ${item.label}`}
+              >
                 <EyeOff className="w-3.5 h-3.5" />
-              ) : (
-                <PackagePlus className="w-3.5 h-3.5" />
-              )}
-            </button>
-          </Tooltip>
-          <Tooltip text="Delete">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(item.id);
-              }}
-              className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-sm transition-colors flex items-center justify-center"
-              aria-label={`Delete ${item.label}`}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          </Tooltip>
+              </button>
+            </Tooltip>
+          )}
+          <PieceMenu
+            item={item}
+            onRotate={() => onRotate(item.id)}
+            onDuplicate={() => onDuplicate(item.id)}
+            onSetAside={() => onSetAside(item.id)}
+            onDelete={() => onDelete(item.id)}
+          />
         </div>
       </div>
 
@@ -213,7 +210,7 @@ export const FurnitureCard = memo(function FurnitureCard({
                 onChange={(val) => onChange(item.id, { width: val })}
                 className="w-full p-1.5 text-xs border border-slate-200 rounded-sm"
                 min={0.1}
-                max={roomDims.width}
+                max={frame.width}
                 label={`Width of ${item.label}`}
                 id={fieldId('width')}
                 unitSystem={unitSystem}
@@ -228,7 +225,7 @@ export const FurnitureCard = memo(function FurnitureCard({
                 onChange={(val) => onChange(item.id, { depth: val })}
                 className="w-full p-1.5 text-xs border border-slate-200 rounded-sm"
                 min={0.1}
-                max={roomDims.height}
+                max={frame.height}
                 label={`Depth of ${item.label}`}
                 id={fieldId('depth')}
                 unitSystem={unitSystem}
@@ -242,13 +239,15 @@ export const FurnitureCard = memo(function FurnitureCard({
                 X Position
               </label>
               <DimensionInput
-                value={box.x}
+                value={box.x - frame.left}
                 onChange={(val) =>
-                  onChange(item.id, { x: clamp(val, 0, roomDims.width - item.width) })
+                  onChange(item.id, {
+                    x: frame.left + clamp(val, 0, frame.width - item.width),
+                  })
                 }
                 className="w-full p-1.5 text-xs border border-slate-200 rounded-sm"
                 min={0}
-                max={roomDims.width - item.width}
+                max={frame.width - item.width}
                 label={`X position of ${item.label}`}
                 id={fieldId('x')}
                 unitSystem={unitSystem}
@@ -259,13 +258,15 @@ export const FurnitureCard = memo(function FurnitureCard({
                 Y Position
               </label>
               <DimensionInput
-                value={box.y}
+                value={box.y - frame.top}
                 onChange={(val) =>
-                  onChange(item.id, { y: clamp(val, 0, roomDims.height - item.depth) })
+                  onChange(item.id, {
+                    y: frame.top + clamp(val, 0, frame.height - item.depth),
+                  })
                 }
                 className="w-full p-1.5 text-xs border border-slate-200 rounded-sm"
                 min={0}
-                max={roomDims.height - item.depth}
+                max={frame.height - item.depth}
                 label={`Y position of ${item.label}`}
                 id={fieldId('y')}
                 unitSystem={unitSystem}

@@ -7,7 +7,17 @@ import { DESIGN_MODES } from './constants';
 import { feetToDisplay } from '../core/units';
 import type { DesignMode, Plan, Selection, UnitSystem } from '../types';
 import { isRectangle } from '../core/geometry/walls';
-import { doorsOf, mainRoom, openingPlace, roomSize, wallLabel, wallName, windowsOf } from './plans';
+import { roomName } from '../core/floor';
+import {
+  doorsOf,
+  openingPlace,
+  roomById,
+  roomOfOpening,
+  roomSize,
+  wallLabel,
+  wallName,
+  windowsOf,
+} from './plans';
 
 export type Detent = 'peek' | 'half' | 'full';
 
@@ -90,7 +100,7 @@ const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 /**
  * The sheet's one-line summary: the selected piece, door or window, or else the active step,
- * e.g. `1. Room · 12' × 12' · 1 door · 1 window`, `2. Items · 6 pieces · 2 in inventory`,
+ * e.g. `1. Room · 12' × 12' · 1 door · 1 window`, `2. Items · 6 pieces · 2 set aside`,
  * `Chair · 1'6" × 1'6"`.
  */
 export function sheetSummary(
@@ -98,9 +108,14 @@ export function sheetSummary(
   mode: DesignMode,
   selection: Selection | null,
   units: UnitSystem,
+  /** The room being edited (several rooms); the first room when left out. */
+  roomId?: string | null,
 ): string {
   const size = (w: number, h: number) => `${feetToDisplay(w, units)} × ${feetToDisplay(h, units)}`;
-  const room = mainRoom(plan);
+  const selectedOpening =
+    selection && selection.type !== 'item' ? roomOfOpening(plan, selection.id) : undefined;
+  const room = selectedOpening ?? roomById(plan, roomId);
+  const several = plan.rooms.length > 1;
   const doors = doorsOf(room);
   const windows = windowsOf(room);
   if (selection?.type === 'item') {
@@ -119,7 +134,9 @@ export function sheetSummary(
   if (mode === DESIGN_MODES.ROOM_SETUP) {
     const { width, height } = roomSize(room);
     return [
-      `1. Room · ${size(width, height)}`,
+      several
+        ? `1. ${roomName(plan, room)} · ${size(width, height)}`
+        : `1. Room · ${size(width, height)}`,
       doors.length ? count(doors.length, 'door') : '',
       windows.length ? count(windows.length, 'window') : '',
     ]
@@ -130,7 +147,7 @@ export function sheetSummary(
   const stored = plan.items.length - n;
   return [
     `2. Items · ${n ? count(n, 'piece') : stored ? 'none in the room' : 'no furniture yet'}`,
-    stored ? `${stored} in inventory` : '',
+    stored ? `${stored} set aside` : '',
   ]
     .filter(Boolean)
     .join(' · ');

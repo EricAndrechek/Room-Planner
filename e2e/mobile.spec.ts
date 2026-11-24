@@ -146,8 +146,12 @@ test('touch targets: sidebar icon buttons and the rotate handle are at least 44p
   await page.goto('/');
   await ready(page);
   await openStep(page, 'furniture');
-  for (const name of [/^Lock /, /^Move .* to inventory$/, /^Delete /]) {
-    const b = (await page.getByRole('button', { name }).first().boundingBox())!;
+  for (const control of [
+    page.getByRole('button', { name: /^Lock / }),
+    page.getByRole('button', { name: /^More actions for / }),
+    page.getByRole('tab', { name: /^Set aside/ }),
+  ]) {
+    const b = (await control.first().boundingBox())!;
     expect(b.width).toBeGreaterThanOrEqual(44);
     expect(b.height).toBeGreaterThanOrEqual(44);
   }

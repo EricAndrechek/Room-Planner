@@ -17,7 +17,8 @@ import {
   setWallLength as setWallLengthEdit,
   type ShapeChoice,
 } from '../lib/edits';
-import { mainRoom, roomSize } from '../lib/plans';
+import { roomById, roomSize } from '../lib/plans';
+import { floorBounds } from '../core/floor';
 import { snapCorner, type CornerGuide } from '../core/geometry/corners';
 import { roomBounds, roomShapeOf, wallLength, type LShape } from '../core/geometry/walls';
 import { SNAP_THRESHOLD_PX, SNAP_THRESHOLD_TOUCH_PX, thresholdFeet } from '../core/snapping';
@@ -50,6 +51,8 @@ interface Options {
   onWallsChanged: (before: Plan, after: Plan) => void;
   /** A corner was selected: whatever else was selected is not any more. */
   onSelectCorner: () => void;
+  /** The room being edited. */
+  roomId: string;
 }
 
 /** "Corner 3" for corner index 2. */
@@ -74,9 +77,10 @@ export function useRoomShape({
   keepView,
   onWallsChanged,
   onSelectCorner,
+  roomId,
 }: Options) {
   const { present: plan, set: setPlan, apply: applyPlan, commit } = history;
-  const room = mainRoom(plan);
+  const room = roomById(plan, roomId);
   const planRef = useRef(plan);
   useEffect(() => {
     planRef.current = plan;
@@ -97,7 +101,7 @@ export function useRoomShape({
 
   const len = (feet: number) => feetToDisplay(feet, unitSystem);
   const wallsAt = (p: Plan, i: number) => {
-    const r = mainRoom(p);
+    const r = roomById(p, roomId);
     const count = r.outline.length;
     const before = (i - 1 + count) % count;
     return `Wall ${before + 1} is ${len(wallLength(r, before))}, wall ${i + 1} is ${len(wallLength(r, i))}`;
@@ -140,7 +144,8 @@ export function useRoomShape({
       before,
       next === 'rect'
         ? { kind: 'rect' }
-        : { kind: 'l', l: defaultLShape(roomSize(mainRoom(before))) },
+        : { kind: 'l', l: defaultLShape(roomSize(roomById(before, roomId))) },
+      roomId,
     );
     if (after !== before) {
       applyPlan(() => after);
@@ -152,7 +157,7 @@ export function useRoomShape({
   /** New L-shape fields (one undo step). */
   const changeLShape = (l: LShape) => {
     const before = planRef.current;
-    const after = setRoomShape(before, { kind: 'l', l });
+    const after = setRoomShape(before, { kind: 'l', l }, roomId);
     if (after === before) return;
     applyPlan(() => after);
     onWallsChanged(before, after);
@@ -180,7 +185,7 @@ export function useRoomShape({
     selectCorner(i);
     const start = floorPoint(e.clientX, e.clientY);
     const first = planRef.current;
-    const at = mainRoom(first).outline[i];
+    const at = roomById(first, roomId).outline[i];
     if (!start || !at) return;
     // The pointer may grab the handle off its centre: keep that offset.
     const grab = { x: at.x - start.x, y: at.y - start.y };
@@ -194,7 +199,7 @@ export function useRoomShape({
         const p = floorPoint(ev.clientX, ev.clientY);
         if (!p) return;
         const raw = { x: p.x + grab.x, y: p.y + grab.y };
-        const r = mainRoom(latest);
+        const r = roomById(latest, roomId);
         const snapped =
           snapEnabled && !ev.altKey
             ? snapCorner(r, i, raw, {
@@ -210,14 +215,14 @@ export function useRoomShape({
               };
         const cur = r.outline[i]!;
         if (cur.x === snapped.point.x && cur.y === snapped.point.y) return;
-        const next = moveCorner(latest, i, snapped.point);
+        const next = moveCorner(latest, i, snapped.point, roomId);
         if (next === latest) {
           // The corner stops at its last good position.
           blocked = true;
           return;
         }
         moved = true;
-        keepView(roomBounds(mainRoom(latest)), roomBounds(mainRoom(next)));
+        keepView(floorBounds(latest), floorBounds(next));
         latest = next;
         setPlan(() => next);
         setDrag({ index: i, guides: snapped.guides });
@@ -242,14 +247,14 @@ export function useRoomShape({
     if (selectedCorner === null) return false;
     const i = selectedCorner;
     const before = planRef.current;
-    const at = mainRoom(before).outline[i]!;
+    const at = roomById(before, roomId).outline[i]!;
     const clean = (v: number) => Math.round(v * 1e6) / 1e6 + 0;
-    const after = moveCorner(before, i, { x: clean(at.x + dx), y: clean(at.y + dy) });
+    const after = moveCorner(before, i, { x: clean(at.x + dx), y: clean(at.y + dy) }, roomId);
     if (after === before) {
       refused(i);
       return true;
     }
-    keepView(roomBounds(mainRoom(before)), roomBounds(mainRoom(after)));
+    keepView(floorBounds(before), floorBounds(after));
     applyPlan(() => after);
     announce(`${cornerName(i)} moved. ${wallsAt(after, i)}`);
     onWallsChanged(before, after);
@@ -259,13 +264,13 @@ export function useRoomShape({
   /** A new corner in the middle of `wallIndex`, selected (and focused). */
   const addCorner = (wallIndex: number) => {
     const before = planRef.current;
-    const after = addCornerEdit(before, wallIndex);
+    const after = addCornerEdit(before, wallIndex, roomId);
     if (after === before) {
       announce(`A corner can't be added to wall ${wallIndex + 1}.`);
       return;
     }
     applyPlan(() => after);
-    const count = mainRoom(after).outline.length;
+    const count = roomById(after, roomId).outline.length;
     track('room_corner_added', { corners: count });
     selectCorner(wallIndex + 1, true);
     announce(
@@ -277,18 +282,18 @@ export function useRoomShape({
   const removeCorner = (i: number | null = selectedCorner): boolean => {
     if (i === null || !editingCorners) return false;
     const before = planRef.current;
-    if (mainRoom(before).outline.length <= 3) {
+    if (roomById(before, roomId).outline.length <= 3) {
       announce('A room needs at least 3 corners.');
       return true;
     }
-    const after = removeCornerEdit(before, i);
+    const after = removeCornerEdit(before, i, roomId);
     if (after === before) {
       announce(`${cornerName(i)} can't be removed: walls would cross or touch.`);
       return true;
     }
-    keepView(roomBounds(mainRoom(before)), roomBounds(mainRoom(after)));
+    keepView(floorBounds(before), floorBounds(after));
     applyPlan(() => after);
-    track('room_corner_removed', { corners: mainRoom(after).outline.length });
+    track('room_corner_removed', { corners: roomById(after, roomId).outline.length });
     setCorner(null);
     announce(`${cornerName(i)} removed. Press Control or Command Z to undo.`);
     onWallsChanged(before, after);
@@ -298,9 +303,9 @@ export function useRoomShape({
   /** A wall's length typed in the wall list. False (nothing changes) if walls would cross. */
   const setWallLength = (wallIndex: number, length: number): boolean => {
     const before = planRef.current;
-    const after = setWallLengthEdit(before, wallIndex, length);
+    const after = setWallLengthEdit(before, wallIndex, length, roomId);
     if (after === before) {
-      if (Math.abs(wallLength(mainRoom(before), wallIndex) - length) < 1e-9) return true;
+      if (Math.abs(wallLength(roomById(before, roomId), wallIndex) - length) < 1e-9) return true;
       announce(`Wall ${wallIndex + 1} can't be ${len(length)}: walls would cross or touch.`);
       return false;
     }

@@ -1,11 +1,11 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { ChevronDown, Plus, Sofa, Trash2, Unlock } from 'lucide-react';
 import { glowClass, useCardHighlight, type CardRef } from '../../hooks/useCardHighlight';
 import type { ItemWarning } from '../../core/geometry';
 import { feetToDisplay } from '../../core/units';
 import { PIECE_PRESETS, type PiecePreset } from '../../lib/edits';
-import type { PiecePatch } from '../../lib/plans';
-import type { Id, Item, RoomDims, Selection, UnitSystem } from '../../types';
+import type { Frame, PiecePatch } from '../../lib/plans';
+import type { Id, Item, Selection, UnitSystem } from '../../types';
 import { FurnitureCard } from './FurnitureCard';
 import { StepHeader } from './StepHeader';
 import { Tooltip } from './Tooltip';
@@ -134,7 +134,12 @@ interface FurniturePanelProps {
   selection: Selection | null;
   isMobile: boolean;
   colorPickerItemId: Id | null;
-  roomDims: RoomDims;
+  /** The box each piece's position fields measure from (its room's, or the floor's). */
+  frameOf: (item: Item) => Frame;
+  /** Several rooms: the pieces grouped under their room's name (null: outside every room). */
+  roomOf?: (item: Item) => string | null;
+  /** The room names in plan order (the groups' order). */
+  roomNames?: string[];
   unitSystem: UnitSystem;
   /** Add a piece: a plain one, or a starter with a shape. */
   onAddItem: (preset?: PiecePreset) => void;
@@ -145,14 +150,116 @@ interface FurniturePanelProps {
   onCommit: () => void;
   onToggleLock: (id: Id) => void;
   onToggleVisibility: (id: Id) => void;
-  onMoveToInventory: (id: Id) => void;
+  onSetAside: (id: Id) => void;
   onDeleteItem: (id: Id) => void;
+  onRotateItem: (id: Id) => void;
+  onDuplicateItem: (id: Id) => void;
   onToggleColorPicker: (id: Id) => void;
   onCloseColorPicker: () => void;
   /** The piece just added: its card is scrolled into view and briefly highlighted. */
   highlight?: CardRef | null;
-  /** Below the list: the inventory tray (InventoryTray.tsx). */
-  inventory?: ReactNode;
+  /** Which list shows: the pieces on the plan, or the ones set aside. */
+  view: 'room' | 'aside';
+  onViewChange: (view: 'room' | 'aside') => void;
+  /** How many pieces are set aside (the toggle's count). */
+  setAsideCount: number;
+  /** The "Set aside" list (SetAsideList.tsx). */
+  setAside: ReactNode;
+  /** The "Set aside" tab (where the focus goes when its list empties). */
+  setAsideTabRef?: RefObject<HTMLButtonElement | null>;
+  /** "In the room", or "In the rooms" for several. */
+  roomLabel?: string;
+}
+
+/**
+ * The top of the Items step: which list shows, the pieces on the plan or the ones set aside, as two
+ * tabs (arrow keys move between them).
+ */
+function ListToggle({
+  view,
+  onChange,
+  placed,
+  aside,
+  roomLabel,
+  asideRef,
+  ids,
+}: {
+  view: 'room' | 'aside';
+  onChange: (v: 'room' | 'aside') => void;
+  placed: number;
+  aside: number;
+  roomLabel: string;
+  asideRef?: RefObject<HTMLButtonElement | null>;
+  ids: { room: string; aside: string; panel: string };
+}) {
+  const roomRef = useRef<HTMLButtonElement>(null);
+  const tabs = [
+    { value: 'room' as const, label: roomLabel, count: placed, id: ids.room, ref: roomRef },
+    { value: 'aside' as const, label: 'Set aside', count: aside, id: ids.aside, ref: asideRef },
+  ];
+  // A piece just set aside: the count gives a short pulse so the eye finds where it went.
+  const [pulse, setPulse] = useState(false);
+  const last = useRef(aside);
+  useEffect(() => {
+    if (aside > last.current) {
+      setPulse(true);
+      const t = setTimeout(() => setPulse(false), 900);
+      last.current = aside;
+      return () => clearTimeout(t);
+    }
+    last.current = aside;
+  }, [aside]);
+  return (
+    <div
+      role="tablist"
+      aria-label="Furniture lists"
+      className="grid grid-cols-2 p-1 rounded-full bg-slate-100 ring-1 ring-inset ring-slate-200/70"
+      data-testid="list-toggle"
+    >
+      {tabs.map((t, i) => {
+        const on = view === t.value;
+        return (
+          <button
+            key={t.value}
+            ref={t.ref}
+            id={t.id}
+            type="button"
+            role="tab"
+            aria-selected={on}
+            aria-controls={ids.panel}
+            tabIndex={on ? 0 : -1}
+            onClick={() => onChange(t.value)}
+            onKeyDown={(e) => {
+              if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+              e.preventDefault();
+              e.stopPropagation();
+              const next = tabs[(i + 1) % 2]!;
+              onChange(next.value);
+              requestAnimationFrame(() => document.getElementById(next.id)?.focus());
+            }}
+            className={`flex items-center justify-center gap-1.5 min-h-9 px-2 rounded-full text-xs font-semibold transition-all focus-visible:ring-2 focus-visible:ring-emerald-500 outline-hidden ${
+              on ? 'bg-white text-emerald-800 shadow-sm' : 'text-slate-600 hover:text-slate-800'
+            }`}
+            data-view={t.value}
+          >
+            <span className="truncate">{t.label}</span>
+            <span
+              className={`min-w-5 px-1.5 rounded-full text-[10px] leading-4 tabular-nums transition-transform ${
+                on
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : t.value === 'aside' && t.count
+                    ? 'bg-emerald-700 text-white'
+                    : 'bg-slate-200 text-slate-600'
+              } ${t.value === 'aside' && pulse ? 'scale-125' : ''}`}
+              data-testid={t.value === 'aside' ? 'set-aside-count' : 'placed-count'}
+            >
+              {t.count}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 /** Step 2 group in the sidebar: the furniture list. */
@@ -160,6 +267,19 @@ export function FurniturePanel(props: FurniturePanelProps) {
   const { isActiveMode, expanded, items } = props;
   const [confirmingClear, setConfirmingClear] = useState(false);
   const { register, isHighlighted } = useCardHighlight(props.highlight);
+  const uid = useId();
+  const ids = { room: `${uid}-room`, aside: `${uid}-aside`, panel: `${uid}-panel` };
+  // Several rooms: the cards grouped under their room's name, in plan order of the rooms.
+  const ordered: { item: Item; group?: string | null }[] = (() => {
+    const roomOf = props.roomOf;
+    if (!roomOf) return items.map((item) => ({ item }));
+    const order = [...(props.roomNames ?? []), null];
+    const sorted = [...items].sort((a, b) => order.indexOf(roomOf(a)) - order.indexOf(roomOf(b)));
+    return sorted.map((item, i) => {
+      const g = roomOf(item);
+      return { item, group: i === 0 || roomOf(sorted[i - 1]!) !== g ? g : undefined };
+    });
+  })();
   return (
     <div
       className={`rounded-xl border-2 transition-all duration-300 ${
@@ -200,86 +320,123 @@ export function FurniturePanel(props: FurniturePanelProps) {
           className={`p-4 pt-2 space-y-4 border-t border-slate-100 ${!isActiveMode ? 'opacity-60 pointer-events-none' : ''}`}
           inert={!isActiveMode}
         >
-          <div className="flex justify-end items-center gap-2">
-            {confirmingClear ? (
-              <>
-                <span role="alert" className="text-xs text-slate-600 mr-auto">
-                  Remove all {items.length} item{items.length !== 1 ? 's' : ''}?
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    props.onClearRoom();
-                    setConfirmingClear(false);
-                  }}
-                  className="text-xs bg-red-50 text-red-700 hover:bg-red-100 px-2 py-1 rounded-sm font-medium transition-colors"
-                >
-                  Clear all
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmingClear(false)}
-                  className="text-xs text-slate-500 hover:bg-slate-100 px-2 py-1 rounded-sm font-medium transition-colors"
-                >
-                  Cancel
-                </button>
-              </>
+          <ListToggle
+            view={props.view}
+            onChange={props.onViewChange}
+            placed={items.length}
+            aside={props.setAsideCount}
+            roomLabel={props.roomLabel ?? 'In the room'}
+            asideRef={props.setAsideTabRef}
+            ids={ids}
+          />
+          <div
+            id={ids.panel}
+            role="tabpanel"
+            aria-labelledby={props.view === 'room' ? ids.room : ids.aside}
+            className="space-y-4"
+          >
+            {props.view === 'aside' ? (
+              props.setAside
             ) : (
               <>
-                {items.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmingClear(true)}
-                    className="flex items-center gap-1 text-xs text-slate-500 hover:text-red-600 hover:bg-red-50 px-2 py-1 rounded-sm font-medium transition-colors"
-                    title="Remove all furniture and start with an empty room (you can undo)"
-                  >
-                    <Trash2 className="w-3 h-3" /> Clear room
-                  </button>
-                )}
-                <AddItemMenu unitSystem={props.unitSystem} onAdd={props.onAddItem} />
+                <div className="flex justify-end items-center gap-2">
+                  {confirmingClear ? (
+                    <>
+                      <span role="alert" className="text-xs text-slate-600 mr-auto">
+                        Remove all {items.length} item{items.length !== 1 ? 's' : ''}?
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          props.onClearRoom();
+                          setConfirmingClear(false);
+                        }}
+                        className="text-xs bg-red-50 text-red-700 hover:bg-red-100 px-2 py-1 rounded-sm font-medium transition-colors"
+                      >
+                        Clear all
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmingClear(false)}
+                        className="text-xs text-slate-500 hover:bg-slate-100 px-2 py-1 rounded-sm font-medium transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {items.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmingClear(true)}
+                          className="flex items-center gap-1 text-xs text-slate-500 hover:text-red-600 hover:bg-red-50 px-2 py-1 rounded-sm font-medium transition-colors"
+                          title="Remove all furniture and start with an empty room (you can undo)"
+                        >
+                          <Trash2 className="w-3 h-3" /> Clear room
+                        </button>
+                      )}
+                      <AddItemMenu unitSystem={props.unitSystem} onAdd={props.onAddItem} />
+                    </>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  {ordered.map(({ item, group }) => {
+                    const card = { type: 'item', id: item.id } as const;
+                    const lit = isHighlighted(card);
+                    return (
+                      <div key={item.id}>
+                        {group !== undefined && (
+                          <h3
+                            className="flex items-center gap-2 mb-2 mt-1 text-xs font-semibold text-slate-600"
+                            data-testid="room-group"
+                          >
+                            <span className="truncate">{group ?? 'Not in a room'}</span>
+                            <span className="h-px flex-1 bg-slate-200" aria-hidden="true" />
+                          </h3>
+                        )}
+                        <div
+                          ref={register(card)}
+                          className={`rounded-lg ${glowClass(lit, 'ring-emerald-300 ring-offset-2')}`}
+                          data-highlighted={lit || undefined}
+                        >
+                          <FurnitureCard
+                            item={item}
+                            warning={props.warnings.get(item.id)}
+                            isSelected={
+                              props.selection?.type === 'item' && props.selection.id === item.id
+                            }
+                            isMobile={props.isMobile}
+                            colorPickerOpen={props.colorPickerItemId === item.id}
+                            frame={props.frameOf(item)}
+                            unitSystem={props.unitSystem}
+                            onSelect={props.onSelectItem}
+                            onChange={props.onChangeItem}
+                            onCommit={props.onCommit}
+                            onToggleLock={props.onToggleLock}
+                            onToggleVisibility={props.onToggleVisibility}
+                            onSetAside={props.onSetAside}
+                            onDelete={props.onDeleteItem}
+                            onRotate={props.onRotateItem}
+                            onDuplicate={props.onDuplicateItem}
+                            onToggleColorPicker={props.onToggleColorPicker}
+                            onCloseColorPicker={props.onCloseColorPicker}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {items.length === 0 && (
+                    <div className="text-center py-6 text-slate-500 text-xs italic border-2 border-dashed border-slate-200 rounded-lg">
+                      {props.setAsideCount
+                        ? 'Nothing on the plan. Add an item, or place one you set aside.'
+                        : 'No furniture added. Click "Add Item" to start.'}
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </div>
-
-          <div className="space-y-3">
-            {items.map((item) => {
-              const card = { type: 'item', id: item.id } as const;
-              const lit = isHighlighted(card);
-              return (
-                <div
-                  key={item.id}
-                  ref={register(card)}
-                  className={`rounded-lg ${glowClass(lit, 'ring-emerald-300 ring-offset-2')}`}
-                  data-highlighted={lit || undefined}
-                >
-                  <FurnitureCard
-                    item={item}
-                    warning={props.warnings.get(item.id)}
-                    isSelected={props.selection?.type === 'item' && props.selection.id === item.id}
-                    isMobile={props.isMobile}
-                    colorPickerOpen={props.colorPickerItemId === item.id}
-                    roomDims={props.roomDims}
-                    unitSystem={props.unitSystem}
-                    onSelect={props.onSelectItem}
-                    onChange={props.onChangeItem}
-                    onCommit={props.onCommit}
-                    onToggleLock={props.onToggleLock}
-                    onToggleVisibility={props.onToggleVisibility}
-                    onMoveToInventory={props.onMoveToInventory}
-                    onDelete={props.onDeleteItem}
-                    onToggleColorPicker={props.onToggleColorPicker}
-                    onCloseColorPicker={props.onCloseColorPicker}
-                  />
-                </div>
-              );
-            })}
-            {items.length === 0 && (
-              <div className="text-center py-6 text-slate-500 text-xs italic border-2 border-dashed border-slate-200 rounded-lg">
-                No furniture added. Click &quot;Add Item&quot; to start.
-              </div>
-            )}
-          </div>
-          {props.inventory}
         </div>
       )}
     </div>

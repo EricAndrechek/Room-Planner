@@ -266,5 +266,37 @@ export function usePanZoom(
     if (dx || dy) setPan((p) => ({ x: p.x + dx, y: p.y + dy }));
   }, []);
 
-  return { zoom, zoomRef, pan, zoomIn, zoomOut, fitToView, reveal, keepView };
+  /**
+   * Zoom to one part of the floor (`area`, feet, inside the floor's box `floor`): fit it to the
+   * visible area and centre it there. The floor is drawn centred on its box, so the area's centre
+   * is panned that far from the middle.
+   */
+  const zoomToArea = useCallback(
+    (area: Bounds, floor: Bounds) => {
+      const el = containerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const padding = isMobile ? 48 : 96;
+      const z = clampZoom(
+        computeFitZoom(
+          {
+            width: rect.width - padding,
+            height: Math.max(40, rect.height - insets.top - insets.bottom - padding),
+          },
+          { width: area.right - area.left, height: area.bottom - area.top },
+          PIXELS_PER_UNIT,
+        ),
+        minZoomRef.current,
+      );
+      movedRef.current = true;
+      setZoom(z);
+      const s = PIXELS_PER_UNIT * z;
+      const dx = ((area.left + area.right - floor.left - floor.right) / 2) * s;
+      const dy = ((area.top + area.bottom - floor.top - floor.bottom) / 2) * s;
+      setPan({ x: -dx, y: -dy + (insets.top - insets.bottom) / 2 });
+    },
+    [containerRef, isMobile, insets.top, insets.bottom, setZoom],
+  );
+
+  return { zoom, zoomRef, pan, zoomIn, zoomOut, fitToView, reveal, keepView, zoomToArea };
 }

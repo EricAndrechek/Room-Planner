@@ -1,12 +1,23 @@
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, RefObject } from 'react';
-import { Home, Plus, Sofa, Trash2 } from 'lucide-react';
+import { Home, Move, Plus, Sofa, Trash2 } from 'lucide-react';
+import { migrateColor } from '../../core/colors';
 import { DESIGN_MODES, PIXELS_PER_UNIT } from '../../lib/constants';
 import { feetToDisplay, nudgeStep } from '../../core/units';
-import type { ItemWarning } from '../../core/geometry';
-import { isRectangle, roomBounds, wallFrame } from '../../core/geometry/walls';
-import { doorsOf, mainRoom, roomSize, shownPieces, windowsOf } from '../../lib/plans';
+import type { ItemWarning, Point } from '../../core/geometry';
+import { floorBounds, roomName, sharedWalls, type RoomGuide } from '../../core/floor';
+import { itemParts, partsBounds } from '../../core/geometry/shapes';
+import { firstCorner, isRectangle, roomBounds, wallFrame } from '../../core/geometry/walls';
+import {
+  areaText,
+  doorsOf,
+  roomArea,
+  roomById,
+  roomSize,
+  shownPieces,
+  windowsOf,
+} from '../../lib/plans';
 import type { CornerDrag } from '../../hooks/useRoomShape';
-import type { DesignMode, Id, Item, Opening, Plan, Selection, UnitSystem } from '../../types';
+import type { DesignMode, Id, Item, Opening, Plan, Room, Selection, UnitSystem } from '../../types';
 import { FurniturePiece } from './FurniturePiece';
 import { DoorShape, WindowShape } from './Openings';
 
@@ -20,6 +31,23 @@ export interface CornerEditing {
   onSelect: (corner: number) => void;
   onAddCorner: (wall: number) => void;
   onRemoveCorner: (corner: number) => void;
+}
+
+/** Several rooms in room setup: pick one, drag it (its walls snap to the others'). */
+export interface RoomPicking {
+  onSelect: (id: Id) => void;
+  onPointerDown: (e: ReactPointerEvent<HTMLElement>, id: Id) => void;
+  /** The room being dragged: the lines it lines up with, and whether it overlaps another now. */
+  drag: { id: Id; guides: RoomGuide[]; overlap: boolean } | null;
+}
+
+/** A set-aside piece waiting to be put on the plan: its outline where it would land. */
+export interface PlacementGhost {
+  item: Item;
+  /** Its centre (floor coordinates), or null while the pointer is off the plan. */
+  at: Point | null;
+  /** False where it cannot go (outside every room). */
+  ok: boolean;
 }
 
 interface RoomCanvasProps {
@@ -48,6 +76,14 @@ interface RoomCanvasProps {
   covered?: boolean;
   /** Custom shape in room setup: corner handles, "+" handles on the walls, wall lengths. */
   corners?: CornerEditing | null;
+  /** The room being edited (several rooms). */
+  activeRoomId?: Id | null;
+  /** Several rooms in room setup: select and drag rooms. */
+  rooms?: RoomPicking | null;
+  /** Shown next to the selected piece (its actions), kept the same size on screen. */
+  selectionBar?: ReactNode;
+  /** Tap-to-place: the piece's outline under the pointer. */
+  ghost?: PlacementGhost | null;
 }
 
 const GRID_STYLE = {
@@ -56,7 +92,16 @@ const GRID_STYLE = {
   backgroundSize: `${PIXELS_PER_UNIT}px ${PIXELS_PER_UNIT}px`,
 };
 
-/** The zoomable/pannable floor plan. */
+const pathOf = (room: Pick<Room, 'outline'>, P: number) =>
+  `M ${room.outline.map((p) => `${p.x * P} ${p.y * P}`).join(' L ')} Z`;
+
+/** Where a room's name goes: just inside its top-left corner (its first corner as listed). */
+const labelAt = (room: Room): Point => {
+  const c = room.outline[firstCorner(room.outline)]!;
+  return { x: c.x + 0.35, y: c.y + 0.35 };
+};
+
+/** The zoomable/pannable floor plan: one room, or a floor of several. */
 export function RoomCanvas({
   containerRef,
   plan,
@@ -78,26 +123,45 @@ export function RoomCanvas({
   covered = false,
   highlightDoorIds = [],
   corners = null,
+  activeRoomId = null,
+  rooms: picking = null,
+  selectionBar,
+  ghost = null,
 }: RoomCanvasProps) {
-  const room = mainRoom(plan);
-  const roomDims = roomSize(room);
-  const bounds = roomBounds(room);
-  const rect = isRectangle(room);
+  const room = roomById(plan, activeRoomId);
+  const several = plan.rooms.length > 1;
+  const bounds = floorBounds(plan);
+  const floorDims = { width: bounds.right - bounds.left, height: bounds.bottom - bounds.top };
+  // One rectangle draws as it always has (a box with a border); anything else as outlines.
+  const rect = !several && isRectangle(room);
   const P = PIXELS_PER_UNIT;
-  // Floor coordinates inside the room box: its top-left is the bounding box's top-left.
+  const k = 1 / zoom;
+  // Floor coordinates inside the box: its top-left is the floor's top-left.
   const floorShift: CSSProperties | undefined =
     bounds.left || bounds.top
       ? { transform: `translate(${-bounds.left * P}px, ${-bounds.top * P}px)` }
       : undefined;
-  const outlinePath = `M ${room.outline.map((p) => `${p.x * P} ${p.y * P}`).join(' L ')} Z`;
-  const clipPolygon = `polygon(${room.outline
-    .map((p) => `${(p.x - bounds.left) * P}px ${(p.y - bounds.top) * P}px`)
-    .join(', ')})`;
-  const doors = doorsOf(room);
-  const windows = windowsOf(room);
+  const shared = several ? sharedWalls(plan) : [];
   const isRoomSetup = designMode === DESIGN_MODES.ROOM_SETUP;
   const isActive = (type: Selection['type'], id: Id) =>
     selection?.type === type && selection.id === id;
+  const selectedItem =
+    selection?.type === 'item' ? plan.items.find((i) => i.id === selection.id) : undefined;
+  const barAt = (() => {
+    if (!selectionBar || !selectedItem?.placement) return null;
+    const b = partsBounds(itemParts(selectedItem));
+    // Below the piece (its rotate handle is above it); above it near the bottom of the floor.
+    const below = b.bottom < bounds.bottom - 1.5;
+    return { x: (b.left + b.right) / 2, y: below ? b.bottom : b.top, below };
+  })();
+  const box = (b: ReturnType<typeof roomBounds>): CSSProperties => ({
+    left: b.left * P,
+    top: b.top * P,
+    width: (b.right - b.left) * P,
+    height: (b.bottom - b.top) * P,
+  });
+  const floorSvg = (extra: CSSProperties = {}): CSSProperties => ({ ...box(bounds), ...extra });
+  const viewBox = `${bounds.left * P} ${bounds.top * P} ${floorDims.width * P} ${floorDims.height * P}`;
 
   return (
     <div
@@ -114,15 +178,14 @@ export function RoomCanvas({
       <p id="floor-plan-help" className="sr-only">
         Press Tab to move between{' '}
         {isRoomSetup
-          ? corners
-            ? 'door and window handles and the room corners'
-            : 'door and window handles'
+          ? `${picking ? 'rooms, ' : ''}${corners ? 'door and window handles and the room corners' : 'door and window handles'}`
           : 'furniture pieces'}
         .
         {isRoomSetup
           ? ' Arrow keys slide the focused opening along its wall; hold Shift for larger steps, Alt or Option for fine ones.'
-          : ` Arrow keys move the focused piece by ${feetToDisplay(nudgeStep('normal', unitSystem), unitSystem)}; hold Shift for ${feetToDisplay(nudgeStep('coarse', unitSystem), unitSystem)}, or Alt or Option (or Control or Command) for ${feetToDisplay(nudgeStep('fine', unitSystem), unitSystem)} without snapping. With Snap on, a move that ends close to a wall or another piece lines up with it. R rotates it by 90 degrees, Shift and R rotates the other way; with Alt or Option, by 1 degree. Delete removes it. Escape deselects.`}
+          : ` Arrow keys move the focused piece by ${feetToDisplay(nudgeStep('normal', unitSystem), unitSystem)}; hold Shift for ${feetToDisplay(nudgeStep('coarse', unitSystem), unitSystem)}, or Alt or Option (or Control or Command) for ${feetToDisplay(nudgeStep('fine', unitSystem), unitSystem)} without snapping. With Snap on, a move that ends close to a wall or another piece lines up with it. R rotates it by 90 degrees, Shift and R rotates the other way; with Alt or Option, by 1 degree. I sets it aside. Delete removes it. Escape deselects.`}
         {isRoomSetup ? ' Delete removes the focused door or window.' : ''}
+        {picking ? ' Arrow keys move the focused room; its walls snap to the other rooms.' : ''}
         {corners
           ? ' Arrow keys move the focused corner, with the same steps; Delete removes it. The add corner buttons in the middle of each wall split it with a new corner.'
           : ''}{' '}
@@ -143,10 +206,16 @@ export function RoomCanvas({
               <span className="hidden sm:inline">
                 {corners
                   ? 'Room Setup Mode • Drag corners to reshape • + adds a corner'
-                  : 'Room Setup Mode • Furniture locked • Drag door/window handles to move them'}
+                  : picking
+                    ? 'Room Setup Mode • Drag a room to move it • Drag door/window handles'
+                    : 'Room Setup Mode • Furniture locked • Drag door/window handles to move them'}
               </span>
               <span className="sm:hidden">
-                {corners ? 'Drag corners · + adds one' : 'Room setup · furniture locked'}
+                {corners
+                  ? 'Drag corners · + adds one'
+                  : picking
+                    ? 'Drag a room to move it'
+                    : 'Room setup · furniture locked'}
               </span>
             </>
           ) : (
@@ -170,8 +239,8 @@ export function RoomCanvas({
         <div
           className={`relative shrink-0 ${rect ? 'bg-white shadow-2xl' : ''}`}
           style={{
-            width: roomDims.width * P,
-            height: roomDims.height * P,
+            width: floorDims.width * P,
+            height: floorDims.height * P,
             // The walls sit outside the floor: the interior is exactly the room size, so (0, 0) and
             // (width, height) are the walls' inner faces (where furniture is flush and openings sit).
             // Another outline draws its own walls (below); the border keeps the same box.
@@ -182,6 +251,7 @@ export function RoomCanvas({
           }}
           data-testid="room"
           data-room-shape={rect ? 'rect' : 'outline'}
+          data-rooms={plan.rooms.length}
         >
           <div className="absolute inset-0" style={floorShift}>
             {!rect && (
@@ -193,51 +263,209 @@ export function RoomCanvas({
                 aria-hidden="true"
                 data-testid="room-outline"
               >
-                <path d={outlinePath} fill="none" stroke="#334155" strokeWidth={8} />
-                <path d={outlinePath} fill="#ffffff" />
+                {/* Every room's walls, then every floor over their inner half (walls show outside). */}
+                {plan.rooms.map((r) => (
+                  <path
+                    key={`w-${r.id}`}
+                    d={pathOf(r, P)}
+                    fill="none"
+                    stroke="#334155"
+                    strokeWidth={8}
+                  />
+                ))}
+                {plan.rooms.map((r) => (
+                  <path key={`f-${r.id}`} d={pathOf(r, P)} fill="#ffffff" />
+                ))}
               </svg>
             )}
-            <div
-              className="absolute pointer-events-none opacity-20"
-              style={{
-                ...GRID_STYLE,
-                left: bounds.left * P,
-                top: bounds.top * P,
-                width: roomDims.width * P,
-                height: roomDims.height * P,
-                clipPath: rect ? undefined : clipPolygon,
-              }}
-            />
+            {plan.rooms.map((r) => {
+              const b = roomBounds(r);
+              return (
+                <div
+                  key={`grid-${r.id}`}
+                  className="absolute pointer-events-none opacity-20"
+                  style={{
+                    ...GRID_STYLE,
+                    ...box(b),
+                    clipPath: rect
+                      ? undefined
+                      : `polygon(${r.outline
+                          .map((p) => `${(p.x - b.left) * P}px ${(p.y - b.top) * P}px`)
+                          .join(', ')})`,
+                  }}
+                />
+              );
+            })}
+            {picking && (
+              <svg
+                className="absolute"
+                style={floorSvg()}
+                viewBox={viewBox}
+                aria-hidden="true"
+                data-testid="room-hit"
+              >
+                {plan.rooms.map((r) => {
+                  const on = r.id === room.id;
+                  const dragging = picking.drag?.id === r.id;
+                  return (
+                    <path
+                      key={r.id}
+                      d={pathOf(r, P)}
+                      fill={on ? 'rgb(79 70 229 / 0.06)' : 'transparent'}
+                      stroke={
+                        dragging && picking.drag?.overlap
+                          ? '#dc2626'
+                          : on
+                            ? '#6366f1'
+                            : 'transparent'
+                      }
+                      strokeWidth={on ? 3 * k : 0}
+                      strokeDasharray={on ? `${6 * k} ${4 * k}` : undefined}
+                      style={{
+                        pointerEvents: 'fill',
+                        cursor: on ? 'move' : 'pointer',
+                        touchAction: on ? 'none' : undefined,
+                      }}
+                      onPointerDown={(e) => {
+                        if (on)
+                          picking.onPointerDown(
+                            e as unknown as ReactPointerEvent<HTMLElement>,
+                            r.id,
+                          );
+                      }}
+                      onClick={() => {
+                        if (!on) picking.onSelect(r.id);
+                      }}
+                      data-room-id={r.id}
+                      data-draggable={on ? '' : undefined}
+                    />
+                  );
+                })}
+              </svg>
+            )}
+            {shared.length > 0 && (
+              <svg
+                className="absolute pointer-events-none"
+                style={floorSvg({ overflow: 'visible' })}
+                viewBox={viewBox}
+                aria-hidden="true"
+              >
+                {shared.map((w, i) => (
+                  <line
+                    key={i}
+                    x1={w.start.x * P}
+                    y1={w.start.y * P}
+                    x2={w.end.x * P}
+                    y2={w.end.y * P}
+                    stroke="#334155"
+                    strokeWidth={3}
+                    data-testid="shared-wall"
+                  />
+                ))}
+              </svg>
+            )}
             {/* The floor's origin, for turning pointer positions into floor coordinates. */}
             <div className="absolute left-0 top-0 w-0 h-0" data-floor-origin aria-hidden="true" />
 
-            {doors.map((door) => (
-              <DoorShape
-                key={door.id}
-                opening={door}
-                room={room}
-                isActive={isActive('door', door.id)}
-                isLocked={!isRoomSetup}
-                unitSystem={unitSystem}
-                zoom={zoom}
-                onSelect={() => onSelectOpening('door', door.id)}
-                onHandlePointerDown={(e) => onDoorPointerDown(e, door)}
-                highlight={highlightDoorIds.includes(door.id)}
-              />
-            ))}
-            {windows.map((win) => (
-              <WindowShape
-                key={win.id}
-                opening={win}
-                room={room}
-                isActive={isActive('window', win.id)}
-                isLocked={!isRoomSetup}
-                unitSystem={unitSystem}
-                zoom={zoom}
-                onSelect={() => onSelectOpening('window', win.id)}
-                onHandlePointerDown={(e) => onWindowPointerDown(e, win)}
-              />
-            ))}
+            {several &&
+              plan.rooms.map((r) => {
+                const at = labelAt(r);
+                const name = roomName(plan, r);
+                const area = areaText(roomArea(r), unitSystem);
+                const on = r.id === room.id;
+                // Kept inside the room on screen: the area goes first when it is narrow.
+                const rb = roomBounds(r);
+                const screenW = (rb.right - rb.left) * P * zoom;
+                const roomy = screenW >= 170;
+                const style: CSSProperties = {
+                  maxWidth: Math.max(44, screenW - 14),
+                  left: at.x * P,
+                  top: at.y * P,
+                  transform: `scale(${k})`,
+                  transformOrigin: '0 0',
+                  zIndex: picking ? 60 : 5,
+                };
+                if (!picking) {
+                  if (screenW < 60) return null;
+                  return (
+                    <div
+                      key={`label-${r.id}`}
+                      className="absolute truncate whitespace-nowrap pointer-events-none rounded-md bg-white/80 px-1.5 py-0.5 text-[11px] leading-4 text-slate-600 shadow-xs ring-1 ring-slate-200/80"
+                      style={style}
+                      aria-hidden="true"
+                      data-testid="room-label"
+                    >
+                      <span className="font-semibold text-slate-800">{name}</span>
+                      {roomy && ` ${area}`}
+                    </div>
+                  );
+                }
+                const sz = roomSize(r);
+                return (
+                  <div
+                    key={`label-${r.id}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={on}
+                    aria-label={`${name}, ${feetToDisplay(sz.width, unitSystem)} by ${feetToDisplay(sz.height, unitSystem)}, ${area}. Drag it or use the arrow keys to move it.`}
+                    className={`touch-hit absolute flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-1 text-[11px] font-semibold leading-4 shadow-sm outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-400 cursor-move ${
+                      on
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-white text-slate-700 ring-1 ring-slate-300 hover:ring-indigo-300'
+                    }`}
+                    style={{ ...style, touchAction: 'none' }}
+                    onPointerDown={(e) => picking.onPointerDown(e, r.id)}
+                    onFocus={() => picking.onSelect(r.id)}
+                    data-draggable
+                    data-room-handle={r.id}
+                    data-testid="room-handle"
+                  >
+                    <Move className="w-3 h-3 shrink-0" aria-hidden="true" />
+                    <span className="truncate">{name}</span>
+                    {roomy && (
+                      <span
+                        className={
+                          on ? 'font-normal text-indigo-100' : 'font-normal text-slate-500'
+                        }
+                      >
+                        {area}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+
+            {plan.rooms.flatMap((r) =>
+              doorsOf(r).map((door) => (
+                <DoorShape
+                  key={door.id}
+                  opening={door}
+                  room={r}
+                  isActive={isActive('door', door.id)}
+                  isLocked={!isRoomSetup}
+                  unitSystem={unitSystem}
+                  zoom={zoom}
+                  onSelect={() => onSelectOpening('door', door.id)}
+                  onHandlePointerDown={(e) => onDoorPointerDown(e, door)}
+                  highlight={highlightDoorIds.includes(door.id)}
+                />
+              )),
+            )}
+            {plan.rooms.flatMap((r) =>
+              windowsOf(r).map((win) => (
+                <WindowShape
+                  key={win.id}
+                  opening={win}
+                  room={r}
+                  isActive={isActive('window', win.id)}
+                  isLocked={!isRoomSetup}
+                  unitSystem={unitSystem}
+                  zoom={zoom}
+                  onSelect={() => onSelectOpening('window', win.id)}
+                  onHandlePointerDown={(e) => onWindowPointerDown(e, win)}
+                />
+              )),
+            )}
 
             {shownPieces(plan).map((item) => (
               <FurniturePiece
@@ -257,8 +485,63 @@ export function RoomCanvas({
               />
             ))}
             {overlay}
+            {picking?.drag && picking.drag.guides.length > 0 && (
+              <svg
+                className="absolute pointer-events-none"
+                style={floorSvg({ overflow: 'visible', zIndex: 61 })}
+                viewBox={viewBox}
+                aria-hidden="true"
+              >
+                {picking.drag.guides.map((g, i) => (
+                  <line
+                    key={i}
+                    x1={(g.axis === 'x' ? g.pos : g.from) * P}
+                    y1={(g.axis === 'x' ? g.from : g.pos) * P}
+                    x2={(g.axis === 'x' ? g.pos : g.to) * P}
+                    y2={(g.axis === 'x' ? g.to : g.pos) * P}
+                    stroke="#e11d48"
+                    strokeWidth={1.5 * k}
+                    strokeDasharray={`${4 * k} ${3 * k}`}
+                    data-testid="room-guide"
+                  />
+                ))}
+              </svg>
+            )}
             {corners && (
               <CornerHandles room={room} corners={corners} zoom={zoom} unitSystem={unitSystem} />
+            )}
+            {barAt && (
+              <div
+                className="absolute"
+                style={{
+                  left: barAt.x * P,
+                  top: barAt.y * P,
+                  transform: `translate(-50%, ${barAt.below ? '14px' : 'calc(-100% - 14px)'}) scale(${k})`,
+                  transformOrigin: barAt.below ? 'top center' : 'bottom center',
+                  zIndex: 70,
+                }}
+              >
+                {selectionBar}
+              </div>
+            )}
+            {ghost?.at && (
+              <div
+                className={`absolute pointer-events-none border-2 border-dashed ${
+                  ghost.item.shape === 'ellipse' ? 'rounded-full' : 'rounded-sm'
+                } ${ghost.ok ? 'border-emerald-600' : 'border-red-500'}`}
+                style={{
+                  left: (ghost.at.x - ghost.item.width / 2) * P,
+                  top: (ghost.at.y - ghost.item.depth / 2) * P,
+                  width: ghost.item.width * P,
+                  height: ghost.item.depth * P,
+                  backgroundColor: ghost.ok
+                    ? `${migrateColor(ghost.item.color)}b3`
+                    : 'rgb(254 202 202 / 0.6)',
+                  zIndex: 65,
+                }}
+                data-testid="placement-ghost"
+                data-ok={ghost.ok || undefined}
+              />
             )}
           </div>
         </div>
@@ -282,7 +565,7 @@ function CornerHandles({
   zoom,
   unitSystem,
 }: {
-  room: ReturnType<typeof mainRoom>;
+  room: Room;
   corners: CornerEditing;
   zoom: number;
   unitSystem: UnitSystem;

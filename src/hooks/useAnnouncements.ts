@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { warningText, type ItemWarning } from '../core/geometry';
 import { feetToDisplay } from '../core/units';
-import { boxOf, doorsOf, mainRoom, windowsOf } from '../lib/plans';
+import { roomAt, roomName } from '../core/floor';
+import { boxOf } from '../lib/plans';
 import type { Id, Item, Plan, SaveStatus, UnitSystem } from '../types';
 
 /** Rapid changes (key repeat, drags) are coalesced into one announcement. */
@@ -43,7 +44,10 @@ export function describeLayoutChange(prev: Plan, next: Plan, unitSystem: UnitSys
       continue;
     }
     if (!!old.placement !== !!item.placement) {
-      parts.push(`${item.label} ${item.placement ? 'placed in the room' : 'moved to inventory'}`);
+      const room = item.placement && next.rooms.length > 1 ? roomAt(next, item.placement) : null;
+      parts.push(
+        `${item.label} ${item.placement ? `placed in ${room ? roomName(next, room) : 'the room'}` : 'set aside'}`,
+      );
       continue;
     }
     if (
@@ -83,8 +87,11 @@ export function describeOpeningsChange(prev: Plan, next: Plan): string {
     if (after > before) parts.push(`${kind} restored`);
     else if (after < before) parts.push(`${kind} removed`);
   };
-  diff(doorsOf(mainRoom(prev)).length, doorsOf(mainRoom(next)).length, 'Door');
-  diff(windowsOf(mainRoom(prev)).length, windowsOf(mainRoom(next)).length, 'Window');
+  const count = (p: Plan, kind: 'door' | 'window') =>
+    p.rooms.reduce((n, r) => n + r.openings.filter((o) => o.kind === kind).length, 0);
+  diff(count(prev, 'door'), count(next, 'door'), 'Door');
+  diff(count(prev, 'window'), count(next, 'window'), 'Window');
+  diff(prev.rooms.length, next.rooms.length, 'Room');
   return parts.join('. ');
 }
 

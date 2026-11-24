@@ -19,6 +19,7 @@ import {
   roomBounds,
 } from '../core/geometry/walls';
 import type { Unit } from '../core/schema';
+import { FEET_PER_METER } from '../core/units';
 import { compact } from '../core/share/compact';
 import type { SnapCandidates, SnapPiece } from '../core/snapping';
 import { roomSnapLines } from '../core/geometry/corners';
@@ -187,6 +188,16 @@ export const windowsOf = (room: Pick<Room, 'openings'>): Opening[] =>
 
 /** A room's floor area (square feet): the shoelace formula, so any outline. */
 export const roomArea = (room: Pick<Room, 'outline'>): number => outlineArea(room);
+
+/** An area in square feet as shown: square metres for metric units, else square feet. */
+export const areaText = (sqft: number, units: UnitSystem): string =>
+  units === 'm' || units === 'cm'
+    ? `${Math.round((sqft / (FEET_PER_METER * FEET_PER_METER)) * 10) / 10} m²`
+    : `${Math.round(sqft * 10) / 10} sq ft`;
+
+/** Every room's floor area together (square feet). */
+export const floorArea = (plan: Pick<Plan, 'rooms'>): number =>
+  plan.rooms.reduce((sum, r) => sum + outlineArea(r), 0);
 
 // --- Walls -------------------------------------------------------------------------------------
 
