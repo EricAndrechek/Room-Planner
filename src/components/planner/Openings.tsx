@@ -1,7 +1,7 @@
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { DOOR_TYPES, PIXELS_PER_UNIT } from '../../lib/constants';
-import { SWING_ARC_STROKE, doorStyles, doorSvg, windowStyles } from '../../lib/openings';
-import { feetToDisplay } from '../../lib/units';
+import { SWING_ARC_STROKE, doorStyles, doorSvg, windowStyles } from './openingStyles';
+import { feetToDisplay } from '../../core/units';
 import type { Door, RoomDims, RoomWindow, UnitSystem } from '../../types';
 
 interface OpeningProps<T> {

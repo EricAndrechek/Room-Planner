@@ -9,7 +9,7 @@
  * Cost: {@link buildSnapCandidates} is O(n) once per drag; {@link snapBounds} and
  * {@link measureClearances} are O(n) per pointer move, with no allocation beyond the result.
  */
-import type { FurnitureItem, Id, RoomDims } from '../types';
+import type { FurnitureItem, Id, RoomDims } from './types';
 import { feetToDisplay } from './units';
 
 /** Snap distance in screen pixels: the same feel at every zoom. */

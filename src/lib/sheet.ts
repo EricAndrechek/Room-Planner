@@ -4,7 +4,7 @@
  * Pure helpers: detent order, snapping a drag, the remembered detent and the summary line.
  */
 import { DESIGN_MODES } from './constants';
-import { feetToDisplay } from './units';
+import { feetToDisplay } from '../core/units';
 import type { DesignMode, Layout, Selection, UnitSystem } from '../types';
 
 export type Detent = 'peek' | 'half' | 'full';

@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { FilePlus, Home, Square } from 'lucide-react';
 import type { NewPlanStart } from '../../hooks/useProjectActions';
 import { INITIAL_ROOM } from '../../lib/constants';
-import { feetToDisplay } from '../../lib/units';
+import { feetToDisplay } from '../../core/units';
 import type { UnitSystem } from '../../types';
 import { Tooltip } from './Tooltip';
 

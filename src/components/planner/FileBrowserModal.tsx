@@ -11,7 +11,7 @@ import {
   Square,
   Trash2,
 } from 'lucide-react';
-import { feetToDisplay } from '../../lib/units';
+import { feetToDisplay } from '../../core/units';
 import type { Project, UnitSystem } from '../../types';
 import type { NewPlanStart } from '../../hooks/useProjectActions';
 import { Modal } from './Modal';

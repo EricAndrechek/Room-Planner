@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FileDown, ImageDown, LoaderCircle, Printer } from 'lucide-react';
 import { captureError, track } from '../../lib/analytics';
 import { defaultPaper, type Paper } from '../../lib/export/paper';
-import type { PlanInput } from '../../lib/export/scene';
+import type { PlanInput } from '../../core/render/scene';
 import type { Layout, UnitSystem } from '../../types';
 import { Modal } from './Modal';
 

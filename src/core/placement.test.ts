@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Door, FurnitureItem, Layout } from '../types';
+import type { Door, FurnitureItem, Layout } from './types';
 import { isItemInBounds } from './geometry';
 import { defaultLayout } from './layout';
 import { computeDoorBlocks, computeLayoutWarnings } from './openings';

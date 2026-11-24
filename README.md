@@ -227,11 +227,13 @@ src/
 ├── hooks/                 # useHistory, useProjects (autosave), useProjectActions,
 │                          # useSelection, useOpenings, useFurnitureEditing,
 │                          # usePanZoom, usePointerDrag, useKeyboardShortcuts...
-├── lib/                   # pure, unit-tested logic: units, geometry, layout,
-│                          # share, storage, projects, boot, analytics facade;
-│                          # guides/ (example layouts, their drawings and share links)
+├── core/                  # pure document logic, no React/DOM (ESLint-enforced):
+│                          # units, colors, layout, geometry/, openings, placement,
+│                          # snapping, share/ (link codec), render/ (export scene, SVG)
+├── lib/                   # app logic: storage, projects, boot, analytics facade,
+│                          # export/ (PNG/PDF), guides/ (example layouts, drawings, links)
 ├── styles/global.css      # Tailwind v4 + app styles
-└── types.ts
+└── types.ts             # app types; document types are in core/types.ts
 e2e/                       # Playwright specs
 ```
 

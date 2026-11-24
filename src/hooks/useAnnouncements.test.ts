@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeItemWarnings } from '../lib/geometry';
+import { computeItemWarnings } from '../core/geometry';
 import type { FurnitureItem, Layout } from '../types';
 import {
   describeLayoutChange,

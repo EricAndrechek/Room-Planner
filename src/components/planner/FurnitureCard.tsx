@@ -1,9 +1,9 @@
 import { memo, useId, useRef } from 'react';
 import { AlertTriangle, DoorOpen, Eye, EyeOff, Lock, Trash2, Unlock } from 'lucide-react';
-import { migrateColor } from '../../lib/colors';
-import { normalizeDegrees, warningText, type ItemWarning } from '../../lib/geometry';
-import { doorBlockText } from '../../lib/openings';
-import { clamp } from '../../lib/units';
+import { migrateColor } from '../../core/colors';
+import { normalizeDegrees, warningText, type ItemWarning } from '../../core/geometry';
+import { doorBlockText } from '../../core/openings';
+import { clamp } from '../../core/units';
 import type { FurnitureItem, Id, RoomDims, UnitSystem } from '../../types';
 import { ColorPicker } from './ColorPicker';
 import { DimensionInput } from './DimensionInput';

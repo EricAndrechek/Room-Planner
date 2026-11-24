@@ -33,7 +33,7 @@ import {
   normalizeLayout,
   normalizeRoomDims,
   type LegacyDoor,
-} from './layout';
+} from '../core/layout';
 
 export interface StorageLike {
   getItem(key: string): string | null;

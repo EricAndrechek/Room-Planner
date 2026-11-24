@@ -1,8 +1,8 @@
 import type { PointerEvent as ReactPointerEvent, ReactNode, RefObject } from 'react';
 import { Home, Sofa } from 'lucide-react';
 import { DESIGN_MODES, PIXELS_PER_UNIT } from '../../lib/constants';
-import { feetToDisplay, nudgeStep } from '../../lib/units';
-import type { ItemWarning } from '../../lib/geometry';
+import { feetToDisplay, nudgeStep } from '../../core/units';
+import type { ItemWarning } from '../../core/geometry';
 import type {
   DesignMode,
   Door,

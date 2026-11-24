@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { FurnitureItem } from '../types';
-import { PIXELS_PER_UNIT } from './constants';
+import type { FurnitureItem } from './types';
+import { PIXELS_PER_UNIT } from '../lib/constants';
 import { getRotatedCorners } from './geometry';
 import {
   SNAP_THRESHOLD_PX,

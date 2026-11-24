@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { INITIAL_DOORS, INITIAL_ROOM } from './constants';
-import { checkItemsCollision, computeItemWarnings, isItemInBounds } from './geometry';
-import { defaultLayout } from './layout';
-import { computeDoorBlocks, doorSwingGeometry } from './openings';
+import { checkItemsCollision, computeItemWarnings, isItemInBounds } from '../core/geometry';
+import { defaultLayout } from '../core/layout';
+import { computeDoorBlocks, doorSwingGeometry } from '../core/openings';
 import { createMemoryStorage, loadPersistedState } from './storage';
 
 describe('default (first-visit) layout', () => {

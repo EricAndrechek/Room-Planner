@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import fs from 'node:fs';
 
 const fixture = (name: string) =>
-  JSON.parse(fs.readFileSync(new URL(`../src/lib/__fixtures__/${name}`, import.meta.url), 'utf8'));
+  JSON.parse(fs.readFileSync(new URL(`../src/core/__fixtures__/${name}`, import.meta.url), 'utf8'));
 
 /** Wait for the island to mount and for the initial auto-fit zoom (500ms) to settle. */
 async function ready(page: Page) {

@@ -1,4 +1,4 @@
-import type { UnitSystem } from '../types';
+import type { UnitSystem } from './types';
 
 // Conversion factors (to feet). Internal storage is always feet.
 export const FEET_PER_METER = 3.28084;

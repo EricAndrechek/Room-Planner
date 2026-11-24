@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { MAX_ZOOM, MIN_ZOOM, PIXELS_PER_UNIT, ZOOM_STEP } from '../lib/constants';
-import { clampZoom, computeFitZoom } from '../lib/geometry';
+import { clampZoom, computeFitZoom } from '../core/geometry';
 import type { RoomDims } from '../types';
 
 /**

@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { formatTimeAgo } from '../../lib/browser';
 import { detectPlatform, toolbarHint } from '../../lib/shortcuts';
-import { feetToDisplay, formatArea } from '../../lib/units';
+import { feetToDisplay, formatArea } from '../../core/units';
 import { useNow } from '../../hooks/useNow';
 import type { RoomDims, SaveStatus, UnitSystem } from '../../types';
 import type { NewPlanStart } from '../../hooks/useProjectActions';

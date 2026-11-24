@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, Sofa, Trash2, Unlock } from 'lucide-react';
 import { glowClass, useCardHighlight, type CardRef } from '../../hooks/useCardHighlight';
-import type { ItemWarning } from '../../lib/geometry';
+import type { ItemWarning } from '../../core/geometry';
 import type { FurnitureItem, Id, RoomDims, Selection, UnitSystem } from '../../types';
 import { FurnitureCard } from './FurnitureCard';
 import { StepHeader } from './StepHeader';

@@ -8,9 +8,9 @@
  * run when a `rasterizeText` callback is given (the browser supplies one that
  * renders with the system font); everything else stays vector.
  */
-import { isWinAnsi, measureText, winAnsiByte } from './fontMetrics';
+import { isWinAnsi, measureText, winAnsiByte } from '../../core/render/fontMetrics';
 import { PAPER_SIZES, type Paper } from './paper';
-import type { PathCommand, Rotation, Scene, SceneNode, TextNode } from './scene';
+import type { PathCommand, Rotation, Scene, SceneNode, TextNode } from '../../core/render/scene';
 
 /** A single-color text run rendered to pixels: `alpha` is width x height coverage (0-255). */
 export interface RasterText {

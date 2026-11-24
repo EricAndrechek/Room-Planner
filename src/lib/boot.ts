@@ -3,9 +3,9 @@
  * link (if the URL carries one). Kept free of React so it can be unit tested.
  */
 import type { Project, SaveStatus } from '../types';
-import { fromShareConfig, layoutsEqual, normalizeLayout } from './layout';
+import { fromShareConfig, layoutsEqual, normalizeLayout } from '../core/layout';
 import { SHARED_PROJECT_NAME, createProject, findDuplicateProject, findProject } from './projects';
-import { readShareLink, stripShareLink, type SharedLayoutLink } from './share';
+import { readShareLink, stripShareLink, type SharedLayoutLink } from '../core/share/link';
 import {
   loadPersistedState,
   migrateStorage,

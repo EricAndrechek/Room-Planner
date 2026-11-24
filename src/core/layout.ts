@@ -7,7 +7,7 @@ import type {
   RoomWindow,
   UnitSystem,
   Wall,
-} from '../types';
+} from './types';
 import {
   DOOR_TYPES,
   INITIAL_DOORS,

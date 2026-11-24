@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { captureError, track } from '../lib/analytics';
 import { boot, bootFromStorage, type BootResult } from '../lib/boot';
-import { hasShareLink } from '../lib/share';
+import { hasShareLink } from '../core/share/link';
 import { getBrowserStorage } from '../lib/storage';
 import { ErrorBoundary } from './ErrorBoundary';
 import { Planner } from './planner/Planner';

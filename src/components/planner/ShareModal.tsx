@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Copy, Download, Mail, MonitorSmartphone, Share, Upload } from 'lucide-react';
 import { captureError, track } from '../../lib/analytics';
 import { copyText } from '../../lib/browser';
-import { isShareConfig, type ShareConfig } from '../../lib/layout';
+import { isShareConfig, type ShareConfig } from '../../core/layout';
 import { makeQr, qrPath, type QrMatrix } from '../../lib/qr';
-import { buildShareUrl } from '../../lib/share';
+import { buildShareUrl } from '../../core/share/link';
 import { Modal } from './Modal';
 
 interface ShareModalProps {
