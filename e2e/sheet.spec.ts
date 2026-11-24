@@ -82,11 +82,26 @@ async function dragHandle(page: Page, dy: number, ms: number) {
         .querySelector('[data-testid="sheet-handle"]')!
         .dispatchEvent(new PointerEvent('pointerdown', o(y, 1)));
       const steps = 10;
-      for (let i = 1; i <= steps; i++) {
-        await new Promise((r) => setTimeout(r, ms / steps));
-        window.dispatchEvent(new PointerEvent('pointermove', o(y + (dy * i) / steps, 1)));
+      // The sheet measures a release's speed with performance.now(). On a loaded runner the
+      // browser can stall for tens of milliseconds mid-gesture (seen: 30-80 ms in Firefox), which
+      // turns a 40 ms flick into a slow drag whatever the test does with timers. So the gesture
+      // runs on a virtual clock: performance.now() advances exactly ms/steps per move, as on a
+      // device that keeps up. Slow drags keep real timers; stalls only make them slower, which
+      // doesn't change their outcome.
+      const flick = ms < 100;
+      const realNow = performance.now.bind(performance);
+      let clock = realNow();
+      if (flick) performance.now = () => clock;
+      try {
+        for (let i = 1; i <= steps; i++) {
+          if (flick) clock += ms / steps;
+          else await new Promise((r) => setTimeout(r, ms / steps));
+          window.dispatchEvent(new PointerEvent('pointermove', o(y + (dy * i) / steps, 1)));
+        }
+        window.dispatchEvent(new PointerEvent('pointerup', o(y + dy, 0)));
+      } finally {
+        if (flick) performance.now = realNow;
       }
-      window.dispatchEvent(new PointerEvent('pointerup', o(y + dy, 0)));
     },
     { x: b.x + b.width / 2, y: b.y + 30, dy, ms },
   );
