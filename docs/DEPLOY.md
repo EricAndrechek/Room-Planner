@@ -1,8 +1,12 @@
 # Deploying Room Planner (Cloudflare Workers)
 
-Hosting is one Cloudflare Worker. The app is a Worker with static assets (`wrangler.jsonc`, served
-at `room-planner.andrechek.com`): `dist/` is served by the assets layer. It is an assets-only Worker (no `main`, no Worker code, no invocations or Worker
-limits). The old hostname `roomplanner.andrechek.com` is a Cloudflare redirect rule, not a Worker
+Hosting is one Cloudflare Worker with static assets (`wrangler.jsonc`, served at
+`room-planner.andrechek.com`). `dist/` is served by the assets layer. The Worker code
+(`worker/index.ts`) runs only for `/mcp` and `/mcp/*` (`assets.run_worker_first`): the MCP server
+for AI assistants (docs/design/plan-format.md, section 7). Every page, asset and 404 is served
+without invoking the Worker, so the Workers Free daily invocation limit (100,000) is spent only on
+MCP requests. A rate-limit binding (`MCP_LIMIT`, 120 requests per minute per client IP) guards
+`/mcp`; it needs no setup in the dashboard. The old hostname `roomplanner.andrechek.com` is a Cloudflare redirect rule, not a Worker
 (section 5). PostHog analytics go directly from the browser to PostHog US cloud; there is no proxy.
 
 The `andrechek.com` zone lives in the maintainer's Cloudflare account.
@@ -72,9 +76,18 @@ the same path, which is what Change of address requires). Update any external li
 
 ```sh
 pnpm build
-pnpm dev:worker         # serves dist/ (assets only) on http://localhost:8787
-pnpm exec wrangler deploy --dry-run --outdir /tmp/out   # validate config, no upload
+pnpm dev:worker         # serves dist/ and /mcp on http://localhost:8787
+pnpm exec wrangler deploy --dry-run --outdir /tmp/out   # validate config and bundle, no upload
+npx @modelcontextprotocol/inspector --cli http://localhost:8787/mcp --transport http --method tools/list
 ```
+
+Against `wrangler dev` (or a preview, via `E2E_BASE_URL`) `e2e/mcp.spec.ts` also runs its `/mcp`
+tests: a real call, CORS, 405/404 and a 429 burst. `astro preview` has no Worker, so they skip
+there. `MCP_SHOTS_DIR=<dir>` saves screenshots of the plan viewer.
+
+`server.json` (repository root) is the MCP Registry entry. Publishing is manual, once, by the owner:
+`mcp-publisher login github`, then `mcp-publisher publish` from the repository root (bump its
+`version` with `package.json` for a new listing).
 
 `_headers` (from `public/`, copied into `dist/`) applies in `wrangler dev`.
 

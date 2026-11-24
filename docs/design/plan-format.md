@@ -25,12 +25,12 @@ reason for it.
 | Newer document, older app | Never loaded, never overwritten. The app shows "update Room Planner". Ships in the first schema PR.                                    |
 | Share links               | Still `#s=` + deflate + base64url. The JSON inside becomes a positional array. 43% shorter than the canonical JSON.                    |
 | Core package              | `src/core/`, a folder with an import boundary enforced by ESLint. Not a workspace package.                                             |
-| MCP server                | `/mcp` on the existing Worker, official SDK `createMcpHandler`, stateless. Four tools that take or return a whole plan.                |
-| MCP image                 | PNG through `@resvg/resvg-wasm`. Needs 30 to 65 ms of CPU per image, so it needs the Workers Paid plan. The account is on Free.        |
+| MCP server                | `/mcp` on the existing Worker, official SDK `createMcpHandler`, stateless. Three tools that take or return a whole plan.               |
+| MCP image                 | No server-side image. An MCP Apps view (`ui://`) draws the plan's SVG in the chat client. PNG would need Workers Paid (declined).      |
 | WebMCP                    | Ten tools registered from a lazy chunk when `document.modelContext` (or `navigator.modelContext`) exists. Each is one undo step.       |
 
-One decision needs the owner: whether to pay for Workers Paid (USD 5 per month) so the MCP server
-can return PNG images. Section 11 has the detail and the fallback.
+The one owner decision, Workers Paid for PNG images, was taken: the account stays on Workers Free,
+and the MCP server shows plans through an MCP Apps view instead (section 7, "The plan viewer").
 
 ## 2. Schema library
 
@@ -622,8 +622,17 @@ server factory:
 - turns a schema failure into a tool error that names the path, for example
   `plan.unit: Invalid option: expected one of "ft"|"in"|"m"|"cm"`.
 
-Measured: the Worker bundle with the SDK and the schema is 326 KB (87 KB gzip). A `tools/list` or a
+Measured: the spike's Worker bundle with the SDK and the schema was 326 KB (87 KB gzip). The PR 4
+Worker, with the drawing code and the viewer, is 415 KB minified (120 KB gzip). A `tools/list` or a
 `check_layout` call on the 40-item apartment costs about 1 ms of CPU.
+
+As built (PR 4), the code is in `worker/`: `index.ts` (the entry: `/mcp*` to `http.ts`, anything
+else to the assets), `http.ts` (CORS, rate limit, 404/405/413/429, the server card), `mcp.ts` (the
+server factory), `tools.ts` (what each tool computes, with no SDK, so unit and e2e tests call it
+directly), `link.ts` (edit links), `descriptions.ts` and `viewer/viewer.html`. Tool input schemas
+are `z.toJSONSchema(Plan, { io: 'input' })`, handed to the SDK as a Standard Schema whose `validate`
+only checks for an object: the handler reads the plan with `loadPlan(..., 'strict')`, so every
+problem comes back at once, one line per path (`plan.rooms.0.openings.1.wall: ...`).
 
 Cloudflare's `agents` package wraps the same SDK function and adds nothing a stateless server
 needs, so it is not used.
@@ -637,14 +646,16 @@ right tool.
 
 ### Tools
 
-All four are read-only in the MCP sense (`readOnlyHint: true`): they compute and return.
+All three are read-only in the MCP sense (`readOnlyHint: true`): they compute and return.
 
-| Tool           | Input                                              | Output (`structuredContent`)                | Use                                                        |
-| -------------- | -------------------------------------------------- | ------------------------------------------- | ---------------------------------------------------------- |
-| `create_plan`  | `{ plan: Plan }`                                   | `{ plan, issues, summary, url }`            | Turn rooms and items into a checked plan and an edit link. |
-| `check_layout` | `{ plan: Plan, minClearance?: number }`            | `{ ok, issues, summary }`                   | Cheap loop while arranging: no link, no image.             |
-| `render_plan`  | `{ plan?: Plan, url?: string, width?: 400..1600 }` | PNG image content, plus `{ issues, url }`   | Show the user the plan.                                    |
-| `read_plan`    | `{ url: string }`                                  | `{ plan }` in the unit the plan displays in | Start from a plan the user already has (any link format).  |
+| Tool           | Input                                   | Output (`structuredContent`)                       | Use                                                        |
+| -------------- | --------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------- |
+| `create_plan`  | `{ plan: Plan }`                        | `{ plan, issues, summary, url }`, and the viewer   | Turn rooms and items into a checked plan and an edit link. |
+| `check_layout` | `{ plan: Plan, minClearance?: number }` | `{ ok, issues, summary }`                          | Cheap loop while arranging: no link, no drawing.           |
+| `read_plan`    | `{ url: string }`                       | `{ plan, summary, issues }` (display unit), viewer | Start from a plan the user already has (any link format).  |
+
+The design's fourth tool, `render_plan` (a PNG), is not built: `create_plan` and `read_plan` show
+the drawing through the plan viewer below, so a separate "show" tool would only lengthen the list.
 
 Details that implementers need:
 
@@ -653,29 +664,95 @@ Details that implementers need:
   for the agent.
 - `plan` in an output is normalised (ids and defaults filled, outline clockwise) and converted back
   to the unit the agent sent, so the agent can edit and resend it.
-- `url` is the `#s=` link in compact form. It is also the last line of the text content, alone on
-  its line, so a client that shows only text still shows it whole.
+- `url` is the edit link (see "Links that today's app opens"). It is also the last line of the text
+  content, alone on its line, so a client that shows only text still shows it whole.
 - `Issue` is `{ code, severity: 'error' | 'warning' | 'info', message, ids: string[] }`. Codes:
   `item_overlap`, `item_outside_room`, `door_blocked`, `doorway_blocked`, `opening_overlap`,
   `opening_off_wall`, `room_overlap`, `tight_clearance`, `unknown_field`. `message` is a full
   sentence with names and distances in the plan's unit ("Sofa overlaps Coffee Table by 4 in").
 - `tight_clearance` is `info`: a gap above zero and below `minClearance` (default 24 in) between
-  two pieces or a piece and a wall. It reuses `measureClearances`.
-- `summary` is one paragraph: room sizes and areas, counts, and what is in the inventory.
+  two pieces or a piece and a wall. It reuses `measureClearances`. `ok` is true when no issue is an
+  error or a warning.
+- `summary` is one paragraph: room sizes and areas, counts, and what is hidden or in the inventory.
 - Tool descriptions carry what an agent needs to write a plan cold: the coordinate system, the
-  rectangle recipe and its wall numbers, that `placement` is the centre, and a short list of common
-  sizes (queen bed 60 × 80 in, three-seat sofa 84 × 36 in, interior door 30 to 32 in). There is no
-  catalogue.
+  rectangle recipe and its wall numbers, the direction of `offset` on each wall, that `placement`
+  is the centre, and a short list of common sizes and clearances. There is no catalogue. The
+  format is in both `create_plan` and `check_layout`, since an agent may read only the tool it
+  calls first; the server's `instructions` give the workflow.
 - The loose schema accepts unknown keys. For agents that is usually a typo, so the MCP layer
-  reports each as `unknown_field` instead of rejecting or silently keeping it.
-- Limits: request body 256 KB; the schema's own caps (50 rooms, 500 items, 64 corners per room).
+  reports each as `unknown_field` (a warning, with its path) instead of rejecting or silently
+  keeping it.
+- Limits: request body 256 KB (413 above it); the schema's own caps (50 rooms, 500 items, 64
+  corners per room).
+- Plans are never logged. The SDK's error callback logs the error's name only, since a message can
+  quote the request.
 
-### Image output
+### Links that today's app opens
 
-Most MCP clients show PNG or JPEG image content and nothing else; at least one fails outright on an
-SVG image. So `render_plan` must rasterise. `@resvg/resvg-wasm` 2.6.2 was measured on the SVG that
-today's export pipeline produces (the 4-room drawing is four of today's room drawings in a grid,
-104 text labels):
+The deployed app holds v3 layouts until PR 5 (`APP_PLAN_VERSION` is 3), and answers a v4 link with
+the "needs a newer Room Planner" dialog (section 4). So until then the server writes the v3 share
+form: `#s=` with the `{ name, unitSystem, roomDims, doors, windows, items }` JSON the app itself
+writes (`worker/link.ts`, the inverse of the 3 → 4 migration). The room moves to the origin, an
+outline may start at any corner, openings get v3 walls, positions and hinges, pieces get their
+top-left corner, and lengths are written in the plan's display unit. A property test checks that
+the app's own reading of such a link (`loadPlan`, as every link is read) gives the same room,
+openings and pieces, and an e2e test opens a server-made link in the app and compares what it
+stored.
+
+What the v3 form cannot hold:
+
+- **Blocks the link:** more than one room, an outline that is not an axis-aligned rectangle,
+  `l` or `ellipse` pieces, pieces without `placement`. `create_plan` returns a tool error that
+  names them and says what the app edits today; `check_layout` accepts every plan.
+- **Left out, said in the text:** room names and item notes (no v3 field). Ids are renumbered
+  (`item-1`, ...).
+
+The switch is one function, `planLink`. It reads `APP_PLAN_VERSION`: once PR 5 raises it to
+`PLAN_VERSION`, every plan gets the compact v4 link (`compact` and the codec, which PR 5 keeps) and
+nothing is blocked; a test with `APP_PLAN_VERSION` mocked to 4 pins that branch. The v3 half of
+`link.ts` and its tests are deleted then. It imports nothing PR 5 removes (`core/layout.ts`,
+`core/adapter/`). Worker and assets deploy together, so the server always writes the links the
+site it ships with can open; copies older than PR 2 are risk 4 in section 11.
+
+Link source attribution (`share_link_opened` with `source: 'mcp'`) needs `boot.ts`, which PR 5
+owns, so PR 4 does not add it; PR 5 can append `&src=mcp` in `planLink` and read it in boot.
+
+### The plan viewer (MCP Apps)
+
+The account stays on Workers Free (10 ms of CPU per request); a PNG takes 30 to 65 ms (measured
+below), and the owner declined Workers Paid. So the server never rasterises. It implements the MCP
+Apps extension (SEP-1865, protocol `2026-01-26`; Claude web and desktop, ChatGPT, VS Code and Goose
+render it): the user's browser draws the plan.
+
+- **Resource:** `ui://room-planner/plan-viewer.html`, `text/html;profile=mcp-app`,
+  `_meta.ui.prefersBorder: true`, no `csp` (it fetches nothing, so the host's no-network default is
+  right). One self-contained file, `worker/viewer/viewer.html` (about 17 KB of inline CSS and
+  script, bundled by Wrangler as text). It speaks the postMessage JSON-RPC by hand
+  (`ui/initialize`, `ui/notifications/initialized`, `tool-input`, `tool-result`,
+  `host-context-changed`, `size-changed`, `ui/open-link`, and replies to `ui/resource-teardown` and
+  `ping`) instead of using the ext-apps `App` class, whose browser bundle is 129 KB gzip.
+- **Linked from** `create_plan` and `read_plan` by `_meta.ui.resourceUri` (plus the deprecated
+  flat `ui/resourceUri` key that the SDK's own helper also writes). `check_layout` has no view: it
+  is the agent's inner loop.
+- **Data:** the tool result's `_meta["com.andrechek.room-planner/view"]`:
+  `{ title, summary, svg, issues, url }`. `_meta` reaches the view but not the model, so the SVG
+  (about 10 KB) costs no tokens. The SVG is the export's drawing (`buildPlanScene`) with the opt-in
+  `data-id` attribute on rooms, openings and pieces.
+- **What it shows:** the drawing with its dimensions, area and scale bar, as a white sheet in
+  either theme; pieces with errors outlined red, pieces and doors with warnings amber; the errors
+  and warnings as a list (choosing one points at its entities and dims the rest), tight gaps under
+  a closed disclosure; and **Open in Room Planner**, which asks the host to open the link
+  (`ui/open-link`; the sandbox blocks `window.open`). Light and dark follow `hostContext.theme` and
+  the host's CSS variables, with fallbacks for every one; safe-area insets are honoured. Axe finds
+  no serious issue in either theme.
+- **Without MCP Apps:** clients ignore `_meta`, and the text content carries the summary, the
+  issues and the link, last and alone on its line; `structuredContent` has the data. If a host
+  drops the result's `_meta`, the view still shows the summary, the issues and the button, and says
+  the drawing was not passed. An SVG as an embedded resource was considered for plain clients and
+  left out: it would put about 10 KB of markup in the model's context on every call.
+
+A PNG stays possible: `@resvg/resvg-wasm` 2.6.2 was measured on the export's SVG (the 4-room drawing
+is four of today's room drawings in a grid, 104 text labels):
 
 | Plan              | 800 px wide | 1200 px wide | 1600 px wide | PNG at 1200 px |
 | ----------------- | ----------: | -----------: | -----------: | -------------: |
@@ -683,54 +760,41 @@ today's export pipeline produces (the 4-room drawing is four of today's room dra
 | 25-piece room     |    25–29 ms |     40–43 ms |     57–66 ms |         108 KB |
 | 4 rooms, 40 items |    36–37 ms |     59–65 ms |    96–103 ms |         157 KB |
 
-These are CPU times per image in Node (the same V8 and WebAssembly engine as Workers). Starting the
-wasm module costs another 28 to 55 ms once per isolate. The wasm file is 2.48 MB (947 KB gzip),
-inside the Worker size limit. Text needs fonts passed in: Inter Latin 500 and 700 as `.woff2`
-(24 KB each, already a dev dependency) rendered correctly; the `.woff` files rendered no text.
-
-**The account is on the Workers Free plan** (checked read-only: the account's subscriptions are
-Cloudflare Free, R2 Paid, Zero Trust Free and the Analytics Engine beta; there is no Workers Paid
-subscription). Free allows 10 ms of CPU per request. Every image above needs three to ten times
-that. Paid allows 30 s by default.
-
-Decision: `render_plan` needs Workers Paid. Until the owner enables it, the tool is not registered,
-and `create_plan` tells the agent that the link shows the drawing. With Paid:
-
-- default width 1000 px, maximum 1600 px;
-- `limits.cpu_ms` set to 500, so one request cannot run away;
-- the wasm module and fonts are imported statically and initialised on first use.
-
-Rejected fallbacks: returning SVG as image content (clients do not show it); a JavaScript
-rasteriser (slower than the wasm one, so further over the limit); a second host for rendering
-(more to run, and the plan would leave Cloudflare).
-
-Labels outside Latin and Latin Extended would draw as missing glyphs in the PNG. PR 6 adds the
-Latin Extended files (36 KB each) and replaces characters the fonts lack with `?`, with a test. The
-edit link always shows the real text.
+Starting the wasm module costs another 28 to 55 ms once per isolate; the wasm file is 2.48 MB
+(947 KB gzip); text needs Inter `.woff2` passed in. That needs Workers Paid (30 s of CPU by
+default). Revisit it only if usage shows that clients people actually use lack MCP Apps.
 
 ### Rate limiting and abuse
 
-- Two Workers rate-limit bindings (`ratelimits` in `wrangler.jsonc`), keyed by client IP because
-  there is no other identity: `MCP_LIMIT` at 60 per 60 s for every call, `MCP_RENDER_LIMIT` at
-  10 per 60 s for `render_plan`. Cloudflare's guidance prefers a key other than IP; with no
-  accounts there is none, and the counters are per location and approximate, which is acceptable.
+- One Workers rate-limit binding (`ratelimits` in `wrangler.jsonc`), keyed by client IP because
+  there is no other identity: `MCP_LIMIT` at 120 per 60 s for every request to `/mcp` and
+  `/mcp/*` except CORS preflights. 120, not 60: a 2025-era client spends three requests
+  (`initialize`, `notifications/initialized`, `tools/list`) before its first call, and an agent
+  loops on `check_layout`. Cloudflare's guidance prefers a key other than IP; with no accounts
+  there is none, and the counters are per location and approximate, which is acceptable.
 - Over the limit: HTTP 429 with `Retry-After` and a JSON-RPC error that says to wait.
 - The zone has Bot Fight Mode off and no AI-bot blocking (checked read-only). Keep it that way: on
   a Free zone Bot Fight Mode cannot be skipped for one path and would challenge MCP clients.
 
 ### HTTP details
 
-- **CORS:** `Access-Control-Allow-Origin: *`, methods `POST, OPTIONS`, headers `content-type`,
-  `accept`, `mcp-protocol-version`, `mcp-method`, `mcp-name`, `mcp-session-id`. `OPTIONS` returns 204. The
-  endpoint has no cookies and no credentials, so any origin is safe, and "any origin, or none" is
-  the Origin validation policy.
+- **CORS:** `Access-Control-Allow-Origin: *`, methods `POST, OPTIONS` (`GET, HEAD, OPTIONS` on the
+  server card), `Access-Control-Allow-Headers: *` and `Access-Control-Expose-Headers: *`. The
+  wildcard is honoured because no credentials are ever sent, and it covers the 2026-07-28
+  `Mcp-Param-*` headers, which a fixed list cannot. `OPTIONS` returns 204. The endpoint has no
+  cookies and no credentials, so any origin is safe, and "any origin, or none" is the Origin
+  validation policy.
 - **Response headers:** `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`. `_headers`
   does not apply to Worker responses, so the site's CSP is neither needed nor sent here.
-- **Routing:** `wrangler.jsonc` gains `main: "worker/index.ts"`, an `ASSETS` binding and
-  `assets.run_worker_first: ["/mcp", "/mcp/*"]`. Every other request is served from assets without
-  running the Worker, so the site stays free and unmetered. A request that matches no asset reaches
-  the Worker, which returns `env.ASSETS.fetch(request)` so the existing 404 page still appears. An
-  e2e test covers the 404 page, `/mcp` and the home page on the preview URL.
+- **Routing:** `wrangler.jsonc` gains `main: "worker/index.ts"`, an `ASSETS` binding,
+  `assets.run_worker_first: ["/mcp", "/mcp/*"]`, `minify` and `upload_source_maps`. Every other
+  request is served from assets without running the Worker, so the site stays free and unmetered;
+  with `not_found_handling: "404-page"` an unknown path gets the 404 page from the assets layer
+  too. Should one reach the Worker anyway, it returns `env.ASSETS.fetch(request)`. `/mcp/`
+  (trailing slash) is the endpoint too; any other `/mcp/*` path is a JSON 404, and methods other
+  than POST (and OPTIONS) on `/mcp` are 405 with `Allow`. The entry module exports only the
+  handler: workerd rejects other named exports. An e2e test covers the 404 page, `/mcp` and the
+  home page on the preview URL.
 - **Service worker:** `/mcp` is already outside it (`navigateFallbackAllowlist` is `/` only and
   nothing is cached at runtime). PR 4 adds `/^\/mcp/` and `/^\/\.well-known\//` to
   `navigateFallbackDenylist` as a guard, and a PWA e2e test that a fetch to `/mcp` from the
@@ -743,25 +807,32 @@ edit link always shows the real text.
 ### Discovery
 
 - `GET /mcp/server-card` returns the MCP Server Card (SEP-2127, media type
-  `application/mcp-server-card+json`): name, title, description, version, website, repository, and
-  the remote `{ type: "streamable-http", url: "https://room-planner.andrechek.com/mcp" }`.
-- `/.well-known/ai-catalog.json` is a static asset with one entry that points at the card.
+  `application/mcp-server-card+json`, `$schema` the v1 card schema): name, title, description (at
+  most 100 characters), version, website, repository, icon, and the remote
+  `{ type: "streamable-http", url: "https://room-planner.andrechek.com/mcp",
+supportedProtocolVersions }`, which lists 2026-07-28 and the 2025-era revisions.
+- `/.well-known/ai-catalog.json` is a static asset with one entry that points at the card, served
+  as `application/ai-catalog+json` with `Access-Control-Allow-Origin: *` (`public/_headers`).
 - `llms.txt` gains an "For AI agents" section with the endpoint and one line per tool.
 - A page `/agents/` explains how to add the server to a client and repeats the privacy statement.
-- The official MCP Registry gets a `server.json` named `io.github.ericandrechek/room-planner`
-  (GitHub namespace, published with `mcp-publisher`). This is a one-time manual step for the owner
-  after PR 4 is live.
+- The official MCP Registry gets a `server.json` (repository root) named
+  `io.github.EricAndrechek/room-planner`: the registry grants `io.github.<login>/*` with the GitHub
+  login's own capitals and matches the prefix case-sensitively, so the lower-case name first
+  written here would be refused. Published with `mcp-publisher`, a one-time manual step for the
+  owner after PR 4 is live. A unit test keeps `server.json`, the card and the catalog in step.
 
 ### Privacy statement
 
-For `/agents/`, the server card description and the help page:
+For `/agents/`, the help page and the FAQ (the server card's description is capped at 100
+characters):
 
 > The MCP server processes each plan in memory to answer the request and then discards it. It
 > stores nothing, has no accounts, and does not log plans. A plan link it returns holds the whole
 > plan in the part of the URL after `#`, which browsers do not send to any server.
 
-`llms.txt` and the FAQ currently say plans are never uploaded. PR 4 changes that to: never
-uploaded by the app; sent to the MCP server only when an AI assistant is asked to use it.
+`llms.txt` and the FAQ said plans are never uploaded. PR 4 changes that to: never uploaded by the
+app; sent to the MCP server only when an AI assistant is asked to use it (footer, home page, FAQ,
+help and llms.txt; the statement above is `MCP_PRIVACY` in `src/lib/site.ts`).
 
 ### Versioning the tool API
 
@@ -883,9 +954,9 @@ review: S is under a day, M is one to two days, L is three to five.
 | 1   | Core extraction: move the pure modules into `src/core/`, split React style helpers out of `openings.ts`, split `scene.ts` into rooms and items files, ESLint boundary. No behaviour change.       | nothing                                 | none       | M      | low    |
 | 2   | Schema and migrations, unused by the app: `schema.ts`, `migrate/`, `load.ts`, `toFeet`, compact share codec, every fixture, property tests. The "needs a newer version" dialog on all read paths. | nothing (the dialog cannot trigger yet) | 1          | M      | low    |
 | 3   | Core on `Plan`: `wallFrame`, `itemParts`, `checkLayout`, `ops.ts`, placement and scene take a `Plan`. The app keeps its v3 state and calls core through `planFromLayout`. Golden SVG tests.       | nothing                                 | 2          | L      | medium |
-| 4   | MCP server: Worker, `create_plan`, `check_layout`, `read_plan`, rate limits, CORS, server card, `/agents/` page, llms.txt, privacy text, PWA denylist.                                            | new `/agents/` page                     | 3          | M      | medium |
+| 4   | MCP server: Worker, `create_plan`, `check_layout`, `read_plan`, the MCP Apps plan viewer, rate limit, CORS, server card, `/agents/` page, llms.txt, privacy text, PWA denylist.                   | new `/agents/` page                     | 3          | M      | medium |
 | 5   | App state on v4: history holds a `Plan`, new storage keys with the legacy recovery, links and JSON written in v4, guide examples as plans. Removes `planFromLayout` and the old types.            | nothing (shorter links)                 | 3          | L      | high   |
-| 6   | `render_plan` with resvg. Needs Workers Paid.                                                                                                                                                     | no                                      | 4, owner   | S      | low    |
+| 6   | Folded into PR 4: the plan viewer (MCP Apps) instead of a PNG `render_plan`. A PNG (resvg, Workers Paid) only if clients without MCP Apps turn out to matter.                                     | no                                      | 4          | -      | -      |
 | 7a  | Furniture shapes: L and round in the card, the canvas, the export.                                                                                                                                | yes                                     | 5          | M      | medium |
 | 7b  | Room shapes: Shape control, L-shape fields, custom outline editing, wall list, openings on any wall.                                                                                              | yes                                     | 5          | L      | high   |
 | 8   | Inventory: tray, take out, place, export list.                                                                                                                                                    | yes                                     | 5          | M      | low    |
@@ -894,16 +965,16 @@ review: S is under a day, M is one to two days, L is three to five.
 
 ### Test strategy per PR
 
-| PR  | Tests                                                                                                                                                                                                            |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | The existing unit and e2e suites pass with no edits except import paths. The planner chunk size is within 1%.                                                                                                    |
-| 2   | Fixture tests for every row of the table in section 4, the property tests listed there, a chunk-size check (the schema stays out of the planner chunk, which grows only by the read-path checks: +0.46 KB gzip). |
-| 3   | SVG export byte-identical to `main` for every fixture and guide example. Warnings identical. The existing snapping, openings and placement tests pass through the adapter.                                       |
-| 4   | Worker unit tests through the handler with both protocol eras. e2e on the preview URL: 404 page, `/mcp` call, CORS preflight, 429. CSP and PWA e2e unchanged and passing.                                        |
-| 5   | Storage migration e2e from each storage fixture. Rollback and recovery test. Old and new links open. Two-tab test. A newer-version plan in storage survives a save untouched.                                    |
-| 6   | PNG decodes, has the expected size and is not blank. CPU time logged in a preview deploy.                                                                                                                        |
-| 7–9 | Geometry unit and property tests per shape, e2e for each new control on desktop and phone projects, axe checks, keyboard-only e2e for outline editing.                                                           |
-| 10  | Fake `modelContext` unit tests and one e2e, as in section 8.                                                                                                                                                     |
+| PR  | Tests                                                                                                                                                                                                                           |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | The existing unit and e2e suites pass with no edits except import paths. The planner chunk size is within 1%.                                                                                                                   |
+| 2   | Fixture tests for every row of the table in section 4, the property tests listed there, a chunk-size check (the schema stays out of the planner chunk, which grows only by the read-path checks: +0.46 KB gzip).                |
+| 3   | SVG export byte-identical to `main` for every fixture and guide example. Warnings identical. The existing snapping, openings and placement tests pass through the adapter.                                                      |
+| 4   | Worker unit tests through the handler with both protocol eras. e2e on the preview URL: 404 page, `/mcp` call, CORS preflight, 429. A server-made link opened in the app; the viewer under a test host. CSP and PWA e2e passing. |
+| 5   | Storage migration e2e from each storage fixture. Rollback and recovery test. Old and new links open. Two-tab test. A newer-version plan in storage survives a save untouched.                                                   |
+| 6   | Only if a PNG is ever added: PNG decodes, has the expected size and is not blank. CPU time logged in a preview deploy.                                                                                                          |
+| 7–9 | Geometry unit and property tests per shape, e2e for each new control on desktop and phone projects, axe checks, keyboard-only e2e for outline editing.                                                                          |
+| 10  | Fake `modelContext` unit tests and one e2e, as in section 8.                                                                                                                                                                    |
 
 ### What can run in parallel
 
@@ -917,7 +988,7 @@ review: S is under a day, M is one to two days, L is three to five.
   `RoomSetupPanel.tsx`, `RoomCanvas.tsx`, `Openings.tsx`, `useOpenings.ts`, `core/geometry/walls.ts`
   and `core/render/scene/rooms.ts`. PR 8 also needs `FurniturePanel.tsx`, so it starts when 7a has
   merged, or takes the tray as a new component file and adds one line to the panel.
-- **PR 6** any time after PR 4.
+- **PR 6** is folded into PR 4.
 - PRs 1, 2 and 3 are strictly in order. PR 9 and PR 10 are last and in order.
 
 The phone bottom sheet (issue #32) touches `Sidebar.tsx`, `Planner.tsx` and the mobile e2e specs.
@@ -925,12 +996,12 @@ PR 5 also edits `Planner.tsx`; whichever merges second rebases. PRs 1 to 4 do no
 
 ## 11. Risks and open questions
 
-Each has a recommendation. Only the first needs the owner.
+Each has a recommendation. The first was the owner's decision and is settled.
 
-1. **Workers Paid for PNG images (owner decision).** The account is on Free; a PNG needs 30 to
-   65 ms of CPU and Free allows 10 ms. Recommendation: enable Workers Paid (USD 5 per month) when
-   PR 4 is live, then merge PR 6. Without it, the MCP server ships without `render_plan` and agents
-   give the user the link to see the drawing. Nothing else in the plan depends on this.
+1. **Workers Paid for PNG images (decided: no).** The account is on Free; a PNG needs 30 to 65 ms
+   of CPU and Free allows 10 ms. The owner declined Workers Paid, so the MCP server shows plans
+   through the MCP Apps viewer (section 7) and gives every client the link. Revisit a PNG only if
+   usage shows that clients people use lack MCP Apps.
 2. **Free-plan limits without the image tool.** Tool calls measured about 1 ms of CPU, well inside
    10 ms. Free also caps Worker invocations at 100,000 per day; requests for missing pages count,
    site assets do not. Recommendation: accept, and watch the invocation count after PR 4.
