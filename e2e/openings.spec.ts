@@ -77,11 +77,11 @@ for (const opening of KINDS) {
   });
 }
 
-// The phone layout (off-canvas sheet) in every project, including the desktop-only `ci` run.
+// The phone layout (the bottom sheet, half open) in every project, including the desktop-only `ci` run.
 test.describe('phone-sized viewport', () => {
   test.use({ viewport: { width: 390, height: 844 } });
   for (const opening of KINDS) {
-    test(`adding ${opening.kind}s in the sidebar sheet keeps the new card in view`, async ({
+    test(`adding ${opening.kind}s in the bottom sheet keeps the new card in view`, async ({
       page,
     }) => {
       await addThreeThenDelete(page, opening);

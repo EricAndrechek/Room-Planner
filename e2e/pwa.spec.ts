@@ -149,7 +149,7 @@ test('the whole app works offline', async ({ page, context }) => {
 test('install button appears on beforeinstallprompt and hides once installed', async ({ page }) => {
   await page.goto('/');
   await ready(page);
-  // Desktop: in the header. Phones: at the bottom of the sidebar sheet, so open that first.
+  // Desktop: in the header. Phones: at the end of the bottom sheet, so open that first.
   if (isNarrow(page)) await openStep(page, 'room');
   await expect(page.getByRole('button', { name: 'Install app' })).toHaveCount(0);
   await page.evaluate(() => {
