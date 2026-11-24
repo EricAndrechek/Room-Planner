@@ -3,10 +3,6 @@ import type { DesignMode } from '../types';
 export {
   DOOR_TYPES,
   FIT_MIN_ZOOM,
-  INITIAL_DOORS,
-  INITIAL_ITEMS,
-  INITIAL_ROOM,
-  INITIAL_WINDOWS,
   MAX_ZOOM,
   MIN_ZOOM,
   UNIT_SYSTEMS,

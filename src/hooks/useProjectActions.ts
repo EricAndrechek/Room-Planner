@@ -1,23 +1,24 @@
 import { track } from '../lib/analytics';
 import { downloadFile } from '../lib/browser';
-import { DESIGN_MODES, isDesignMode, isUnitSystem } from '../lib/constants';
-import {
-  blankLayout,
-  defaultLayout,
-  fromShareConfig,
-  normalizeLayout,
-  type ShareConfig,
-} from '../core/layout';
+import { DESIGN_MODES, isUnitSystem } from '../lib/constants';
+import { blankPlan, starterPlan } from '../lib/plans';
 import { buildExportFile, exportFileName } from '../lib/projects';
-import type { DesignMode, Layout, Project, Selection, UnitSystem } from '../types';
+import type { DesignMode, Plan, Project, Selection, UnitSystem } from '../types';
 import type { History } from './useHistory';
 import type { useProjects } from './useProjects';
 
 /** What a new plan starts from: the sample bedroom, or an empty room. */
 export type NewPlanStart = 'sample' | 'blank';
 
+/** A plan read from the JSON box: `named` when the document carried a name of its own. */
+export interface ImportedPlan {
+  plan: Plan;
+  name: string;
+  named: boolean;
+}
+
 interface Options {
-  history: History<Layout>;
+  history: History<Plan>;
   projects: ReturnType<typeof useProjects>;
   designMode: DesignMode;
   unitSystem: UnitSystem;
@@ -43,13 +44,14 @@ export function useProjectActions({
   closeFiles,
 }: Options) {
   const openProject = (project: Project) => {
-    const next = normalizeLayout(project.data);
-    const mode = isDesignMode(project.data.designMode) ? project.data.designMode : designMode;
-    const units = isUnitSystem(project.data.unitSystem) ? project.data.unitSystem : unitSystem;
+    const next = project.plan;
+    const mode = project.ui?.designMode ?? designMode;
+    const stored = next.settings?.unitSystem;
+    const units = isUnitSystem(stored) ? stored : unitSystem;
     history.reset(next);
     setDesignMode(mode);
     setUnitSystem(units);
-    projects.select(project, { layout: next, designMode: mode, unitSystem: units });
+    projects.select(project, { plan: next, designMode: mode, unitSystem: units });
     setSelection(null);
     closeFiles();
     track('project_opened');
@@ -61,7 +63,7 @@ export function useProjectActions({
    */
   const newProject = (start: NewPlanStart = 'sample') => {
     if (projects.saveStatus !== 'saved') projects.saveNow();
-    history.reset(start === 'blank' ? blankLayout() : defaultLayout());
+    history.reset(start === 'blank' ? blankPlan() : starterPlan());
     setDesignMode(DESIGN_MODES.ROOM_SETUP);
     projects.startNew(start === 'blank' ? 'new_blank' : 'new');
     setSelection(null);
@@ -73,13 +75,11 @@ export function useProjectActions({
     else projects.createNamed(name, 'rename');
   };
 
-  const importConfig = (config: ShareConfig) => {
-    const next = fromShareConfig(config);
-    history.apply(() => next);
+  /** A plan pasted in the Share dialog replaces the working one (one undo step). */
+  const importConfig = ({ plan, name, named }: ImportedPlan) => {
+    history.apply(() => plan);
     setSelection(null);
-    if (typeof config.name === 'string' && config.name) {
-      projects.createNamed(config.name, 'import', { layout: next, designMode, unitSystem }, next);
-    }
+    if (named) projects.createNamed(name, 'import', { plan, designMode, unitSystem });
     track('import_json', { kind: 'layout' });
   };
 

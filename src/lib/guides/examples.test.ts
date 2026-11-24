@@ -1,22 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import type { FurnitureItem } from '../../types';
-import { computeLayoutWarnings } from '../../core/openings';
+import { decodeFragmentPayload } from '../../core/share/link';
+import { readSharedPlan } from '../boot';
+import { boxOf, doorsOf, itemWarnings, mainRoom, samePlan, type PieceBox } from '../plans';
 import { EXAMPLES, examplesFor } from './examples';
 import { GUIDES } from './index';
 import { exampleShareFragment, exampleSvg } from './render';
-import { decodeShareFragment } from '../../core/share/link';
-import { fromShareConfig } from '../../core/layout';
 
-const byLabel = (id: string, label: string, nth = 0): FurnitureItem => {
-  const found = EXAMPLES.find((e) => e.id === id)!.layout.items.filter((i) => i.label === label);
+const byLabel = (id: string, label: string, nth = 0): PieceBox => {
+  const found = EXAMPLES.find((e) => e.id === id)!.plan.items.filter((i) => i.label === label);
   expect(found.length, `${id}: ${label}`).toBeGreaterThan(nth);
-  return found[nth];
+  return boxOf(found[nth]!);
 };
 
 /** Clear distance in inches between two unrotated boxes along one axis. */
-const gapX = (a: FurnitureItem, b: FurnitureItem) =>
+const gapX = (a: PieceBox, b: PieceBox) =>
   Math.round(Math.max(b.x - (a.x + a.width), a.x - (b.x + b.width)) * 12);
-const gapY = (a: FurnitureItem, b: FurnitureItem) =>
+const gapY = (a: PieceBox, b: PieceBox) =>
   Math.round(Math.max(b.y - (a.y + a.height), a.y - (b.y + b.height)) * 12);
 
 describe('guide example layouts', () => {
@@ -29,8 +28,8 @@ describe('guide example layouts', () => {
   it.each(EXAMPLES.map((e) => [e.id, e] as const))(
     '%s: nothing overlaps, sticks out of the room or blocks a door',
     (_id, e) => {
-      const warnings = [...computeLayoutWarnings(e.layout).entries()]
-        .map(([id, w]) => ({ label: e.layout.items.find((i) => i.id === id)?.label, ...w }))
+      const warnings = [...itemWarnings(e.plan).entries()]
+        .map(([id, w]) => ({ label: e.plan.items.find((i) => i.id === id)?.label, ...w }))
         .filter((w) => w.collision || w.outOfBounds || w.blocksDoor || w.blocksDoorway);
       expect(warnings).toEqual([]);
     },
@@ -38,7 +37,7 @@ describe('guide example layouts', () => {
 
   it('quote true clearances', () => {
     // Queen bedroom: 30 in each side of the bed, 46 in from the bed to the dresser.
-    const room = { x: 0, y: 0, width: 10, height: 12 } as FurnitureItem;
+    const room = { width: 10, height: 12 };
     const queen = byLabel('queen-bedroom-10x12', 'Queen bed');
     expect(Math.round(queen.x * 12)).toBe(30);
     expect(Math.round((room.width - queen.x - queen.width) * 12)).toBe(30);
@@ -88,18 +87,25 @@ describe('guide example layouts', () => {
     async (_id, e) => {
       const fragment = await exampleShareFragment(e);
       expect(fragment).toMatch(/^s=[A-Za-z0-9_-]+$/);
-      const config = (await decodeShareFragment(fragment))!;
-      expect(config.name).toBe(e.name);
-      const layout = fromShareConfig(config);
-      expect(layout.roomDims).toEqual(e.layout.roomDims);
-      expect(layout.items.map((i) => i.label)).toEqual(e.layout.items.map((i) => i.label));
-      for (const [n, item] of layout.items.entries()) {
-        expect(item.x).toBeCloseTo(e.layout.items[n].x, 6);
-        expect(item.y).toBeCloseTo(e.layout.items[n].y, 6);
-        expect(item.width).toBeCloseTo(e.layout.items[n].width, 6);
-        expect(item.height).toBeCloseTo(e.layout.items[n].height, 6);
+      const decoded = await decodeFragmentPayload(fragment);
+      if (decoded.status !== 'ok') throw new Error(decoded.status);
+      const opened = readSharedPlan(decoded.data);
+      if (!opened.ok) throw new Error(JSON.stringify(opened));
+      expect(opened.name).toBe(e.name);
+      expect(samePlan(opened.plan, e.plan)).toBe(true);
+      expect(opened.plan.items.map((i) => i.label)).toEqual(e.plan.items.map((i) => i.label));
+      for (const [n, item] of opened.plan.items.entries()) {
+        const was = boxOf(e.plan.items[n]!);
+        // The link keeps 4 decimals of the centre, so the corner is within 0.001 ft.
+        const now = boxOf(item);
+        expect(now.x).toBeCloseTo(was.x, 3);
+        expect(now.y).toBeCloseTo(was.y, 3);
+        expect(now.width).toBeCloseTo(was.width, 3);
+        expect(now.height).toBeCloseTo(was.height, 3);
       }
-      expect(layout.doors.map((d) => d.type)).toEqual(e.layout.doors.map((d) => d.type));
+      expect(doorsOf(mainRoom(opened.plan)).map((d) => d.type)).toEqual(
+        doorsOf(mainRoom(e.plan)).map((d) => d.type),
+      );
     },
   );
 

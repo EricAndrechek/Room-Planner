@@ -11,10 +11,12 @@ import {
   type MeasurementLabel,
   type SnapResult,
 } from '../../core/snapping';
-import type { FurnitureItem, Id, RoomDims, UnitSystem } from '../../types';
+import type { SnapPiece } from '../../lib/plans';
+import type { Id, RoomDims, UnitSystem } from '../../types';
 
 interface SnapOverlayProps {
-  items: FurnitureItem[];
+  /** The placed pieces as boxes (`snapPieces`). */
+  items: SnapPiece[];
   room: RoomDims;
   zoom: number;
   unitSystem: UnitSystem;
@@ -124,7 +126,7 @@ function RotationFeedback({
   angle,
   zoom,
 }: {
-  item: FurnitureItem;
+  item: SnapPiece;
   angle: AngleSnap;
   zoom: number;
 }) {

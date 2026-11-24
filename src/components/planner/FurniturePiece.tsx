@@ -3,22 +3,22 @@ import { AlertTriangle, DoorOpen, Lock, RotateCw } from 'lucide-react';
 import { blendOnWhite, getBorderColor, migrateColor, readableTextOn } from '../../core/colors';
 import { PIXELS_PER_UNIT } from '../../lib/constants';
 import { warningText, type ItemWarning } from '../../core/geometry';
-import { doorBlockText } from '../../core/openings';
 import { feetToDisplay } from '../../core/units';
-import type { FurnitureItem, UnitSystem } from '../../types';
+import { boxOf, doorBlockText } from '../../lib/plans';
+import type { Item, UnitSystem } from '../../types';
 
 interface FurniturePieceProps {
-  item: FurnitureItem;
+  item: Item;
   warning: ItemWarning | undefined;
   isActive: boolean;
   /** All furniture is locked during room setup. */
   modeLocked: boolean;
   unitSystem: UnitSystem;
-  onPointerDown: (e: ReactPointerEvent<HTMLDivElement>, item: FurnitureItem) => void;
-  onRotatePointerDown: (e: ReactPointerEvent<HTMLDivElement>, item: FurnitureItem) => void;
-  onSelect: (item: FurnitureItem) => void;
+  onPointerDown: (e: ReactPointerEvent<HTMLDivElement>, item: Item) => void;
+  onRotatePointerDown: (e: ReactPointerEvent<HTMLDivElement>, item: Item) => void;
+  onSelect: (item: Item) => void;
   /** Enter/Space on a piece that room setup locks (to explain why it does not move). */
-  onLockedPress?: (item: FurnitureItem) => void;
+  onLockedPress?: (item: Item) => void;
   /** Canvas zoom: the rotate handle keeps a constant on-screen size. */
   zoom: number;
 }
@@ -71,10 +71,11 @@ export const FurniturePiece = memo(function FurniturePiece({
 
   // Positioned like the piece; the amber note sits outside the button (it is not part of its
   // name: the button's description says it).
+  const box = boxOf(item);
   const frame = {
-    width: item.width * PIXELS_PER_UNIT,
-    height: item.height * PIXELS_PER_UNIT,
-    transform: `translate(${item.x * PIXELS_PER_UNIT}px, ${item.y * PIXELS_PER_UNIT}px) rotate(${item.rotation}deg)`,
+    width: box.width * PIXELS_PER_UNIT,
+    height: box.height * PIXELS_PER_UNIT,
+    transform: `translate(${box.x * PIXELS_PER_UNIT}px, ${box.y * PIXELS_PER_UNIT}px) rotate(${box.rotation}deg)`,
   };
   return (
     <>
@@ -89,9 +90,7 @@ export const FurniturePiece = memo(function FurniturePiece({
               : 'cursor-grab active:cursor-grabbing'
         }`}
         style={{
-          width: item.width * PIXELS_PER_UNIT,
-          height: item.height * PIXELS_PER_UNIT,
-          transform: `translate(${item.x * PIXELS_PER_UNIT}px, ${item.y * PIXELS_PER_UNIT}px) rotate(${item.rotation}deg)`,
+          ...frame,
           backgroundColor: fill,
           color: readableTextOn(fill),
           borderColor,
@@ -120,7 +119,7 @@ export const FurniturePiece = memo(function FurniturePiece({
         aria-pressed={isActive}
         data-draggable
         data-item-id={item.id}
-        aria-label={`${item.label}, ${feetToDisplay(item.width, unitSystem)} by ${feetToDisplay(item.height, unitSystem)}, at ${feetToDisplay(item.x, unitSystem)}, ${feetToDisplay(item.y, unitSystem)}, rotated ${Math.round(item.rotation)}°`}
+        aria-label={`${item.label}, ${feetToDisplay(box.width, unitSystem)} by ${feetToDisplay(box.height, unitSystem)}, at ${feetToDisplay(box.x, unitSystem)}, ${feetToDisplay(box.y, unitSystem)}, rotated ${Math.round(box.rotation)}°`}
         aria-describedby={descId}
       >
         <span id={descId} className="sr-only">

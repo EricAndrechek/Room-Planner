@@ -2,15 +2,15 @@ import { memo, useId, useRef } from 'react';
 import { AlertTriangle, DoorOpen, Eye, EyeOff, Lock, Trash2, Unlock } from 'lucide-react';
 import { migrateColor } from '../../core/colors';
 import { normalizeDegrees, warningText, type ItemWarning } from '../../core/geometry';
-import { doorBlockText } from '../../core/openings';
 import { clamp } from '../../core/units';
-import type { FurnitureItem, Id, RoomDims, UnitSystem } from '../../types';
+import { boxOf, doorBlockText, type PiecePatch } from '../../lib/plans';
+import type { Id, Item, RoomDims, UnitSystem } from '../../types';
 import { ColorPicker } from './ColorPicker';
 import { DimensionInput } from './DimensionInput';
 import { Tooltip } from './Tooltip';
 
 interface FurnitureCardProps {
-  item: FurnitureItem;
+  item: Item;
   warning: ItemWarning | undefined;
   isSelected: boolean;
   isMobile: boolean;
@@ -19,7 +19,7 @@ interface FurnitureCardProps {
   unitSystem: UnitSystem;
   onSelect: (id: Id) => void;
   /** `commit: false` for keystroke-level edits that are committed on blur. */
-  onChange: (id: Id, patch: Partial<FurnitureItem>, commit?: boolean) => void;
+  onChange: (id: Id, patch: PiecePatch, commit?: boolean) => void;
   onCommit: () => void;
   onToggleLock: (id: Id) => void;
   onToggleVisibility: (id: Id) => void;
@@ -51,7 +51,8 @@ export const FurnitureCard = memo(function FurnitureCard({
   const uid = useId();
   const fieldId = (name: string) => `${uid}-${name}`;
   const isItemLocked = !!item.locked;
-  const hidden = item.visible === false;
+  const hidden = !!item.hidden;
+  const box = boxOf(item);
   const hasWarning = !hidden && !!warning && (warning.outOfBounds || warning.collision);
   const text = warning ? warningText(warning) : '';
   const doorBlock =
@@ -210,8 +211,8 @@ export const FurnitureCard = memo(function FurnitureCard({
                 Depth
               </label>
               <DimensionInput
-                value={item.height}
-                onChange={(val) => onChange(item.id, { height: val })}
+                value={item.depth}
+                onChange={(val) => onChange(item.id, { depth: val })}
                 className="w-full p-1.5 text-xs border border-slate-200 rounded-sm"
                 min={0.1}
                 max={roomDims.height}
@@ -228,7 +229,7 @@ export const FurnitureCard = memo(function FurnitureCard({
                 X Position
               </label>
               <DimensionInput
-                value={item.x}
+                value={box.x}
                 onChange={(val) =>
                   onChange(item.id, { x: clamp(val, 0, roomDims.width - item.width) })
                 }
@@ -245,13 +246,13 @@ export const FurnitureCard = memo(function FurnitureCard({
                 Y Position
               </label>
               <DimensionInput
-                value={item.y}
+                value={box.y}
                 onChange={(val) =>
-                  onChange(item.id, { y: clamp(val, 0, roomDims.height - item.height) })
+                  onChange(item.id, { y: clamp(val, 0, roomDims.height - item.depth) })
                 }
                 className="w-full p-1.5 text-xs border border-slate-200 rounded-sm"
                 min={0}
-                max={roomDims.height - item.height}
+                max={roomDims.height - item.depth}
                 label={`Y position of ${item.label}`}
                 id={fieldId('y')}
                 unitSystem={unitSystem}
@@ -264,7 +265,7 @@ export const FurnitureCard = memo(function FurnitureCard({
               <input
                 id={fieldId('rotation')}
                 type="number"
-                value={Math.round(normalizeDegrees(item.rotation))}
+                value={Math.round(normalizeDegrees(box.rotation))}
                 onChange={(e) =>
                   onChange(item.id, { rotation: parseFloat(e.target.value) || 0 }, false)
                 }

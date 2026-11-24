@@ -2,11 +2,12 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { DOOR_TYPES, PIXELS_PER_UNIT } from '../../lib/constants';
 import { SWING_ARC_STROKE, doorStyles, doorSvg, windowStyles } from './openingStyles';
 import { feetToDisplay } from '../../core/units';
-import type { Door, RoomDims, RoomWindow, UnitSystem } from '../../types';
+import { openingPlace, roomSize } from '../../lib/plans';
+import type { Opening, Room, UnitSystem } from '../../types';
 
-interface OpeningProps<T> {
-  opening: T;
-  room: RoomDims;
+interface OpeningProps {
+  opening: Opening;
+  room: Room;
   isActive: boolean;
   /** Doors/windows are locked (no handle) while arranging furniture. */
   isLocked: boolean;
@@ -32,12 +33,11 @@ const handleScale = (handle: { width?: unknown }, zoom: number) => {
   } as CSSProperties;
 };
 
-const handleLabel = (
-  kind: 'Door' | 'Window',
-  o: { wall: string; position: number; width: number; type?: string },
-  unitSystem: UnitSystem,
-) =>
-  `${kind} handle${o.type ? ` (${DOOR_TYPES.find((t) => t.value === o.type)?.label ?? o.type})` : ''}, ${feetToDisplay(o.width, unitSystem)} wide on the ${o.wall} wall, ${feetToDisplay(o.position, unitSystem)} along the wall. Arrow keys slide it.`;
+const handleLabel = (kind: 'Door' | 'Window', room: Room, o: Opening, unitSystem: UnitSystem) => {
+  const { wall, position, width } = openingPlace(room, o);
+  const type = kind === 'Door' ? o.type : undefined;
+  return `${kind} handle${type ? ` (${DOOR_TYPES.find((t) => t.value === type)?.label ?? type})` : ''}, ${feetToDisplay(width, unitSystem)} wide on the ${wall} wall, ${feetToDisplay(position, unitSystem)} along the wall. Arrow keys slide it.`;
+};
 
 export function DoorShape({
   opening: door,
@@ -49,9 +49,10 @@ export function DoorShape({
   onSelect,
   onHandlePointerDown,
   highlight = false,
-}: OpeningProps<Door> & { highlight?: boolean }) {
+}: OpeningProps & { highlight?: boolean }) {
   const s = doorStyles(door, room);
   const d = doorSvg(door, room);
+  const size = roomSize(room);
   return (
     <>
       <div style={s.gap} />
@@ -61,8 +62,8 @@ export function DoorShape({
       {/* The door itself (leaves, arcs, panels, pocket), drawn from the shared door geometry. */}
       <svg
         className="absolute left-0 top-0 overflow-visible pointer-events-none"
-        width={room.width * PIXELS_PER_UNIT}
-        height={room.height * PIXELS_PER_UNIT}
+        width={size.width * PIXELS_PER_UNIT}
+        height={size.height * PIXELS_PER_UNIT}
         aria-hidden="true"
         data-door-swing
         data-door-type={door.type || 'swing-in'}
@@ -106,7 +107,7 @@ export function DoorShape({
           role="button"
           tabIndex={0}
           aria-pressed={isActive}
-          aria-label={handleLabel('Door', door, unitSystem)}
+          aria-label={handleLabel('Door', room, door, unitSystem)}
           data-draggable
         />
       )}
@@ -123,7 +124,7 @@ export function WindowShape({
   zoom,
   onSelect,
   onHandlePointerDown,
-}: OpeningProps<RoomWindow>) {
+}: OpeningProps) {
   const s = windowStyles(win, room);
   return (
     <>
@@ -141,7 +142,7 @@ export function WindowShape({
           role="button"
           tabIndex={0}
           aria-pressed={isActive}
-          aria-label={handleLabel('Window', win, unitSystem)}
+          aria-label={handleLabel('Window', room, win, unitSystem)}
           data-draggable
         />
       )}

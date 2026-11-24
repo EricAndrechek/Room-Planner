@@ -1,18 +1,26 @@
 import { inflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { INITIAL_DOORS, INITIAL_ITEMS, INITIAL_ROOM, INITIAL_WINDOWS } from '../constants';
+import { loadPlan } from '../../core/load';
+import {
+  INITIAL_DOORS,
+  INITIAL_ITEMS,
+  INITIAL_ROOM,
+  INITIAL_WINDOWS,
+} from '../../core/testing/v3/constants';
+import { buildPlanScene, type SceneInput } from '../../core/render/scene';
 import { exportBaseName, pngScale } from './exportPlan';
 import { defaultPaper, PAPER_SIZES } from './paper';
 import { deflate, pageFor, scenePdf } from './planPdf';
-import { buildLayoutScene as buildPlanScene, type PlanInput } from '../../core/adapter/scene';
 
-const input: PlanInput = {
-  layout: {
-    roomDims: INITIAL_ROOM,
-    doors: INITIAL_DOORS,
-    windows: INITIAL_WINDOWS,
-    items: INITIAL_ITEMS,
-  },
+const loaded = loadPlan(
+  { roomDims: INITIAL_ROOM, doors: INITIAL_DOORS, windows: INITIAL_WINDOWS, items: INITIAL_ITEMS },
+  'strict',
+  { lengthsInFeet: true },
+);
+if (!loaded.ok) throw new Error(JSON.stringify(loaded));
+
+const input: SceneInput = {
+  plan: loaded.plan,
   unitSystem: 'ft-in',
   title: 'Café plan',
   date: new Date('2026-11-13T12:00:00Z'),

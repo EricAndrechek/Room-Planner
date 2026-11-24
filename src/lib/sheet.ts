@@ -5,7 +5,8 @@
  */
 import { DESIGN_MODES } from './constants';
 import { feetToDisplay } from '../core/units';
-import type { DesignMode, Layout, Selection, UnitSystem } from '../types';
+import type { DesignMode, Plan, Selection, UnitSystem } from '../types';
+import { doorsOf, mainRoom, openingPlace, roomSize, windowsOf } from './plans';
 
 export type Detent = 'peek' | 'half' | 'full';
 
@@ -91,33 +92,36 @@ const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
  * e.g. `1. Room · 12' × 12' · 1 door · 1 window`, `2. Items · 6 pieces`, `Chair · 1'6" × 1'6"`.
  */
 export function sheetSummary(
-  layout: Pick<Layout, 'roomDims' | 'items' | 'doors' | 'windows'>,
+  plan: Pick<Plan, 'rooms' | 'items'>,
   mode: DesignMode,
   selection: Selection | null,
   units: UnitSystem,
 ): string {
   const size = (w: number, h: number) => `${feetToDisplay(w, units)} × ${feetToDisplay(h, units)}`;
+  const room = mainRoom(plan);
+  const doors = doorsOf(room);
+  const windows = windowsOf(room);
   if (selection?.type === 'item') {
-    const item = layout.items.find((i) => i.id === selection.id);
-    if (item) return `${item.label.trim() || 'Item'} · ${size(item.width, item.height)}`;
+    const item = plan.items.find((i) => i.id === selection.id);
+    if (item) return `${item.label.trim() || 'Item'} · ${size(item.width, item.depth)}`;
   } else if (selection) {
-    const list = selection.type === 'door' ? layout.doors : layout.windows;
+    const list = selection.type === 'door' ? doors : windows;
     const index = list.findIndex((o) => o.id === selection.id);
     if (index >= 0) {
       const name = selection.type === 'door' ? 'Door' : 'Window';
-      return `${name} ${index + 1} · ${list[index]!.wall} wall`;
+      return `${name} ${index + 1} · ${openingPlace(room, list[index]!).wall} wall`;
     }
   }
   if (mode === DESIGN_MODES.ROOM_SETUP) {
-    const { width, height } = layout.roomDims;
+    const { width, height } = roomSize(room);
     return [
       `1. Room · ${size(width, height)}`,
-      layout.doors.length ? count(layout.doors.length, 'door') : '',
-      layout.windows.length ? count(layout.windows.length, 'window') : '',
+      doors.length ? count(doors.length, 'door') : '',
+      windows.length ? count(windows.length, 'window') : '',
     ]
       .filter(Boolean)
       .join(' · ');
   }
-  const n = layout.items.length;
+  const n = plan.items.length;
   return `2. Items · ${n ? count(n, 'piece') : 'no furniture yet'}`;
 }
