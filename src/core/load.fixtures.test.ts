@@ -32,6 +32,7 @@ const FROZEN: Record<string, string> = {
   'doors-storage.json': 'a93c70dfb6e546dc',
   'early-v3-config-link.json': 'cd7893dea428b025',
   'early-v3-storage.json': 'e7d473bdc60ec59c',
+  'golden-main.json': '413a30ad65256370',
   'fragment-links.json': 'fb0b4ac0a799ad27',
   'original-share-links.json': '76ab27d91eb9e0a6',
   'original-storage.json': '9aa279090cb48dd8',

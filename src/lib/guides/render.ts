@@ -4,13 +4,14 @@
  */
 import { toShareConfig } from '../../core/layout';
 import { encodeShareFragment } from '../../core/share/link';
-import { buildPlanScene, DEFAULT_SITE, type Scene, type SceneNode } from '../../core/render/scene';
+import { buildLayoutScene } from '../../core/adapter/scene';
+import { DEFAULT_SITE, type Scene, type SceneNode } from '../../core/render/scene';
 import { sceneToSvg } from '../../core/render/svg';
 import type { Example } from './examples';
 
 /** The example's plan scene, with the site name (no export date) in the footer. */
 export const exampleScene = (example: Example): Scene => {
-  const scene = buildPlanScene({
+  const scene = buildLayoutScene({
     layout: example.layout,
     unitSystem: example.unitSystem,
     title: example.name,

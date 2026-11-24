@@ -11,7 +11,8 @@ import tseslint from 'typescript-eslint';
  * `zod/mini`, nothing else: no React, Astro or icons, nothing from the app (`../components`,
  * `../hooks`, `../lib`, `../types`), and no browser-only globals. Tests are exempt (they may
  * import fixtures, Vitest and the app's code under test). One block per folder depth, because a
- * relative import leaves `src/core` at a depth-dependent number of `../`.
+ * relative import leaves `src/core` at a depth-dependent number of `../`. Test helpers in
+ * `src/core/testing/` are exempt too.
  */
 const CORE_GLOBALS = [
   'window',
@@ -24,7 +25,7 @@ const CORE_GLOBALS = [
 /** @type {import("eslint").Linter.Config[]} */
 const coreBoundary = [1, 2, 3, 4].map((depth) => ({
   files: [`src/core/${'*/'.repeat(depth - 1)}*.ts`],
-  ignores: ['src/core/**/*.test.ts'],
+  ignores: ['src/core/**/*.test.ts', 'src/core/testing/**'],
   rules: {
     'no-restricted-imports': [
       'error',

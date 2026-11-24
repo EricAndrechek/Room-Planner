@@ -282,17 +282,18 @@ All of it stays our own code, in `src/core/geometry/`. `polygon-clipping` was me
 alternative: 9.8 KB gzip against 1.2 KB for the approach below, and it answers a harder question
 than we ask.
 
-| Need                    | Approach                                                                                                                                                                          |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Item outline            | `itemParts(item)`: convex polygons in floor coordinates. `rect` is 1 part, `l` is 2 rectangles, `ellipse` is one 32-sided polygon.                                                |
-| Item overlaps item      | Bounding-box reject, then today's SAT with `GEOMETRY_EPSILON` on each pair of parts. Flush pieces still do not collide.                                                           |
-| Item inside a room      | Each part: every vertex inside or on the outline, no edge properly crossing an outline edge, no concave room corner strictly inside the part. The item must be inside one room.   |
-| Wall frame              | `wallFrame(room, i)`: `origin = outline[i]`, `along` = unit vector to `outline[i+1]`, `inward` = its right-hand normal. This replaces the four hard-coded `WALL_FRAMES`.          |
-| Door shape and blocking | `doorGeometry(opening, frame)` is today's function with the frame passed in. Clearance and doorway polygons come out in floor coordinates and are tested against item parts.      |
-| Snapping                | Unchanged for axis-aligned walls and item bounds. Angled walls add their angle to the rotation snap targets. No edge snapping to angled walls in the first version.               |
-| New piece placement     | `findFurnitureSpot` scans the room's bounding box and keeps candidates that pass "inside a room".                                                                                 |
-| Room shrinks or changes | `moveInside` keeps today's behaviour for rectangles. For other outlines it moves a piece to the nearest free spot, or leaves it with the "outside room" warning if there is none. |
-| Rooms overlap           | Same part-against-outline test on the two outlines. Reported as a warning.                                                                                                        |
+| Need                    | Approach                                                                                                                                                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Item outline            | `itemParts(item)`: convex polygons in floor coordinates. `rect` is 1 part, `l` is 2 rectangles, `ellipse` is one 32-sided polygon.                                                                                              |
+| Item overlaps item      | Bounding-box reject, then today's SAT with `GEOMETRY_EPSILON` on each pair of parts. Flush pieces still do not collide.                                                                                                         |
+| Item inside a room      | Each part: every vertex inside or on the outline, no edge properly crossing an outline edge, no concave room corner strictly inside the part. The item must be inside one room.                                                 |
+| Wall frame              | `wallFrame(room, i)`: `origin = outline[i]`, `along` = unit vector to `outline[i+1]`, `inward` = its right-hand normal. This replaces the four hard-coded `WALL_FRAMES`.                                                        |
+| Door shape and blocking | `doorGeometry(opening, frame)` is today's function with the frame passed in. Clearance and doorway polygons come out in floor coordinates and are tested against item parts.                                                    |
+| Drawing frame           | `drawingFrame(room, i)` (PR 3): the same wall running left to right (top to bottom when vertical). Openings are drawn and spots scanned in it; for a rectangle it is exactly the v3 frame, which keeps drawings byte-identical. |
+| Snapping                | Unchanged for axis-aligned walls and item bounds. Angled walls add their angle to the rotation snap targets. No edge snapping to angled walls in the first version.                                                             |
+| New piece placement     | `findFurnitureSpot` scans the room's bounding box and keeps candidates that pass "inside a room".                                                                                                                               |
+| Room shrinks or changes | `moveInside` keeps today's behaviour for rectangles. For other outlines it moves a piece to the nearest free spot, or leaves it with the "outside room" warning if there is none.                                               |
+| Rooms overlap           | Same part-against-outline test on the two outlines. Reported as a warning.                                                                                                                                                      |
 
 Measured cost of a full check (every item against every item and against the rooms): 11 µs for the
 sample plan, 104 µs for 25 pieces, 387 µs for the 40-item apartment. The worst case tried, 40
@@ -561,11 +562,14 @@ src/core/
   units.ts             toFeet, fromFeet, parsing and display (today's lib/units.ts)
   colors.ts
   migrate/             v2.ts, v3.ts, index.ts
-  geometry/            polygon.ts, shapes.ts (itemParts), walls.ts (wallFrame), doors.ts (doorGeometry)
-  check.ts             checkLayout(plan) -> Issue[]   (overlap, outside room, blocked door, clearances)
+  geometry/            index.ts (polygons, SAT), shapes.ts (itemParts), walls.ts (wallFrame), doors.ts (doorGeometry)
+  check.ts             checkLayout(plan, { minClearance, codes }) -> Issue[]   (every code in section 7)
   placement.ts         findFurnitureSpot, findOpeningSpot, moveInside
   snapping.ts
   ops.ts               pure edits: addItem, moveItem, toInventory, insertVertex, moveRoom, ...
+  adapter/             PR 3 to PR 5 only: index.ts (planFromLayout, the v3 checks and placement),
+                       scene.ts (the v3 export, apart so the export stays a lazy chunk)
+  openings.ts          PR 3 to PR 5 only: doors and windows in v3 terms, over geometry/doors.ts
   share/               codec.ts (base64url, deflate), compact.ts, link.ts
   render/              scene.ts, scene/rooms.ts, scene/items.ts, svg.ts, fontMetrics.ts
   __fixtures__/
@@ -575,6 +579,18 @@ What stays outside: `storage.ts`, `projects.ts`, `boot.ts`, `pwa.ts`, `analytics
 `export/exportPlan.ts` and `export/planPdf.ts` (browser APIs), and the React style helpers now at
 the bottom of `openings.ts` (`doorStyles`, `windowStyles`, `doorSvg`), which move to
 `src/components/planner/openingStyles.ts`.
+
+How PR 3 built it, for PR 5 to finish: the app keeps its v3 imports. `core/openings.ts` and
+`core/adapter/` keep the v3 function names and signatures over the plan core, so components
+changed only where an import moved (`moveInside`, `piecesOutside`, `findFurnitureSpot` from
+`core/adapter`, the export from `core/adapter/scene`). `planFromLayout` gives entities positional
+ids (`door-0`, `item-0`) so answers map back by index even when v3 ids collide. The scene emits the
+data attributes it always did (`wall="bottom"` on a rectangle, the wall's index otherwise; `hinge`
+named in the drawing frame). An edit that would leave an outline whose walls are closer than
+`GEOMETRY_EPSILON` to touching is refused, so rounding never turns a valid outline into a crossed
+one. The scene draws any outline (a rectangle exactly as before; other outlines as a path, the wall
+band as its stroke) and L and round pieces as paths; PR 7a and 7b own their final look. These
+checks and the plan geometry add 2.9 KB gzip to the planner's boot chunks; the schema stays out.
 
 `ops.ts` is new and matters for WebMCP: every edit the UI makes becomes a pure function
 `(plan, args) => plan`. The hooks call them through `history.apply`, and the WebMCP tools call the

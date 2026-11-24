@@ -4,7 +4,7 @@ import { INITIAL_DOORS, INITIAL_ITEMS, INITIAL_ROOM, INITIAL_WINDOWS } from '../
 import { exportBaseName, pngScale } from './exportPlan';
 import { defaultPaper, PAPER_SIZES } from './paper';
 import { deflate, pageFor, scenePdf } from './planPdf';
-import { buildPlanScene, type PlanInput } from '../../core/render/scene';
+import { buildLayoutScene as buildPlanScene, type PlanInput } from '../../core/adapter/scene';
 
 const input: PlanInput = {
   layout: {

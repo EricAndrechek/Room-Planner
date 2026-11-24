@@ -1,0 +1,1160 @@
+{
+  "_comment": "Golden output of main at ca2c31d (before core took plans): for every fixture and guide example (src/core/testing/cases.ts), the sha256 and length of the exported SVG (planSvg, date 2026-01-01, locale en-US) and the warnings the canvas shows (computeLayoutWarnings, as [id, warning] pairs). golden.test.ts requires both pipelines, the v3 adapter and loadPlan + the plan scene, to reproduce them exactly.",
+  "cases": {
+    "v2-storage working": {
+      "svg": "36d57e01b1b4dfbeaff103653c07c6d8ffad83462317cf944775c2c12c02b8b7",
+      "bytes": 4648,
+      "warnings": [
+        [
+          "1",
+          {
+            "outOfBounds": false,
+            "collision": true
+          }
+        ],
+        [
+          "2",
+          {
+            "outOfBounds": true,
+            "collision": false
+          }
+        ],
+        [
+          "4",
+          {
+            "outOfBounds": true,
+            "collision": true
+          }
+        ]
+      ]
+    },
+    "early-v3-storage working": {
+      "svg": "270d9c77ec36f24a42cbc4f2a5fd053303737dd02f12a0b846518b5aaa56b68b",
+      "bytes": 5329,
+      "warnings": [
+        [
+          "1",
+          {
+            "outOfBounds": false,
+            "collision": true
+          }
+        ],
+        [
+          "2",
+          {
+            "outOfBounds": true,
+            "collision": false
+          }
+        ],
+        [
+          "4",
+          {
+            "outOfBounds": true,
+            "collision": true,
+            "blocksDoor": true,
+            "blocksDoorway": false,
+            "doorIds": [
+              1
+            ]
+          }
+        ]
+      ]
+    },
+    "early-v3-storage project 0": {
+      "svg": "015873657866581d66ec3470f98bc3fe6d85f8612b4e0c7834ac9b1987783f68",
+      "bytes": 5374,
+      "warnings": [
+        [
+          "1",
+          {
+            "outOfBounds": false,
+            "collision": true
+          }
+        ],
+        [
+          "2",
+          {
+            "outOfBounds": true,
+            "collision": false
+          }
+        ],
+        [
+          "4",
+          {
+            "outOfBounds": true,
+            "collision": true,
+            "blocksDoor": true,
+            "blocksDoorway": false,
+            "doorIds": [
+              1
+            ]
+          }
+        ]
+      ]
+    },
+    "original-storage working": {
+      "svg": "af0326d28bb50f5a032088e71dc9ab0b01a35d5a2cfbe751a56f63acad885f7f",
+      "bytes": 6442,
+      "warnings": [
+        [
+          "1",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "2",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "3",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ]
+      ]
+    },
+    "original-storage project 0": {
+      "svg": "0615ecaab59316b83d708c1d52b6798f5b1b4fd695dfc2e8c1314b679c1b0427",
+      "bytes": 6445,
+      "warnings": [
+        [
+          "1",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "2",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "3",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ]
+      ]
+    },
+    "doors-storage working": {
+      "svg": "02502bcb264a692972e5584c09959a7cb512d79304d877233bfcf05f43a16b3c",
+      "bytes": 12257,
+      "warnings": [
+        [
+          "1",
+          {
+            "outOfBounds": false,
+            "collision": false,
+            "blocksDoor": true,
+            "blocksDoorway": false,
+            "doorIds": [
+              1795534752716
+            ]
+          }
+        ],
+        [
+          "2",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "3",
+          {
+            "outOfBounds": false,
+            "collision": false,
+            "blocksDoor": true,
+            "blocksDoorway": false,
+            "doorIds": [
+              1795534752716
+            ]
+          }
+        ],
+        [
+          "4",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "5",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "6",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ]
+      ]
+    },
+    "doors-storage project 0": {
+      "svg": "3ae87d0f9f5bc4694d43c9ab085b42fad8b745b3ba612bdf454d7e8a27297fd1",
+      "bytes": 12302,
+      "warnings": [
+        [
+          "1",
+          {
+            "outOfBounds": false,
+            "collision": false,
+            "blocksDoor": true,
+            "blocksDoorway": false,
+            "doorIds": [
+              1795534752716
+            ]
+          }
+        ],
+        [
+          "2",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "3",
+          {
+            "outOfBounds": false,
+            "collision": false,
+            "blocksDoor": true,
+            "blocksDoorway": false,
+            "doorIds": [
+              1795534752716
+            ]
+          }
+        ],
+        [
+          "4",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "5",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "6",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ]
+      ]
+    },
+    "link v2 ?config=": {
+      "svg": "01fc7fd91b29acaf4485908446e10053ba3a135ba6c4bd8912d7040261f6988b",
+      "bytes": 5166,
+      "warnings": [
+        [
+          "1",
+          {
+            "outOfBounds": false,
+            "collision": true
+          }
+        ],
+        [
+          "2",
+          {
+            "outOfBounds": true,
+            "collision": false
+          }
+        ],
+        [
+          "4",
+          {
+            "outOfBounds": true,
+            "collision": true
+          }
+        ]
+      ]
+    },
+    "link early v3 ?config=": {
+      "svg": "61cd3f54f86dc51f01e9cc3122da2ce269fcba272b76164cf1bb23a7f10a752a",
+      "bytes": 5362,
+      "warnings": [
+        [
+          "1",
+          {
+            "outOfBounds": false,
+            "collision": true
+          }
+        ],
+        [
+          "2",
+          {
+            "outOfBounds": true,
+            "collision": false
+          }
+        ],
+        [
+          "4",
+          {
+            "outOfBounds": true,
+            "collision": true,
+            "blocksDoor": true,
+            "blocksDoorway": false,
+            "doorIds": [
+              1
+            ]
+          }
+        ]
+      ]
+    },
+    "link original ?config= ft-in": {
+      "svg": "0615ecaab59316b83d708c1d52b6798f5b1b4fd695dfc2e8c1314b679c1b0427",
+      "bytes": 6445,
+      "warnings": [
+        [
+          "1",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "2",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "3",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ]
+      ]
+    },
+    "link original ?config= m": {
+      "svg": "4d30751d77938ac8717ab4be089ca9e8d36a1e19da7311aaffe8ecef9b7b470a",
+      "bytes": 6194,
+      "warnings": [
+        [
+          "1",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "2",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "3",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ]
+      ]
+    },
+    "link #s= cm": {
+      "svg": "89fee9a9774cf07330e0cf1243d254eeb13669f4e33281701b8e82ba8cc572b3",
+      "bytes": 11718,
+      "warnings": [
+        [
+          "1",
+          {
+            "outOfBounds": false,
+            "collision": false,
+            "blocksDoor": true,
+            "blocksDoorway": false,
+            "doorIds": [
+              1795534752716
+            ]
+          }
+        ],
+        [
+          "2",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "3",
+          {
+            "outOfBounds": false,
+            "collision": false,
+            "blocksDoor": true,
+            "blocksDoorway": false,
+            "doorIds": [
+              1795534752716
+            ]
+          }
+        ],
+        [
+          "4",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "5",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "6",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ]
+      ]
+    },
+    "link #j= cm": {
+      "svg": "89fee9a9774cf07330e0cf1243d254eeb13669f4e33281701b8e82ba8cc572b3",
+      "bytes": 11718,
+      "warnings": [
+        [
+          "1",
+          {
+            "outOfBounds": false,
+            "collision": false,
+            "blocksDoor": true,
+            "blocksDoorway": false,
+            "doorIds": [
+              1795534752716
+            ]
+          }
+        ],
+        [
+          "2",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "3",
+          {
+            "outOfBounds": false,
+            "collision": false,
+            "blocksDoor": true,
+            "blocksDoorway": false,
+            "doorIds": [
+              1795534752716
+            ]
+          }
+        ],
+        [
+          "4",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "5",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "6",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ]
+      ]
+    },
+    "json v2": {
+      "svg": "01fc7fd91b29acaf4485908446e10053ba3a135ba6c4bd8912d7040261f6988b",
+      "bytes": 5166,
+      "warnings": [
+        [
+          "1",
+          {
+            "outOfBounds": false,
+            "collision": true
+          }
+        ],
+        [
+          "2",
+          {
+            "outOfBounds": true,
+            "collision": false
+          }
+        ],
+        [
+          "4",
+          {
+            "outOfBounds": true,
+            "collision": true
+          }
+        ]
+      ]
+    },
+    "json early v3": {
+      "svg": "61cd3f54f86dc51f01e9cc3122da2ce269fcba272b76164cf1bb23a7f10a752a",
+      "bytes": 5362,
+      "warnings": [
+        [
+          "1",
+          {
+            "outOfBounds": false,
+            "collision": true
+          }
+        ],
+        [
+          "2",
+          {
+            "outOfBounds": true,
+            "collision": false
+          }
+        ],
+        [
+          "4",
+          {
+            "outOfBounds": true,
+            "collision": true,
+            "blocksDoor": true,
+            "blocksDoorway": false,
+            "doorIds": [
+              1
+            ]
+          }
+        ]
+      ]
+    },
+    "json cm": {
+      "svg": "89fee9a9774cf07330e0cf1243d254eeb13669f4e33281701b8e82ba8cc572b3",
+      "bytes": 11718,
+      "warnings": [
+        [
+          "1",
+          {
+            "outOfBounds": false,
+            "collision": false,
+            "blocksDoor": true,
+            "blocksDoorway": false,
+            "doorIds": [
+              1795534752716
+            ]
+          }
+        ],
+        [
+          "2",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "3",
+          {
+            "outOfBounds": false,
+            "collision": false,
+            "blocksDoor": true,
+            "blocksDoorway": false,
+            "doorIds": [
+              1795534752716
+            ]
+          }
+        ],
+        [
+          "4",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "5",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "6",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ]
+      ]
+    },
+    "plans file 0": {
+      "svg": "015873657866581d66ec3470f98bc3fe6d85f8612b4e0c7834ac9b1987783f68",
+      "bytes": 5374,
+      "warnings": [
+        [
+          "1",
+          {
+            "outOfBounds": false,
+            "collision": true
+          }
+        ],
+        [
+          "2",
+          {
+            "outOfBounds": true,
+            "collision": false
+          }
+        ],
+        [
+          "4",
+          {
+            "outOfBounds": true,
+            "collision": true,
+            "blocksDoor": true,
+            "blocksDoorway": false,
+            "doorIds": [
+              1
+            ]
+          }
+        ]
+      ]
+    },
+    "plans file 1": {
+      "svg": "0615ecaab59316b83d708c1d52b6798f5b1b4fd695dfc2e8c1314b679c1b0427",
+      "bytes": 6445,
+      "warnings": [
+        [
+          "1",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "2",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "3",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ]
+      ]
+    },
+    "plans file 2": {
+      "svg": "3ae87d0f9f5bc4694d43c9ab085b42fad8b745b3ba612bdf454d7e8a27297fd1",
+      "bytes": 12302,
+      "warnings": [
+        [
+          "1",
+          {
+            "outOfBounds": false,
+            "collision": false,
+            "blocksDoor": true,
+            "blocksDoorway": false,
+            "doorIds": [
+              1795534752716
+            ]
+          }
+        ],
+        [
+          "2",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "3",
+          {
+            "outOfBounds": false,
+            "collision": false,
+            "blocksDoor": true,
+            "blocksDoorway": false,
+            "doorIds": [
+              1795534752716
+            ]
+          }
+        ],
+        [
+          "4",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "5",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "6",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ]
+      ]
+    },
+    "bare layout file": {
+      "svg": "0615ecaab59316b83d708c1d52b6798f5b1b4fd695dfc2e8c1314b679c1b0427",
+      "bytes": 6445,
+      "warnings": [
+        [
+          "1",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "2",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "3",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ]
+      ]
+    },
+    "example queen-bedroom-10x12": {
+      "svg": "36ca02198bbbb5144718af797f74c777a1155d695e341c5dc98bf95bea97e5eb",
+      "bytes": 5726,
+      "warnings": [
+        [
+          "3",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "4",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "5",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "6",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ]
+      ]
+    },
+    "example king-bedroom-13x14": {
+      "svg": "2f59e8d302d6ce50a2c2d54c4e6d010730a1e1f2505cf4509dad2ad812f8d6a4",
+      "bytes": 6849,
+      "warnings": [
+        [
+          "10",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "11",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "12",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "13",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "14",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ]
+      ]
+    },
+    "example twin-beds-12x12": {
+      "svg": "d79a95ee07eb88da3e82e3d2d4170a96fd73e253da1b63e6843bdfbd19e732fb",
+      "bytes": 5708,
+      "warnings": [
+        [
+          "17",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "18",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "19",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "20",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ]
+      ]
+    },
+    "example living-tv-13x15": {
+      "svg": "594e0d1e73ae07604bd0d515171619616e1c0294e43bee815b7ddd87e8f73d4b",
+      "bytes": 5861,
+      "warnings": [
+        [
+          "23",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "24",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "25",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "26",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ]
+      ]
+    },
+    "example living-l-14x16": {
+      "svg": "d44d73710192e7af1348da1da91a45d6080b33ab6e6c79d72974484f1d7ac9f9",
+      "bytes": 5888,
+      "warnings": [
+        [
+          "29",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "30",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "31",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "32",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "33",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ]
+      ]
+    },
+    "example studio-15x20": {
+      "svg": "861ae863dcf670571316e4d21ac0f945b973e311b31ee2eedf82a05af6bf83ad",
+      "bytes": 9278,
+      "warnings": [
+        [
+          "38",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "39",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "40",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "41",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "42",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "43",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "44",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "45",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "46",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "47",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ]
+      ]
+    },
+    "example dorm-double-12x15": {
+      "svg": "19572e471dac6d036579d9a5e153a706f8bf0615e4b0602ad4dfcb2e18e0e055",
+      "bytes": 7508,
+      "warnings": [
+        [
+          "50",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "51",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "52",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "53",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "54",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "55",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "56",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "57",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ]
+      ]
+    },
+    "example office-9x10": {
+      "svg": "4b520ceee226b72e6cd2939580d2d02c7330defa26b4192818f6677c5cc04994",
+      "bytes": 5810,
+      "warnings": [
+        [
+          "60",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "61",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "62",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "63",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "64",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ]
+      ]
+    },
+    "example office-guest-11x12": {
+      "svg": "0cef8946476cfc6728e3ff018af78bf706e70178d2d865aa66ab9fdc4c64a952",
+      "bytes": 6282,
+      "warnings": [
+        [
+          "67",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "68",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "69",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "70",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ],
+        [
+          "71",
+          {
+            "outOfBounds": false,
+            "collision": false
+          }
+        ]
+      ]
+    }
+  }
+}
