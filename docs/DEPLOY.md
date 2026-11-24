@@ -6,7 +6,9 @@ Hosting is one Cloudflare Worker with static assets (`wrangler.jsonc`, served at
 for AI assistants (docs/design/plan-format.md, section 7). Every page, asset and 404 is served
 without invoking the Worker, so the Workers Free daily invocation limit (100,000) is spent only on
 MCP requests. A rate-limit binding (`MCP_LIMIT`, 120 requests per minute per client IP) guards
-`/mcp`; it needs no setup in the dashboard. The old hostname `roomplanner.andrechek.com` is a Cloudflare redirect rule, not a Worker
+`/mcp`; it needs no setup in the dashboard. Wrangler's custom build (`build.command` in
+`wrangler.jsonc`) bundles the MCP plan viewer (`scripts/build-viewer.mjs`) before every `dev`,
+`deploy` and `preview`, so the Workers Builds commands are unchanged. The old hostname `roomplanner.andrechek.com` is a Cloudflare redirect rule, not a Worker
 (section 5). PostHog analytics go directly from the browser to PostHog US cloud; there is no proxy.
 
 The `andrechek.com` zone lives in the maintainer's Cloudflare account.

@@ -771,6 +771,31 @@ Starting the wasm module costs another 28 to 55 ms once per isolate; the wasm fi
 (947 KB gzip); text needs Inter `.woff2` passed in. That needs Workers Paid (30 s of CPU by
 default). Revisit it only if usage shows that clients people actually use lack MCP Apps.
 
+### CPU per request
+
+Workers Free allows 10 ms of CPU per request, with "some built-in flexibility" per isolate for
+infrequent overruns (Cloudflare's limits page); consistent overruns end in error 1102. The spike's
+"about 1 ms" was measured in Node on a warm process. On the PR 4 preview (Workers Logs
+`cpuTimeMs`, 15 to 16 calls of each, 2026-11-24, the 4-piece bedroom of the tests):
+
+| Call                    | Median | Range   |
+| ----------------------- | -----: | ------- |
+| `tools/list`            |   6 ms | 2–15 ms |
+| `resources/read` (view) |   6 ms | 2–16 ms |
+| `check_layout`          |   5 ms | 3–16 ms |
+| `read_plan`             |   9 ms | 4–27 ms |
+| `create_plan`           |  10 ms | 3–35 ms |
+
+Most of it is the SDK's own per-request work (a fresh server, message validation), which a
+static `resources/read` shows; the spread is cold isolates. Two changes brought `create_plan` down
+from a median of 12 ms (7 to 42): the view draws the plan instead of the server, and `warm.ts`
+runs one of each lazily initialised piece (Zod's parsers for the SDK's message schemas, the plan's
+JSON Schema, the tool code) in global scope, which runs once per isolate under its own 1 s start-up
+limit (`wrangler check startup`: about 210 ms locally). Asynchronous work is not allowed there, so
+a whole request cannot be replayed. None of about 200 MCP invocations on the preview ended in
+`exceededCpu`. Watch that outcome in the Worker's metrics after launch; if it shows up regularly,
+the options are Workers Paid or trimming the SDK's per-request work.
+
 ### Rate limiting and abuse
 
 - One Workers rate-limit binding (`ratelimits` in `wrangler.jsonc`), keyed by client IP because
