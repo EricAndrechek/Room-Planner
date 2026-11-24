@@ -7,10 +7,10 @@ import {
   type RefObject,
 } from 'react';
 import { track } from '../lib/analytics';
-import { randomPresetColor } from '../lib/colors';
+import { randomPresetColor } from '../core/colors';
 import { PIXELS_PER_UNIT } from '../lib/constants';
-import type { AngleSnap } from '../lib/geometry';
-import { findFurnitureSpot } from '../lib/placement';
+import type { AngleSnap } from '../core/geometry';
+import { findFurnitureSpot } from '../core/placement';
 import {
   SNAP_THRESHOLD_PX,
   SNAP_THRESHOLD_TOUCH_PX,
@@ -20,7 +20,7 @@ import {
   snapNudge,
   thresholdFeet,
   type SnapResult,
-} from '../lib/snapping';
+} from '../core/snapping';
 import type { FurnitureItem, Id, Layout } from '../types';
 import type { CardRef } from './useCardHighlight';
 import type { History } from './useHistory';

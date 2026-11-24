@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import originalLinks from './__fixtures__/original-share-links.json';
-import originalStorage from './__fixtures__/original-storage.json';
-import { INITIAL_DOORS, INITIAL_WINDOWS } from './constants';
-import { migrateColor } from './colors';
-import { fromShareConfig, normalizeLayout, toShareConfig, type ShareConfig } from './layout';
+import originalLinks from '../__fixtures__/original-share-links.json';
+import originalStorage from '../__fixtures__/original-storage.json';
+import { INITIAL_DOORS, INITIAL_WINDOWS } from '../constants';
+import { migrateColor } from '../colors';
+import { fromShareConfig, normalizeLayout, toShareConfig, type ShareConfig } from '../layout';
 import {
-  base64UrlToBytes,
   buildShareUrl,
-  bytesToBase64Url,
   decodeLegacyConfig,
   decodeShareFragment,
   encodeLegacyConfig,
@@ -15,8 +13,9 @@ import {
   hasShareLink,
   readShareLink,
   stripShareLink,
-} from './share';
-import { unitValueToFeet } from './units';
+} from './link';
+import { base64UrlToBytes, bytesToBase64Url } from './codec';
+import { unitValueToFeet } from '../units';
 import type { Layout } from '../types';
 
 /**

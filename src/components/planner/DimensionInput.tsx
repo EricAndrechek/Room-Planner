@@ -8,7 +8,7 @@ import {
   roundNum,
   suggestReading,
   unitSuffix,
-} from '../../lib/units';
+} from '../../core/units';
 import type { UnitSystem } from '../../types';
 
 interface DimensionInputProps {

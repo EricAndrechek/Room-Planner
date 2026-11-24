@@ -1,5 +1,5 @@
 import { useEffect, useRef, type RefObject } from 'react';
-import type { NudgeSize } from '../lib/units';
+import type { NudgeSize } from '../core/units';
 
 export interface ShortcutHandlers {
   undo: () => void;

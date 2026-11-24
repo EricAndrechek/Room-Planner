@@ -19,14 +19,14 @@ import { useRotationDrag } from '../../hooks/useRotationDrag';
 import { useSelection } from '../../hooks/useSelection';
 import { track } from '../../lib/analytics';
 import type { BootState } from '../../lib/boot';
-import { migrateColor } from '../../lib/colors';
+import { migrateColor } from '../../core/colors';
 import { DESIGN_MODES } from '../../lib/constants';
-import { normalizeDegrees } from '../../lib/geometry';
-import { moveInside, piecesOutside } from '../../lib/placement';
-import { computeLayoutWarnings } from '../../lib/openings';
-import { toShareConfig } from '../../lib/layout';
+import { normalizeDegrees } from '../../core/geometry';
+import { moveInside, piecesOutside } from '../../core/placement';
+import { computeLayoutWarnings } from '../../core/openings';
+import { toShareConfig } from '../../core/layout';
 import { HELP_PATH } from '../../lib/paths';
-import { nudgeStep } from '../../lib/units';
+import { nudgeStep } from '../../core/units';
 import {
   loadSnapPreference,
   saveDesignMode,

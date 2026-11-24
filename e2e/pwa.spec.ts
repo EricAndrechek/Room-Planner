@@ -8,7 +8,7 @@ import fs from 'node:fs';
 
 const legacyLink: string = JSON.parse(
   fs.readFileSync(
-    new URL('../src/lib/__fixtures__/original-share-links.json', import.meta.url),
+    new URL('../src/core/__fixtures__/original-share-links.json', import.meta.url),
     'utf8',
   ),
 ).ftIn.url;

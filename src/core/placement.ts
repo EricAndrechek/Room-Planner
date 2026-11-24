@@ -2,7 +2,7 @@
  * Placing furniture: where a new piece goes (the free spot nearest the middle of the room), and
  * moving pieces back inside a room that shrank.
  */
-import type { FurnitureItem, Layout, RoomDims } from '../types';
+import type { FurnitureItem, Layout, RoomDims } from './types';
 import {
   GEOMETRY_EPSILON,
   checkItemsCollision,

@@ -7,5 +7,5 @@ playwright-report
 test-results
 public
 .github
-src/lib/__fixtures__
+src/core/__fixtures__
 brand/*.svg

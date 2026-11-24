@@ -9,7 +9,7 @@ import {
 import { createPortal } from 'react-dom';
 import { Check, Palette, X } from 'lucide-react';
 import { useDialogFocus } from '../../hooks/useDialogFocus';
-import { COLOR_PRESETS, DEFAULT_COLOR, isValidHex } from '../../lib/colors';
+import { COLOR_PRESETS, DEFAULT_COLOR, isValidHex } from '../../core/colors';
 import { PopoverRootContext } from './PopoverRoot';
 
 interface ColorPickerProps {

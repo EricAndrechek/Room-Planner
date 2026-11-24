@@ -14,7 +14,7 @@ import {
   snapAngle,
   type Point,
   wallLength,
-} from './geometry';
+} from './index';
 import type { Door, FurnitureItem } from '../types';
 
 const item = (over: Partial<FurnitureItem>): FurnitureItem => ({

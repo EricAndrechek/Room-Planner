@@ -1,6 +1,6 @@
 import type { FurnitureItem, Id, RoomDims, Wall } from '../types';
-import { FIT_MIN_ZOOM, MAX_ZOOM, MIN_ZOOM } from './constants';
-import { clamp } from './units';
+import { FIT_MIN_ZOOM, MAX_ZOOM, MIN_ZOOM } from '../constants';
+import { clamp } from '../units';
 
 export interface Point {
   x: number;

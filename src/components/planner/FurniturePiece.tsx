@@ -1,10 +1,10 @@
 import { memo, useId, type PointerEvent as ReactPointerEvent } from 'react';
 import { AlertTriangle, DoorOpen, Lock, RotateCw } from 'lucide-react';
-import { blendOnWhite, getBorderColor, migrateColor, readableTextOn } from '../../lib/colors';
+import { blendOnWhite, getBorderColor, migrateColor, readableTextOn } from '../../core/colors';
 import { PIXELS_PER_UNIT } from '../../lib/constants';
-import { warningText, type ItemWarning } from '../../lib/geometry';
-import { doorBlockText } from '../../lib/openings';
-import { feetToDisplay } from '../../lib/units';
+import { warningText, type ItemWarning } from '../../core/geometry';
+import { doorBlockText } from '../../core/openings';
+import { feetToDisplay } from '../../core/units';
 import type { FurnitureItem, UnitSystem } from '../../types';
 
 interface FurniturePieceProps {

@@ -7,9 +7,9 @@ import {
 } from 'react';
 import { track } from '../lib/analytics';
 import { PIXELS_PER_UNIT } from '../lib/constants';
-import { constrainOpening, isHorizontalWall, wallLength } from '../lib/geometry';
-import { findOpeningSpot, findOpeningSpotOnWall } from '../lib/openings';
-import { clamp } from '../lib/units';
+import { constrainOpening, isHorizontalWall, wallLength } from '../core/geometry';
+import { findOpeningSpot, findOpeningSpotOnWall } from '../core/openings';
+import { clamp } from '../core/units';
 import type { Door, Id, Layout, RoomDims, RoomWindow, Selection, Wall } from '../types';
 import type { History } from './useHistory';
 import type { usePointerDrag } from './usePointerDrag';

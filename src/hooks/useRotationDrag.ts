@@ -6,7 +6,7 @@ import {
   type AngleSnap,
   type Point,
   type RotationSnapMode,
-} from '../lib/geometry';
+} from '../core/geometry';
 import { usePointerDrag } from './usePointerDrag';
 
 export interface RotationDragOptions {

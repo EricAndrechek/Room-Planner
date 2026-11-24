@@ -7,7 +7,7 @@ import {
   fromShareConfig,
   normalizeLayout,
   type ShareConfig,
-} from '../lib/layout';
+} from '../core/layout';
 import { buildExportFile, exportFileName } from '../lib/projects';
 import type { DesignMode, Layout, Project, Selection, UnitSystem } from '../types';
 import type { History } from './useHistory';

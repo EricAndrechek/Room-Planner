@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { warningText, type ItemWarning } from '../lib/geometry';
-import { feetToDisplay } from '../lib/units';
+import { warningText, type ItemWarning } from '../core/geometry';
+import { feetToDisplay } from '../core/units';
 import type { FurnitureItem, Id, Layout, SaveStatus, UnitSystem } from '../types';
 
 /** Rapid changes (key repeat, drags) are coalesced into one announcement. */

@@ -6,8 +6,8 @@
  */
 import type { Paper } from './paper';
 import { deflate, pageFor, scenePdf, type RasterText } from './planPdf';
-import { PLAN_FONT_STACK, sceneToSvg } from './planSvg';
-import { buildPlanScene, type PlanInput, type Scene, type TextNode } from './scene';
+import { PLAN_FONT_STACK, sceneToSvg } from '../../core/render/svg';
+import { buildPlanScene, type PlanInput, type Scene, type TextNode } from '../../core/render/scene';
 
 /** Largest canvas we ask for (iOS Safari caps canvases at ~16.7 MP). */
 const MAX_PIXELS = 16_000_000;

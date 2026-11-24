@@ -14,7 +14,7 @@ import {
   roomMaxFeet,
   suggestReading,
 } from './units';
-import type { UnitSystem } from '../types';
+import type { UnitSystem } from './types';
 
 const close = (actual: number, expected: number, digits = 6) =>
   expect(actual).toBeCloseTo(expected, digits);
