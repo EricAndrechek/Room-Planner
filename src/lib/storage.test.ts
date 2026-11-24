@@ -302,15 +302,13 @@ describe('plans this build cannot open', () => {
     expect(s.getItem(KEYS.plans)).toBe(`[${NEWER_RECORD}]`);
   });
 
-  it('a saved plan with what the editor cannot show yet is kept the same way', () => {
+  it('a saved floor of several rooms opens (PR 9), and is not locked', () => {
     const record = JSON.stringify(createProject('Two rooms', TWO_ROOMS, NOW));
     const { s } = withNewKeys(`[${record}]`);
     const store = createPlanStore(s);
     const state = store.load(LATER);
-    expect(state.projects).toEqual([]);
-    expect(state.locked.map((l) => l.name)).toEqual(['Two rooms']);
-    store.savePlans([createProject('Mine', starterPlan(), LATER)]);
-    expect(splitJsonArray(s.getItem(KEYS.plans)!)![0]).toBe(record);
+    expect(state.locked).toEqual([]);
+    expect(state.projects.map((p) => p.plan.rooms.length)).toEqual([2]);
   });
 
   it('a working plan from a newer build is not loaded and never written', () => {
@@ -618,15 +616,13 @@ describe('opening share links at boot', () => {
     expect(result.state.plan.settings?.unitSystem).toBe('cm');
   });
 
-  it('a link holding what the editor cannot show is not opened, and nothing is written', async () => {
+  it('a link holding a floor of several rooms opens it (PR 9)', async () => {
     const s = createMemoryStorage();
     const store = createPlanStore(s);
     bootFromStorage(store, NOW);
-    const before = s.dump();
     const result = await boot(await buildPlanUrl('https://example.com/', TWO_ROOMS), store, LATER);
-    expect(result.linkProblem).toEqual({ kind: 'unsupported', where: 'link' });
-    expect(result.shared).toBeNull();
-    expect(s.dump()).toEqual(before);
+    expect(result.linkProblem).toBeUndefined();
+    expect(result.state.plan.rooms).toHaveLength(2);
   });
 
   it('an invalid link is ignored', async () => {
