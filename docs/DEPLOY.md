@@ -87,9 +87,31 @@ Against `wrangler dev` (or a preview, via `E2E_BASE_URL`) `e2e/mcp.spec.ts` also
 tests: a real call, CORS, 405/404 and a 429 burst. `astro preview` has no Worker, so they skip
 there. `MCP_SHOTS_DIR=<dir>` saves screenshots of the plan viewer.
 
-`server.json` (repository root) is the MCP Registry entry. Publishing is manual, once, by the owner:
-`mcp-publisher login github`, then `mcp-publisher publish` from the repository root (bump its
-`version` with `package.json` for a new listing).
+### MCP Registry releases
+
+`server.json` (repository root) is the MCP Registry entry and the one source of the MCP server's
+identity: the Worker's `initialize` serverInfo and its server card read their name, version, title,
+description, website and icons from it. To release, bump `version` in `server.json` in a PR.
+After the merge, `.github/workflows/mcp-registry.yml` validates it, skips a version the registry
+already has, waits until `https://room-planner.andrechek.com/mcp/server-card` serves the new
+version (Workers Builds deploys first), then logs in with GitHub OIDC (`id-token: write`, no
+secrets; the registry grants `io.github.EricAndrechek/*` to this repository's workflows) and
+publishes. Nothing is manual, including the first publish. `workflow_dispatch` reruns it. On
+PRs the workflow only validates. `mcp-publisher` is pinned to a release and its SHA-256 is
+checked; to upgrade, change both from that release's `registry_<version>_checksums.txt`.
+
+A domain name instead (`com.andrechek/room-planner`, the owner's open decision): generate an
+Ed25519 key pair, publish the public key as a TXT record on `andrechek.com`
+(`v=MCPv1; k=ed25519; p=<base64 public key>`), store the private key as the repository secret
+`MCP_DNS_PRIVATE_KEY`, then change `name` in `server.json` (and the AI Catalog identifier) and the
+workflow's login step to `mcp-publisher login dns --domain andrechek.com --private-key ...` (the
+workflow has the line in a comment). The `io.github` entry would then be marked deprecated with
+`mcp-publisher status`.
+
+### MCP analytics
+
+The Worker sends MCP usage events to PostHog (`worker/analytics.ts`, project key in the code). It
+needs no setup.
 
 `_headers` (from `public/`, copied into `dist/`) applies in `wrangler dev`.
 

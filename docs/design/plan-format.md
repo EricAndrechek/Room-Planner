@@ -858,10 +858,22 @@ supportedProtocolVersions }`, which lists 2026-07-28 and the 2025-era revisions.
 - `llms.txt` gains an "For AI agents" section with the endpoint and one line per tool.
 - A page `/agents/` explains how to add the server to a client and repeats the privacy statement.
 - The official MCP Registry gets a `server.json` (repository root) named
-  `io.github.EricAndrechek/room-planner`: the registry grants `io.github.<login>/*` with the GitHub
-  login's own capitals and matches the prefix case-sensitively, so the lower-case name first
-  written here would be refused. Published with `mcp-publisher`, a one-time manual step for the
-  owner after PR 4 is live. A unit test keeps `server.json`, the card and the catalog in step.
+  `io.github.EricAndrechek/room-planner`: the registry grants `io.github.<owner>/*` with the GitHub
+  owner's own capitals and matches the prefix case-sensitively, so the lower-case name first
+  written here would be refused. `server.json` is the one source of the server's identity: name,
+  version (its own, starting at 1.0.0, not the site's), title, a description within the
+  registry's 100 characters, `websiteUrl` (`/agents/`), `repository`, icons (the brand SVG, and
+  PNGs at 192 and 512 px, absolute https URLs with `mimeType` and `sizes`; the indigo tile reads
+  on light and dark, so no `theme`), and the remote. The Worker's `initialize` serverInfo and the
+  server card read the same fields, and a unit test checks all three agree.
+- **Publishing is automatic** (`.github/workflows/mcp-registry.yml`): a merge that bumps
+  `server.json`'s `version` is validated, skipped if the registry has that version, held until
+  production's server card serves it, then published with `mcp-publisher login github-oidc` (no
+  secrets; the registry derives the namespace from the OIDC token's `repository_owner`, so the
+  first publish needs no manual login). `mcp-publisher` is pinned (v1.8.8) and checksum-verified.
+  Pull requests run `mcp-publisher validate`. A domain-verified name (`com.andrechek/...`) would
+  need a DNS TXT record with an Ed25519 public key and the private key as a repository secret;
+  the switch is the `name` and the workflow's login step (docs/DEPLOY.md). Held for now.
 
 ### Privacy statement
 
@@ -869,12 +881,53 @@ For `/agents/`, the help page and the FAQ (the server card's description is capp
 characters):
 
 > The MCP server processes each plan in memory to answer the request and then discards it. It
-> stores nothing, has no accounts, and does not log plans. A plan link it returns holds the whole
-> plan in the part of the URL after `#`, which browsers do not send to any server.
+> stores no plans, has no accounts, and does not log plans. For usage analytics it sends PostHog
+> the tool name, the plan's size and issue counts, the client app's name and the request's IP
+> address (used for approximate location), like the website's own analytics; never plan content,
+> names or links. A plan link it returns holds the whole plan in the part of the URL after `#`,
+> which browsers do not send to any server.
 
 `llms.txt` and the FAQ said plans are never uploaded. PR 4 changes that to: never uploaded by the
 app; sent to the MCP server only when an AI assistant is asked to use it (footer, home page, FAQ,
 help and llms.txt; the statement above is `MCP_PRIVACY` in `src/lib/site.ts`).
+
+### Analytics
+
+The Worker reports usage to the site's PostHog project (`worker/analytics.ts`), so the owner can
+see whether and how the server is used. No other server-side analytics exist beyond Cloudflare's
+own Worker metrics.
+
+- **Events:** `mcp_initialize` (2025-era `initialize`, or `server/discover`), `mcp_tool_called`
+  (`tool`, `ok`, `error_kind` from a fixed list (`invalid_plan`, `unsupported_plan`,
+  `damaged_link`, ...), `issues_error` / `issues_warning` / `issues_info`, `issue_codes`,
+  `rooms`, `items`, `unit`, `duration_ms`), `mcp_resource_read` (`uri`), `mcp_rate_limited`. Every
+  event carries `client_name` / `client_version` (from `clientInfo`: on `initialize`, and on every
+  2026-07-28 request; 2025-era tool calls do not name their client), `client_kind`, `protocol`,
+  `ua_family` (a coarse class such as `claude`, `openai`, `node`; never the raw user agent),
+  `country` (from `request.cf`), `environment` (`production`, or `preview` on workers.dev, which
+  the project's test-account filter already excludes) and `$lib_version` (the server version).
+  `tools/list` and `ping` send nothing.
+- **Location:** the caller's IP (`CF-Connecting-IP`) goes to PostHog as `$ip`, so its GeoIP fills
+  city, region and country, as for the website's analytics (the owner's choice). `client_kind`
+  is `hosted` for clients that call from their vendor's servers (Claude's connectors on the web
+  and desktop, ChatGPT), whose location is the vendor's datacentre, and `local` otherwise (Claude
+  Code, Cursor, VS Code, the Inspector); the dashboard splits location by it.
+- **Never sent:** plan content, names, labels, coordinates, links or the raw user agent.
+  `$process_person_profile: false`: no person profiles.
+- **Identity:** `distinct_id` is `mcp_` plus 32 hex digits of SHA-256(IP, client name), stable for
+  one client app at one address.
+- **Never in the way:** the body is parsed once (and handed to the SDK as `parsedBody`); events are
+  built and posted in one batch to `us.i.posthog.com/batch/` inside `ctx.waitUntil`, after the
+  response body has finished (a 2025-era answer is a stream that ends when the tool does). A
+  failing or slow PostHog costs only the events; a unit test proves it. Local development sends
+  nothing.
+- **Dashboards:** "Room Planner MCP" in PostHog (calls per day by tool and by client, error rate,
+  issues per plan, location by client kind), and an MCP row on "Room Planner overview". No
+  alerts.
+- **Later:** link attribution (`&src=mcp` on server-made links and the viewer's button, read by the
+  app into `share_link_opened` as its `source`) needs `boot.ts`, which PR 5 owns. TODO after PR 5
+  merges: append it in `planLink` and read it in boot. WebMCP (PR 10) runs in the page, so its
+  analytics will be client-side, through `src/lib/analytics.ts`.
 
 ### Versioning the tool API
 

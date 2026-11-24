@@ -1,0 +1,126 @@
+name: MCP Registry
+
+# Publishes the MCP server (server.json) to the official MCP Registry, with no manual step: GitHub
+# OIDC proves the repository owner, so the registry grants io.github.EricAndrechek/*. Advisory
+# only: not a required check (the ruleset requires just `ci`). Never name a job `ci`.
+#
+# A release is a bump of `version` in server.json (the one source: the Worker's serverInfo and
+# server card read it). On main, the job skips a version the registry already has, waits until
+# production serves that version, then publishes. On pull requests it validates server.json.
+on:
+  push:
+    branches: [main]
+    paths: ['server.json', 'worker/**', '.github/workflows/mcp-registry.yml']
+  pull_request:
+    paths: ['server.json', 'worker/**', '.github/workflows/mcp-registry.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcp-registry-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # Pinned release and its SHA-256 from that release's registry_<v>_checksums.txt.
+  MCP_PUBLISHER_VERSION: v1.8.8
+  MCP_PUBLISHER_SHA256: 09f1fa70ee146b640584274a1a6b2b8a0310b05d4321fa9224e6df6a016d67f4
+  REGISTRY: https://registry.modelcontextprotocol.io
+  SERVER_CARD: https://room-planner.andrechek.com/mcp/server-card
+
+jobs:
+  validate:
+    name: validate server.json
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install mcp-publisher (pinned, checksum verified)
+        run: |
+          set -euo pipefail
+          archive=mcp-publisher_linux_amd64.tar.gz
+          curl --fail --location --silent --show-error --retry 3 --output "$archive" \
+            "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/${archive}"
+          echo "${MCP_PUBLISHER_SHA256}  ${archive}" | sha256sum --check --strict
+          tar xzf "$archive" mcp-publisher
+          ./mcp-publisher --help > /dev/null
+
+      - name: Validate server.json
+        run: ./mcp-publisher validate server.json
+
+  publish:
+    name: publish
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write # GitHub OIDC login to the registry
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read name and version
+        id: meta
+        run: |
+          echo "name=$(jq -r .name server.json)" >> "$GITHUB_OUTPUT"
+          echo "version=$(jq -r .version server.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Install mcp-publisher (pinned, checksum verified)
+        run: |
+          set -euo pipefail
+          archive=mcp-publisher_linux_amd64.tar.gz
+          curl --fail --location --silent --show-error --retry 3 --output "$archive" \
+            "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/${archive}"
+          echo "${MCP_PUBLISHER_SHA256}  ${archive}" | sha256sum --check --strict
+          tar xzf "$archive" mcp-publisher
+          ./mcp-publisher --help > /dev/null
+
+      - name: Validate server.json
+        run: ./mcp-publisher validate server.json
+
+      - name: Skip a version the registry already has
+        id: published
+        env:
+          NAME: ${{ steps.meta.outputs.name }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          name=$(jq -rn --arg n "$NAME" '$n|@uri')
+          status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            "${REGISTRY}/v0.1/servers/${name}/versions/${VERSION}")
+          echo "registry answered ${status} for ${NAME} ${VERSION}"
+          if [ "$status" = 200 ]; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::${NAME} ${VERSION} is already in the MCP Registry; nothing to publish."
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Wait for production to serve this version
+        if: steps.published.outputs.already == 'false'
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          # Workers Builds deploys main in a few minutes; the registry entry must not run ahead.
+          for i in $(seq 1 60); do
+            live=$(curl --silent --fail "${SERVER_CARD}" | jq -r .version || true)
+            if [ "$live" = "$VERSION" ]; then echo "production serves ${VERSION}"; exit 0; fi
+            echo "production serves '${live}', waiting for ${VERSION} (${i}/60)"
+            sleep 20
+          done
+          echo "::error::Production did not serve ${VERSION} within 20 minutes; not publishing."
+          exit 1
+
+      # The namespace follows the login: GitHub OIDC grants io.github.EricAndrechek/*. To move to a
+      # domain name (com.andrechek/room-planner), change `name` in server.json and this step to
+      # `./mcp-publisher login dns --domain andrechek.com --private-key "$MCP_DNS_KEY"` with
+      # `env: MCP_DNS_KEY: ${{ secrets.MCP_DNS_PRIVATE_KEY }}` (see docs/DEPLOY.md).
+      - name: Log in with GitHub OIDC
+        if: steps.published.outputs.already == 'false'
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish
+        if: steps.published.outputs.already == 'false'
+        run: ./mcp-publisher publish server.json
