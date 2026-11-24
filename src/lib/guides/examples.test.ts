@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { FurnitureItem } from '../../types';
-import { computeLayoutWarnings } from '../openings';
+import { computeLayoutWarnings } from '../../core/openings';
 import { EXAMPLES, examplesFor } from './examples';
 import { GUIDES } from './index';
 import { exampleShareFragment, exampleSvg } from './render';
-import { decodeShareFragment } from '../share';
-import { fromShareConfig } from '../layout';
+import { decodeShareFragment } from '../../core/share/link';
+import { fromShareConfig } from '../../core/layout';
 
 const byLabel = (id: string, label: string, nth = 0): FurnitureItem => {
   const found = EXAMPLES.find((e) => e.id === id)!.layout.items.filter((i) => i.label === label);

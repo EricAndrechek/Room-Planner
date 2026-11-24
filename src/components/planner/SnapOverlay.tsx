@@ -1,6 +1,6 @@
 import { memo, type CSSProperties } from 'react';
 import { Magnet } from 'lucide-react';
-import type { AngleSnap } from '../../lib/geometry';
+import type { AngleSnap } from '../../core/geometry';
 import { PIXELS_PER_UNIT } from '../../lib/constants';
 import {
   fitMeasurementLabels,
@@ -10,7 +10,7 @@ import {
   type Guide,
   type MeasurementLabel,
   type SnapResult,
-} from '../../lib/snapping';
+} from '../../core/snapping';
 import type { FurnitureItem, Id, RoomDims, UnitSystem } from '../../types';
 
 interface SnapOverlayProps {

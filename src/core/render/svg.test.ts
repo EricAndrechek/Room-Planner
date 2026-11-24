@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { INITIAL_DOORS, INITIAL_ITEMS, INITIAL_ROOM, INITIAL_WINDOWS } from '../constants';
 import { doorSwingGeometry } from '../openings';
 import { FEET_PER_METER } from '../units';
-import type { Door, FurnitureItem, Layout, RoomWindow, Wall } from '../../types';
-import { escapeXml, planSvg } from './planSvg';
+import type { Door, FurnitureItem, Layout, RoomWindow, Wall } from '../types';
+import { escapeXml, planSvg } from './svg';
 import {
   buildPlanScene,
   scaleBarFeet,

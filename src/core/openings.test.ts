@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Door, DoorType, FurnitureItem, Hinge, RoomDims, RoomWindow, Wall } from '../types';
-import { PIXELS_PER_UNIT as P } from './constants';
+import type { Door, DoorType, FurnitureItem, Hinge, RoomDims, RoomWindow, Wall } from './types';
+import { PIXELS_PER_UNIT as P } from '../lib/constants';
 import { checkItemsCollision, type Point } from './geometry';
 import { defaultLayout } from './layout';
 import {
@@ -11,7 +11,6 @@ import {
   computeLayoutWarnings,
   doorBlockText,
   doorGeometry,
-  doorSvg,
   doorSwingAngle,
   doorSwingGeometry,
   findOpeningSpot,
@@ -19,6 +18,7 @@ import {
   hasHingeSide,
   isSwingDoor,
 } from './openings';
+import { doorSvg } from '../components/planner/openingStyles';
 
 const room: RoomDims = { width: 14, height: 10 };
 const WIDTH = 3;

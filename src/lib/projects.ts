@@ -1,6 +1,6 @@
 /** Pure operations on the saved-projects list ("My Floor Plans"). */
 import type { Layout, Project, ProjectData } from '../types';
-import { layoutsEqual, normalizeLayout } from './layout';
+import { layoutsEqual, normalizeLayout } from '../core/layout';
 
 export const generateProjectId = (
   now: number = Date.now(),

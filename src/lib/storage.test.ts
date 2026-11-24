@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import earlyV3 from './__fixtures__/early-v3-storage.json';
-import originalLinks from './__fixtures__/original-share-links.json';
-import originalStorage from './__fixtures__/original-storage.json';
-import v2Storage from './__fixtures__/v2-storage.json';
+import earlyV3 from '../core/__fixtures__/early-v3-storage.json';
+import originalLinks from '../core/__fixtures__/original-share-links.json';
+import originalStorage from '../core/__fixtures__/original-storage.json';
+import v2Storage from '../core/__fixtures__/v2-storage.json';
 import { applySharedLink, boot, bootFromStorage } from './boot';
-import { defaultLayout, toShareConfig } from './layout';
-import { buildShareUrl } from './share';
+import { defaultLayout, toShareConfig } from '../core/layout';
+import { buildShareUrl } from '../core/share/link';
 import {
   KEYS,
   SCHEMA_KEY,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { defaultLayout, toShareConfig } from './layout';
-import { buildShareUrl } from './share';
+import { defaultLayout, toShareConfig } from '../core/layout';
+import { buildShareUrl } from '../core/share/link';
 import { QR_MAX_VERSION, makeQr, qrPath, qrVersion, type QrMatrix } from './qr';
 
 const matrix = (rows: string[]): QrMatrix => ({

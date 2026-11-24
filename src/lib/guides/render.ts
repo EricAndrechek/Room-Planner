@@ -2,10 +2,10 @@
  * Build-time rendering of the guide examples: the plan drawing (the same scene the planner's
  * PNG/PDF export draws) and the share link that opens the example in the planner.
  */
-import { toShareConfig } from '../layout';
-import { encodeShareFragment } from '../share';
-import { buildPlanScene, DEFAULT_SITE, type Scene, type SceneNode } from '../export/scene';
-import { sceneToSvg } from '../export/planSvg';
+import { toShareConfig } from '../../core/layout';
+import { encodeShareFragment } from '../../core/share/link';
+import { buildPlanScene, DEFAULT_SITE, type Scene, type SceneNode } from '../../core/render/scene';
+import { sceneToSvg } from '../../core/render/svg';
 import type { Example } from './examples';
 
 /** The example's plan scene, with the site name (no export date) in the footer. */
