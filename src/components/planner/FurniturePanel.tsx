@@ -70,7 +70,7 @@ function AddItemMenu({
           ref={button}
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className={`flex items-center justify-center text-emerald-800 px-1 py-1 rounded-r-sm border-l border-emerald-200 transition-colors ${open ? 'bg-emerald-100' : 'bg-emerald-50 hover:bg-emerald-100'}`}
+          className={`flex items-center justify-center text-emerald-800 w-6 min-h-6 rounded-r-sm border-l border-emerald-200 transition-colors ${open ? 'bg-emerald-100' : 'bg-emerald-50 hover:bg-emerald-100'}`}
           aria-label="More items to add"
           aria-expanded={open}
           aria-controls={open ? panelId : undefined}
