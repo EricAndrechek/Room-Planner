@@ -257,12 +257,14 @@ test.describe('plan viewer', () => {
     const first = view.getByRole('button', { name: /overlaps/ }).first();
     await expect(view.locator('#issues button').first()).toContainText('error');
     // Choosing an issue points at its pieces.
-    await first.click();
+    // Enter, not a click: iOS WebKit grows an iframe to its content, which confuses hit testing in
+    // this test host (real hosts embed the view in their own web view).
+    await first.press('Enter');
     await expect(first).toHaveAttribute('aria-pressed', 'true');
     await expect(view.locator('g[data-id="desk"]')).toHaveClass(/focus/);
     await expect(view.locator('g[data-id="bed"]')).not.toHaveClass(/focus/);
 
-    await view.getByRole('button', { name: 'Open in Room Planner' }).click();
+    await view.getByRole('button', { name: 'Open in Room Planner' }).press('Enter');
     await expect
       .poll(async () => (await viewerLog(page)).find((m) => m.method === 'ui/open-link')?.params)
       .toEqual({ url: (outcome.structured as { url: string }).url });
