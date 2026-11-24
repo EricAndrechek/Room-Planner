@@ -16,6 +16,7 @@ import {
   moveCorner,
   moveOpeningToWall,
   movePiecesInside,
+  narrowedOpenings,
   openingSpot,
   removeCorner,
   setRoomShape,
@@ -405,6 +406,23 @@ describe('room shapes', () => {
     expect(fixed.items[1]).toBe(l.items[1]);
     // Nearest: straight up out of the cut (the cut starts at y 6), not across to the left.
     expect(boxOf(fixed.items[0]!)).toMatchObject({ x: 9, y: 4 });
+  });
+});
+
+describe('narrowedOpenings', () => {
+  it('lists the doors and windows a shape change made narrower', () => {
+    const plan = toPlan({
+      roomDims: { width: 12, height: 10 },
+      doors: [],
+      windows: [{ id: 1, wall: 'top', position: 1, width: 10 }],
+      items: [],
+    });
+    const l = setRoomShape(plan, {
+      kind: 'l',
+      l: { width: 12, height: 10, corner: 'tr', cutWidth: 5, cutHeight: 4 },
+    });
+    expect(narrowedOpenings(plan, l).map((o) => [o.id, o.width])).toEqual([['window-1', 7]]);
+    expect(narrowedOpenings(l, l)).toEqual([]);
   });
 });
 

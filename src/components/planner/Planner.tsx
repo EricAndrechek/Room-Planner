@@ -32,7 +32,7 @@ import { DESIGN_MODES } from '../../lib/constants';
 import { normalizeDegrees } from '../../core/geometry';
 import { isRectangle } from '../../core/geometry/walls';
 import { piecesOutside } from '../../core/placement';
-import { movePiecesInside, resizeRoom } from '../../lib/edits';
+import { movePiecesInside, narrowedOpenings, resizeRoom } from '../../lib/edits';
 import {
   doorsOf,
   itemWarnings,
@@ -46,7 +46,7 @@ import {
 } from '../../lib/plans';
 import { HELP_PATH } from '../../lib/paths';
 import { sheetSummary } from '../../lib/sheet';
-import { nudgeStep } from '../../core/units';
+import { feetToDisplay, nudgeStep } from '../../core/units';
 import { loadSnapPreference, saveSnapPreference, type PlanStore } from '../../lib/storage';
 import type { DesignMode, Id, Item, Plan, RoomDims, UnitSystem } from '../../types';
 import { ColorPicker } from './ColorPicker';
@@ -335,7 +335,9 @@ export function Planner({ store, initial }: PlannerProps) {
     zoomRef,
     containerRef,
     keepView,
-    onWallsChanged: (before, after) => offerMoveInside(before, after),
+    onWallsChanged: (before, after) => {
+      if (!offerMoveInside(before, after)) noteNarrowed(before, after);
+    },
     onSelectCorner: () => setSelection(null),
   });
   // Selecting anything else deselects the corner; another plan starts from its own shape.
@@ -365,9 +367,9 @@ export function Planner({ store, initial }: PlannerProps) {
     [plan.items, plan.rooms],
   );
   /** The walls changed: if that left more pieces outside, offer to bring them back in. */
-  const offerMoveInside = (before: Plan, after: Plan) => {
+  const offerMoveInside = (before: Plan, after: Plan): boolean => {
     const outside = piecesOutside(after).length;
-    if (outside === 0 || outside <= piecesOutside(before).length) return;
+    if (outside === 0 || outside <= piecesOutside(before).length) return false;
     const one = outside === 1;
     showNotice({
       key: 'outside-room',
@@ -382,6 +384,26 @@ export function Planner({ store, initial }: PlannerProps) {
           track('pieces_moved_inside', { count });
         },
       },
+    });
+    return true;
+  };
+  /** A door or window too wide for its wall after the walls changed was narrowed: say so. */
+  const noteNarrowed = (before: Plan, after: Plan) => {
+    const narrowed = narrowedOpenings(before, after);
+    if (!narrowed.length) return;
+    const r = mainRoom(after);
+    const name = (o: (typeof narrowed)[number]) => {
+      const list = o.kind === 'door' ? doorsOf(r) : windowsOf(r);
+      return `${o.kind === 'door' ? 'Door' : 'Window'} ${list.findIndex((x) => x.id === o.id) + 1}`;
+    };
+    const first = narrowed[0]!;
+    showNotice({
+      key: 'wall-full',
+      message:
+        narrowed.length === 1
+          ? `${name(first)} is wider than ${theWall(r, first.wall)} now, so it was made ${feetToDisplay(first.width, unitSystem)} wide.`
+          : `${narrowed.length} doors and windows were made narrower to fit their walls.`,
+      timeoutMs: 6000,
     });
   };
   const changeRoomDims = (dims: RoomDims) => {
