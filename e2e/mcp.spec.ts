@@ -390,21 +390,16 @@ test.describe('the /mcp endpoint', () => {
     expect(catalog.headers()['content-type']).toContain('application/ai-catalog+json');
   });
 
-  // Last: it uses up this address's allowance for a minute.
+  // Last: it uses up this address's allowance for a minute. Sequential, so the requests share a
+  // connection and so an isolate (the in-memory limit is per isolate; see worker/http.ts).
   test('rate limits a burst with 429 and Retry-After', async ({ request }) => {
     test.slow();
-    const statuses: number[] = [];
-    let retryAfter: string | undefined;
-    for (let round = 0; round < 6 && !statuses.includes(429); round++) {
-      const batch = await Promise.all(
-        Array.from({ length: 40 }, () => request.post('/mcp', rpc('ping'))),
-      );
-      for (const r of batch) {
-        statuses.push(r.status());
-        if (r.status() === 429) retryAfter = r.headers()['retry-after'];
-      }
+    let limited: { status: number; retryAfter?: string } | undefined;
+    for (let i = 0; i < 250 && !limited; i++) {
+      const r = await request.post('/mcp', rpc('ping'));
+      if (r.status() === 429) limited = { status: 429, retryAfter: r.headers()['retry-after'] };
+      else expect(r.status()).toBe(200);
     }
-    expect(statuses).toContain(429);
-    expect(retryAfter).toBe('60');
+    expect(limited).toEqual({ status: 429, retryAfter: '60' });
   });
 });

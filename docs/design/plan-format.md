@@ -809,9 +809,10 @@ the options are Workers Paid or trimming the SDK's per-request work.
 - **The binding did not limit on this account.** With the binding present on the preview
   (`RateLimit-Policy` set), 200 sequential and then 250 parallel requests from one address in about
   50 s were all answered. So `http.ts` also keeps a fixed-window counter per client in the
-  isolate's memory (120 per 60 s, at most 10,000 clients, old windows dropped). It is approximate,
-  since one client can reach several isolates, but it costs nothing and stops a single client
-  hammering one isolate. The binding stays in front of it, so if Cloudflare enforces it later (or
+  isolate's memory (120 per 60 s, at most 10,000 clients, old windows dropped). It is approximate:
+  over one keep-alive connection (what MCP clients use) 160 pings got 429 from about the 113th on
+  the preview, but requests on fresh connections spread over many isolates and were not limited.
+  It costs nothing and stops a single client hammering the endpoint. The binding stays in front of it, so if Cloudflare enforces it later (or
   on production), both apply.
 - Over the limit: HTTP 429 with `Retry-After` and a JSON-RPC error that says to wait.
 - The zone has Bot Fight Mode off and no AI-bot blocking (checked read-only). Keep it that way: on
