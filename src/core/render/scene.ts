@@ -5,8 +5,10 @@
  *
  * This file lays out the page (title, plan, dimensions, footer); the rooms with their doors and
  * windows are drawn by scene/rooms.ts and the furniture by scene/items.ts. Pieces in the
- * inventory and hidden pieces are not drawn.
+ * inventory and hidden pieces are not drawn; the inventory is listed under the plan ("Not
+ * placed"), with each piece's colour and size.
  */
+import { getBorderColor, migrateColor } from '../colors';
 import { leafPoint, openingDoorGeometry } from '../geometry/doors';
 import { itemParts } from '../geometry/shapes';
 import { isRectangle, outlineArea, roomBounds } from '../geometry/walls';
@@ -66,6 +68,9 @@ const FONT_TITLE = 22;
 const FONT_SUB = 12.5;
 const FONT_DIM = 12;
 const FONT_FOOT = 10.5;
+const FONT_LIST = 11;
+/** Row height of the "Not placed" list. */
+const LIST_LINE = 17;
 
 // --- Annotations -------------------------------------------------------------------------
 
@@ -184,6 +189,70 @@ const bounds = (pts: [number, number][]) => ({
   maxY: Math.max(...pts.map((p) => p[1])),
 });
 
+/**
+ * The pieces in the inventory as a list under the plan, in columns across the page, from `top`:
+ * a heading, then a colour swatch, the name and the size of each. Null when there are none.
+ */
+const inventoryList = (
+  items: Plan['items'],
+  unitSystem: UnitSystem,
+  width: number,
+  top: number,
+): { node: GroupNode; height: number } | null => {
+  if (items.length === 0) return null;
+  const cols = width >= 760 ? 3 : 2;
+  const colW = (width - 2 * MARGIN) / cols;
+  const rows = Math.ceil(items.length / cols);
+  const children: SceneNode[] = [
+    {
+      kind: 'text',
+      x: MARGIN,
+      y: r2(top + FONT_SUB * 0.8),
+      text: `Not placed (${items.length})`,
+      size: FONT_SUB,
+      bold: true,
+      anchor: 'start',
+      fill: INK,
+    },
+  ];
+  const first = top + FONT_SUB + 10;
+  items.forEach((item, i) => {
+    const x = MARGIN + Math.floor(i / rows) * colW;
+    const y = first + (i % rows) * LIST_LINE;
+    const color = migrateColor(item.color);
+    children.push(
+      {
+        kind: 'rect',
+        x: r2(x),
+        y: r2(y),
+        w: 10,
+        h: 10,
+        rx: 2,
+        fill: color,
+        stroke: getBorderColor(color),
+        strokeWidth: 0.75,
+      },
+      {
+        kind: 'text',
+        x: r2(x + 16),
+        y: r2(y + 9),
+        text: fitText(
+          `${item.label.trim() || 'Item'} · ${feetToDisplay(item.width, unitSystem)} × ${feetToDisplay(item.depth, unitSystem)}`,
+          colW - 24,
+          FONT_LIST,
+        ),
+        size: FONT_LIST,
+        anchor: 'start',
+        fill: TEXT,
+      },
+    );
+  });
+  return {
+    node: { kind: 'group', role: 'inventory', children },
+    height: FONT_SUB + 10 + rows * LIST_LINE + 8,
+  };
+};
+
 // --- Scene -----------------------------------------------------------------------------
 
 export const formatPlanDate = (date: Date, locale?: string): string => {
@@ -280,16 +349,24 @@ export const buildPlanScene = (input: SceneInput): Scene => {
     maxY: content.maxY,
   };
 
-  // Page layout: header, plan, footer.
+  // Page layout: header, plan, the inventory (if any), footer.
   const planW = planBox.maxX - planBox.minX;
   const planH = planBox.maxY - planBox.minY;
   const width = Math.ceil(Math.max(planW + 2 * MARGIN, 600));
   const headerH = FONT_TITLE + 8 + FONT_SUB + 22;
   const footerH = 50;
-  const height = Math.ceil(MARGIN + headerH + planH + footerH + MARGIN);
+  const stored = inventoryList(
+    plan.items.filter((i) => !i.placement),
+    unitSystem,
+    width,
+    MARGIN + headerH + planH + 24,
+  );
+  const listH = stored ? stored.height + 24 : 0;
+  const height = Math.ceil(MARGIN + headerH + planH + listH + footerH + MARGIN);
   const ox = (width - planW) / 2 - planBox.minX;
   const oy = MARGIN + headerH - planBox.minY;
   const nodes: SceneNode[] = planNodes.map((n) => translateNode(n, ox, oy));
+  if (stored) nodes.push(stored.node);
 
   const title = (input.title ?? plan.name).trim() || 'Untitled';
   // One rectangle: its area as width x depth, as always; otherwise the outlines' total.

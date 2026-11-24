@@ -22,7 +22,7 @@ import {
 import { buildPlanUrl } from '../core/share/plan';
 import type { Plan, Project } from '../types';
 import { applySharedLink, boot, bootFromStorage } from './boot';
-import { changePiece, resizeRoom } from './edits';
+import { changePiece, resizeRoom, takeOutPiece } from './edits';
 import { DEFAULT_PLAN_NAME, samePlan, starterPlan, withDoc } from './plans';
 import { createProject } from './projects';
 import {
@@ -572,6 +572,18 @@ describe('opening share links at boot', () => {
     expect(result.state.projects[0]!.plan.name).toBe('Wohnzimmer 🛋️');
     expect(samePlan(result.state.plan, plan)).toBe(true);
     expect((await boot(url, createPlanStore(s))).shared?.createdProject).toBe(false);
+  });
+
+  it('a link keeps the pieces in the inventory, and they stay out of the room', async () => {
+    const s = createMemoryStorage();
+    const plan = withDoc(takeOutPiece(starterPlan(), 'item-6'), 'Aside', 'ft-in');
+    const url = await buildPlanUrl('https://example.com/', plan);
+    const result = await boot(url, createPlanStore(s));
+    expect(result.linkProblem ?? null).toBeNull();
+    expect(samePlan(result.state.plan, plan)).toBe(true);
+    const chair = result.state.plan.items.find((i) => i.label === 'Chair')!;
+    expect(chair).not.toHaveProperty('placement');
+    expect(chair).toMatchObject({ width: 1.5, depth: 1.5, color: '#fdba74' });
   });
 
   it('a link without a name gets its own project instead of overwriting the current one', () => {
