@@ -27,5 +27,16 @@ export const FEATURES = [
   'Share links that carry the whole layout',
   'Export as a PNG image or PDF (A4 or Letter), or print',
   'Works offline and installs as an app (PWA)',
+  'An MCP server, so AI assistants can lay out a room and hand you a link to edit it',
   'Undo and redo, keyboard shortcuts, and a touch-friendly phone layout',
 ] as const;
+
+/** The MCP server's endpoint, relative to the site (worker/http.ts). */
+export const MCP_PATH = 'mcp';
+
+/**
+ * What the MCP server does with a plan (docs/design/plan-format.md, section 7): one wording for
+ * /agents/, the help page and the FAQ.
+ */
+export const MCP_PRIVACY =
+  'The MCP server processes each plan in memory to answer the request and then discards it. It stores nothing, has no accounts, and does not log plans. A plan link it returns holds the whole plan in the part of the URL after #, which browsers do not send to any server.';

@@ -1,0 +1,205 @@
+---
+/**
+ * /agents/: the MCP server for AI assistants (docs/design/plan-format.md, section 7): what it
+ * does, how to add it to each client, example prompts, privacy and limits.
+ */
+import Content from '../layouts/Content.astro';
+import { withBase } from '../lib/paths';
+import { MCP_PATH, MCP_PRIVACY, SITE_NAME } from '../lib/site';
+
+const title = 'Room Planner for AI Assistants: Free MCP Server for Claude, ChatGPT & More';
+const description =
+  'Connect Claude, ChatGPT, VS Code, Cursor or Claude Code to Room Planner: your AI assistant lays out a room, checks it for clashes and blocked doors, and gives you a link to edit it.';
+
+const site = Astro.site ?? new URL(Astro.url.origin);
+const abs = (path: string) => new URL(withBase(path), site).toString();
+const endpoint = abs(MCP_PATH);
+
+const vscode = JSON.stringify(
+  { servers: { 'room-planner': { type: 'http', url: endpoint } } },
+  null,
+  2,
+);
+const cursor = JSON.stringify({ mcpServers: { 'room-planner': { url: endpoint } } }, null, 2);
+
+const tools = [
+  {
+    name: 'create_plan',
+    text: 'turns the rooms and furniture the assistant describes into a checked plan and a link that opens it in the planner. In Claude, ChatGPT and other apps that support MCP Apps, the drawing appears in the chat with any problems marked.',
+  },
+  {
+    name: 'check_layout',
+    text: 'lists overlapping pieces, pieces outside the room, furniture in a door’s swing or doorway, and gaps tighter than a walkway, so the assistant can fix them before it shows you anything.',
+  },
+  {
+    name: 'read_plan',
+    text: 'reads a Room Planner link you paste into the chat, so the assistant can change your existing plan.',
+  },
+];
+
+const prompts = [
+  'My bedroom is 11 × 12 ft. The door is on the bottom wall near the left corner and there is a window in the middle of the top wall. Fit a queen bed, two nightstands, a dresser and a desk, and give me a Room Planner link.',
+  'Lay out a 350 × 400 cm living room with a three-seat sofa facing a TV stand, a coffee table and two armchairs. Keep 90 cm walkways and nothing in front of the door.',
+  'Here is my plan: (paste your Room Planner link). Move the desk under the window and check that nothing blocks the door.',
+];
+
+const jsonLd = [
+  {
+    '@type': 'WebPage',
+    '@id': `${abs('agents/')}#page`,
+    name: 'Room Planner for AI assistants',
+    description,
+    url: abs('agents/'),
+    inLanguage: 'en',
+    isPartOf: { '@id': `${abs('')}#website` },
+    about: { '@id': `${abs('')}#app` },
+  },
+];
+
+const code = 'block bg-slate-900 text-slate-100 rounded-lg p-3 text-sm overflow-x-auto';
+---
+
+<Content
+  title={title}
+  description={description}
+  breadcrumbs={[{ name: 'For AI assistants', path: 'agents/' }]}
+  jsonLd={jsonLd}
+>
+  <h1 class="text-3xl font-bold text-slate-900 mb-3">Use {SITE_NAME} from an AI assistant</h1>
+  <p class="text-lg text-slate-600 mb-8">
+    {SITE_NAME} has a free MCP server. Connect it to Claude, ChatGPT or your code editor and ask the
+    assistant to lay out a room: it writes the plan to scale, checks it for clashes and blocked
+    doors, and gives you a link that opens the plan in the planner, where you can drag, rotate,
+    measure, export and share it. No account and no API key.
+  </p>
+
+  <article class="space-y-10 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:mb-3 [&_h3]:font-semibold [&_h3]:text-slate-800 [&_h3]:mt-5 [&_h3]:mb-1 [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_ul]:mb-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1 [&_ol]:mb-3">
+    <section id="url">
+      <h2>The server URL</h2>
+      <code class={code} tabindex="0">{endpoint}</code>
+      <p class="mt-3">
+        It is a remote MCP server over Streamable HTTP, with no sign-in (choose “no authentication”
+        or “none” if your app asks).
+      </p>
+    </section>
+
+    <section id="setup">
+      <h2>Add it to your assistant</h2>
+
+      <h3>Claude (claude.ai and the desktop app)</h3>
+      <ol>
+        <li>
+          Open <strong>Settings → Connectors</strong> and choose{' '}
+          <strong>Add custom connector</strong>.
+        </li>
+        <li>Name it “Room Planner”, paste the server URL above, and add it.</li>
+        <li>In a chat, turn Room Planner on from the tools menu, then ask for a layout.</li>
+      </ol>
+
+      <h3>ChatGPT</h3>
+      <ol>
+        <li>
+          Open <strong>Settings → Apps &amp; Connectors → Advanced settings</strong> and turn on
+          <strong>Developer mode</strong>.
+        </li>
+        <li>
+          Back in <strong>Apps &amp; Connectors</strong>, choose <strong>Create</strong>, paste the
+          server URL, set authentication to <strong>No authentication</strong>, and create it.
+        </li>
+        <li>In a chat, pick Room Planner from the tools (+) menu, then ask for a layout.</li>
+      </ol>
+
+      <h3>Claude Code</h3>
+      <code class={code} tabindex="0">claude mcp add --transport http room-planner {endpoint}</code>
+
+      <h3>VS Code (GitHub Copilot agent mode)</h3>
+      <p>
+        Run <strong>MCP: Add Server</strong> from the Command Palette, choose HTTP and paste the
+        URL, or add this to <code>.vscode/mcp.json</code>:
+      </p>
+      <pre class={code} tabindex="0">{vscode}</pre>
+
+      <h3>Cursor</h3>
+      <p>
+        Add this to <code>~/.cursor/mcp.json</code> (or <code>.cursor/mcp.json</code> in a project):
+      </p>
+      <pre class={code} tabindex="0">{cursor}</pre>
+
+      <h3>Other apps</h3>
+      <p>
+        Any MCP client that supports remote servers over Streamable HTTP can use the URL as it is.
+      </p>
+    </section>
+
+    <section id="tools">
+      <h2>What the assistant can do</h2>
+      <ul>
+        {tools.map((t) => (
+          <li>
+            <code>{t.name}</code> {t.text}
+          </li>
+        ))}
+      </ul>
+      <p>
+        Lengths can be in feet, inches, meters or centimeters: the assistant uses the units you use.
+        For now a link opens one rectangular room with its doors, windows and rectangular furniture,
+        which is what the planner edits today.
+      </p>
+    </section>
+
+    <section id="examples">
+      <h2>Things to ask</h2>
+      <ul>
+        {prompts.map((p) => (
+          <li>“{p}”</li>
+        ))}
+      </ul>
+    </section>
+
+    <section id="privacy">
+      <h2>Privacy</h2>
+      <p>{MCP_PRIVACY}</p>
+      <p>
+        The planner itself never uploads your floor plans: they stay in your browser. A plan reaches
+        the MCP server only when you ask an AI assistant to use it, and only the plan the assistant
+        sends. Your assistant's own privacy terms cover the chat itself.
+      </p>
+    </section>
+
+    <section id="limits">
+      <h2>Limits</h2>
+      <ul>
+        <li>Free, with no account. Each address can make about 120 requests a minute.</li>
+        <li>Up to 50 rooms and 500 pieces of furniture per plan, and 256 KB per request.</li>
+        <li>
+          The server makes no images; apps that support MCP Apps draw the plan in the chat, and the
+          link always shows it in the planner.
+        </li>
+      </ul>
+      <p>
+        For developers: the server is stateless and speaks both current MCP protocol versions. Its
+        server card is at{' '}
+        <a href={abs(`${MCP_PATH}/server-card`)} class="text-indigo-700 underline">
+          /{MCP_PATH}/server-card
+        </a>
+        , and the source is on{' '}
+        <a href="https://github.com/EricAndrechek/Room-Planner" class="text-indigo-700 underline">
+          GitHub
+        </a>
+        .
+      </p>
+    </section>
+  </article>
+
+  <p class="mt-10">
+    New to the planner? The{' '}
+    <a href={withBase('help/')} class="text-indigo-700 underline">
+      help page
+    </a>{' '}
+    explains every feature, and the{' '}
+    <a href={withBase('guides/')} class="text-indigo-700 underline">
+      room layout guides
+    </a>{' '}
+    list furniture sizes and clearances.
+  </p>
+</Content>

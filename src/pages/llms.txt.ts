@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { GUIDES, guidePath } from '../lib/guides';
-import { DEFAULT_DESCRIPTION, FEATURES, SITE_NAME } from '../lib/site';
+import { DEFAULT_DESCRIPTION, FEATURES, MCP_PATH, MCP_PRIVACY, SITE_NAME } from '../lib/site';
 
 /**
  * llms.txt (https://llmstxt.org): what the site is and where its content lives, for AI assistants
@@ -13,7 +13,7 @@ export const GET: APIRoute = ({ site }) => {
 
   const body = `# ${SITE_NAME}
 
-> ${SITE_NAME} (${url('')}) is a free online room layout and furniture planner. It runs entirely in the web browser: no sign-up, no account, and floor plans are stored on the user's own device, never uploaded.
+> ${SITE_NAME} (${url('')}) is a free online room layout and furniture planner. It runs entirely in the web browser: no sign-up, no account, and floor plans are stored on the user's own device; the app never uploads them.
 
 ${DEFAULT_DESCRIPTION}
 
@@ -21,7 +21,7 @@ Key facts:
 
 - Price: free. No account, trial or paid version.
 - Platform: any modern web browser on desktop, tablet or phone. Installable as a progressive web app; works offline after the first visit.
-- Privacy: plans live in the browser's local storage. Anonymous usage analytics (never layouts or plan names) can be turned off on the help page.
+- Privacy: plans live in the browser's local storage, and the app never uploads them. A plan reaches the MCP server only when an AI assistant is asked to use it. Anonymous usage analytics (never layouts or plan names) can be turned off on the help page.
 - Share links: a link carries the whole layout in the URL fragment (\`#s=\` followed by base64url-encoded, deflate-compressed JSON), so the layout is never sent to a server. Opening a link adds a copy of the layout as a new plan in the recipient's browser; the link is a snapshot.
 - Scope: one rectangular room per plan, drawn in 2D from above; furniture pieces are rectangles with a name, size, color and rotation. For a whole home, make one plan per room.
 
@@ -35,6 +35,17 @@ ${FEATURES.map((f) => `- ${f}`).join('\n')}
 - [Help](${url('help/')}): how to use every feature, step by step, and keyboard shortcuts.
 - [FAQ](${url('faq/')}): short answers: price, accounts, data storage, phones, sharing, export, units, offline use, door types.
 - [Room layout guides](${url('guides/')}): furniture sizes, clearances and example floor plans.
+- [For AI assistants](${url('agents/')}): how to connect Claude, ChatGPT, VS Code, Cursor or Claude Code to the MCP server.
+
+## For AI agents
+
+Room Planner has a free remote MCP server (Streamable HTTP, no authentication): ${url(MCP_PATH)}
+
+- \`create_plan\`: a plan (rooms, doors, windows, furniture, in ft, in, m or cm) checked for layout problems, and a link that opens it in the planner. Clients with MCP Apps show the drawing.
+- \`check_layout\`: overlapping pieces, pieces outside the room, blocked doors and tight clearances, without a link.
+- \`read_plan\`: the plan in a Room Planner link, to edit and send back to create_plan.
+
+${MCP_PRIVACY} Server card: ${url(`${MCP_PATH}/server-card`)}
 
 ## Guides
 

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** Site paths included, in order. Guides are appended from dist/guides/. */
-const PAGES = ['faq/', 'help/', 'guides/'];
+const PAGES = ['faq/', 'help/', 'agents/', 'guides/'];
 
 const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'" };
 const decode = (s) =>
@@ -100,8 +100,8 @@ export function llmsFull() {
           return `<!-- ${origin}/${path} -->\n\n${md}`;
         });
         const head =
-          '# Room Planner: help, FAQ and room layout guides (full text)\n\n' +
-          `> The text of ${origin}/faq/, /help/ and /guides/, generated from the site at build time. ` +
+          '# Room Planner: help, FAQ, AI assistants and room layout guides (full text)\n\n' +
+          `> The text of ${origin}/faq/, /help/, /agents/ and /guides/, generated from the site at build time. ` +
           `Summary and links: ${origin}/llms.txt\n`;
         writeFileSync(join(dist, 'llms-full.txt'), `${head}\n${sections.join('\n\n---\n\n')}\n`);
       },

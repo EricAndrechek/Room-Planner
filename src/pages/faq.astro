@@ -25,7 +25,11 @@ const faqs: { q: string; a: string }[] = [
   },
   {
     q: 'Where are my floor plans stored?',
-    a: `In your browser, on your device (local storage). Your layouts are never uploaded to a server. Clearing your browser's site data deletes them, so export a backup now and then. Anonymous usage analytics, which never include your layouts or plan names, can be turned off on the ${link('help/#privacy', 'help page')}.`,
+    a: `In your browser, on your device (local storage). The planner never uploads your layouts to a server. Clearing your browser's site data deletes them, so export a backup now and then. Anonymous usage analytics, which never include your layouts or plan names, can be turned off on the ${link('help/#privacy', 'help page')}.`,
+  },
+  {
+    q: 'Can an AI assistant plan my room?',
+    a: `Yes. ${link('agents/', 'Room Planner’s MCP server')} works with Claude, ChatGPT, VS Code, Cursor and other MCP apps: the assistant lays out the room, checks it for clashes and blocked doors, and gives you a link that opens the plan in the planner. It is free and needs no account. The server only sees the plans an assistant sends it, processes them in memory and stores nothing.`,
   },
   {
     q: 'Can I use it on a phone or tablet?',
