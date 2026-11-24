@@ -649,11 +649,11 @@ right tool.
 
 All three are read-only in the MCP sense (`readOnlyHint: true`): they compute and return.
 
-| Tool           | Input                                   | Output (`structuredContent`)                       | Use                                                        |
-| -------------- | --------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------- |
-| `create_plan`  | `{ plan: Plan }`                        | `{ plan, issues, summary, url }`, and the viewer   | Turn rooms and items into a checked plan and an edit link. |
-| `check_layout` | `{ plan: Plan, minClearance?: number }` | `{ ok, issues, summary }`                          | Cheap loop while arranging: no link, no drawing.           |
-| `read_plan`    | `{ url: string }`                       | `{ plan, summary, issues }` (display unit), viewer | Start from a plan the user already has (any link format).  |
+| Tool           | Input                                   | Output (`structuredContent`)                               | Use                                                        |
+| -------------- | --------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
+| `create_plan`  | `{ plan: Plan }`                        | `{ plan, issues, summary, url, editable }`, and the viewer | Turn rooms and items into a checked plan and an edit link. |
+| `check_layout` | `{ plan: Plan, minClearance?: number }` | `{ ok, issues, summary }`                                  | Cheap loop while arranging: no link, no drawing.           |
+| `read_plan`    | `{ url: string }`                       | `{ plan, summary, issues, url, editable }`, and the viewer | Start from a plan the user already has (any link format).  |
 
 The design's fourth tool, `render_plan` (a PNG), is not built: `create_plan` and `read_plan` show
 the drawing through the plan viewer below, so a separate "show" tool would only lengthen the list.
@@ -665,7 +665,11 @@ Details that implementers need:
   for the agent.
 - `plan` in an output is normalised (ids and defaults filled, outline clockwise) and converted back
   to the unit the agent sent, so the agent can edit and resend it.
-- `url` is the edit link (see "Links that today's app opens"). It is also the last line of the text
+- Every plan the format allows is accepted, checked and drawn: several rooms, any outline, L and
+  round pieces, pieces in the inventory. Only the edit link depends on the editor (see "Edit
+  links").
+- `url` is the edit link, or `null` when the editor cannot open the plan yet (`editable: false`,
+  `notEditable` lists why, and the text says so). The link is also the last line of the text
   content, alone on its line, so a client that shows only text still shows it whole.
 - `Issue` is `{ code, severity: 'error' | 'warning' | 'info', message, ids: string[] }`. Codes:
   `item_overlap`, `item_outside_room`, `door_blocked`, `doorway_blocked`, `opening_overlap`,
@@ -688,35 +692,27 @@ Details that implementers need:
 - Plans are never logged. The SDK's error callback logs the error's name only, since a message can
   quote the request.
 
-### Links that today's app opens
+### Edit links
 
-The deployed app holds v3 layouts until PR 5 (`APP_PLAN_VERSION` is 3), and answers a v4 link with
-the "needs a newer Room Planner" dialog (section 4). So until then the server writes the v3 share
-form: `#s=` with the `{ name, unitSystem, roomDims, doors, windows, items }` JSON the app itself
-writes (`worker/link.ts`, the inverse of the 3 → 4 migration). The room moves to the origin, an
-outline may start at any corner, openings get v3 walls, positions and hinges, pieces get their
-top-left corner, and lengths are written in the plan's display unit. A property test checks that
-the app's own reading of such a link (`loadPlan`, as every link is read) gives the same room,
-openings and pieces, and an e2e test opens a server-made link in the app and compares what it
-stored.
+PR 5 is merged, so the app holds v4 plans, and a server link is the compact v4 form (`#s=`), the
+one the app writes (`buildPlanUrl`, `worker/link.ts`). It carries the whole plan: room names, item
+notes and ids included.
 
-What the v3 form cannot hold:
+The editor does not open every v4 plan yet. Its own gate, `editablePlan` (`src/lib/plans.ts`),
+takes one rectangular room (listed from any corner, anywhere: turned and moved to the origin,
+which changes no drawing) whose pieces are all rectangles with a placement; anything else gets
+the "needs a newer Room Planner" dialog. The server asks the same function, so it never hands out
+a link the app would refuse. When it says no, the server still answers in full (the checked plan,
+the issues and the drawing) with `url: null`, `editable: false`, `notEditable` (its reasons), and
+one line of text: "No edit link yet: Room Planner's editor can't open plans with several rooms
+yet. The plan above is complete and checked, and the drawing shows it in full; editing support is
+coming." The viewer then hides Open in Room Planner and says the same. PRs 7a, 7b, 8 and 9 loosen
+`editablePlan`, and links appear for those plans with no change to the server. A property test
+round-trips random rectangular plans through a server link and `readPlanLink`; an e2e test opens
+a server link in the app and compares what the editor stored.
 
-- **Blocks the link:** more than one room, an outline that is not an axis-aligned rectangle,
-  `l` or `ellipse` pieces, pieces without `placement`. `create_plan` returns a tool error that
-  names them and says what the app edits today; `check_layout` accepts every plan.
-- **Left out, said in the text:** room names and item notes (no v3 field). Ids are renumbered
-  (`item-1`, ...).
-
-The switch is one function, `planLink`. It reads `APP_PLAN_VERSION`: once PR 5 raises it to
-`PLAN_VERSION`, every plan gets the compact v4 link (`compact` and the codec, which PR 5 keeps) and
-nothing is blocked; a test with `APP_PLAN_VERSION` mocked to 4 pins that branch. The v3 half of
-`link.ts` and its tests are deleted then. It imports nothing PR 5 removes (`core/layout.ts`,
-`core/adapter/`). Worker and assets deploy together, so the server always writes the links the
-site it ships with can open; copies older than PR 2 are risk 4 in section 11.
-
-Link source attribution (`share_link_opened` with `source: 'mcp'`) needs `boot.ts`, which PR 5
-owns, so PR 4 does not add it; PR 5 can append `&src=mcp` in `planLink` and read it in boot.
+Link source attribution (`share_link_opened` with `source: 'mcp'`): TODO, now that PR 5 has
+merged: append `&src=mcp` in `planLink` and read it in `boot.ts`.
 
 ### The plan viewer (MCP Apps)
 
@@ -871,9 +867,13 @@ supportedProtocolVersions }`, which lists 2026-07-28 and the 2025-era revisions.
   production's server card serves it, then published with `mcp-publisher login github-oidc` (no
   secrets; the registry derives the namespace from the OIDC token's `repository_owner`, so the
   first publish needs no manual login). `mcp-publisher` is pinned (v1.8.8) and checksum-verified.
-  Pull requests run `mcp-publisher validate`. A domain-verified name (`com.andrechek/...`) would
-  need a DNS TXT record with an Ed25519 public key and the private key as a repository secret;
-  the switch is the `name` and the workflow's login step (docs/DEPLOY.md). Held for now.
+  Pull requests run `mcp-publisher validate`. The owner approved the domain name
+  `com.andrechek.room-planner/mcp`, verified over HTTP (a public key at
+  `/.well-known/mcp-registry-auth` on `room-planner.andrechek.com`, which the registry grants
+  exactly `com.andrechek.room-planner/*`; no DNS change). Storing its private key as a repository
+  secret is the owner's step, so PR 4 keeps the OIDC name; the switch is the key file, the `name`
+  and the workflow's login step (docs/DEPLOY.md lists the commands; the workflow carries them in
+  a comment). GitHub OIDC stays the fallback.
 
 ### Privacy statement
 
@@ -882,10 +882,11 @@ characters):
 
 > The MCP server processes each plan in memory to answer the request and then discards it. It
 > stores no plans, has no accounts, and does not log plans. For usage analytics it sends PostHog
-> the tool name, the plan's size and issue counts, the client app's name and the request's IP
-> address (used for approximate location), like the website's own analytics; never plan content,
-> names or links. A plan link it returns holds the whole plan in the part of the URL after `#`,
-> which browsers do not send to any server.
+> the tool name, the plan's size and issue counts, the client app's name, the request's headers
+> (such as the user agent and language, never credentials), its IP address and Cloudflare's
+> location and network data for it, like the website's own analytics; never plan content, names
+> or links. A plan link it returns holds the whole plan in the part of the URL after `#`, which
+> browsers do not send to any server.
 
 `llms.txt` and the FAQ said plans are never uploaded. PR 4 changes that to: never uploaded by the
 app; sent to the MCP server only when an AI assistant is asked to use it (footer, home page, FAQ,
@@ -907,15 +908,29 @@ own Worker metrics.
   `country` (from `request.cf`), `environment` (`production`, or `preview` on workers.dev, which
   the project's test-account filter already excludes) and `$lib_version` (the server version).
   `tools/list` and `ping` send nothing.
-- **Location:** the caller's IP (`CF-Connecting-IP`) goes to PostHog as `$ip`, so its GeoIP fills
-  city, region and country, as for the website's analytics (the owner's choice). `client_kind`
-  is `hosted` for clients that call from their vendor's servers (Claude's connectors on the web
-  and desktop, ChatGPT), whose location is the vendor's datacentre, and `local` otherwise (Claude
-  Code, Cursor, VS Code, the Inspector); the dashboard splits location by it.
-- **Never sent:** plan content, names, labels, coordinates, links or the raw user agent.
+- **Request context:** the request's headers as `h_*` properties (`h_user_agent`,
+  `h_accept_language`, `h_origin`, `h_mcp_protocol_version`, ...), values cut to 512 characters,
+  except a denylist: `authorization`, `proxy-authorization`, `cookie`, `set-cookie`, and any
+  header whose name contains `token`, `secret`, `key`, `auth`, `session`, `signature` or
+  `password`. Cloudflare's `request.cf` adds `cf_city`, `cf_region`, `cf_region_code`,
+  `cf_postal_code`, `cf_country`, `cf_continent`, `cf_latitude`, `cf_longitude`, `cf_timezone`,
+  `cf_asn`, `cf_as_organization`, `cf_colo`, `cf_http_protocol` and `cf_tls_version`. A Worker's
+  own fetch to PostHog carries none of the caller's headers, so they travel as properties.
+- **Location:** the caller's IP (`CF-Connecting-IP`) also goes to PostHog as `$ip`, so its GeoIP
+  fills city, region and country, as for the website's analytics (the owner's choice).
+  `client_kind` is `hosted` for clients that call from their vendor's servers (Claude's
+  connectors on the web and desktop, ChatGPT), whose location is the vendor's datacentre, and
+  `local` otherwise (Claude Code, Cursor, VS Code, the Inspector). The network is the strongest
+  signal (`cf_as_organization` of a cloud or AI provider means hosted), then the client's name and
+  user agent. The dashboard splits location by it.
+- **Never sent:** plan content, names, labels, coordinates, links, or the denied headers.
   `$process_person_profile: false`: no person profiles.
-- **Identity:** `distinct_id` is `mcp_` plus 32 hex digits of SHA-256(IP, client name), stable for
-  one client app at one address.
+- **Identity:** a host-provided anonymous id when there is one, hashed and prefixed by its source:
+  ChatGPT's `_meta["openai/subject"]` (`chatgpt_…`), else its `_meta["openai/session"]`
+  (`chatgptsession_…`), else an `Mcp-Session-Id` header (`mcpsession_…`; this stateless server
+  issues none, but a proxy might). Otherwise a hash of IP, user agent and client name, with
+  `id_source: 'fallback'`. All users of a hosted client share its egress addresses, so without a
+  host id they cannot be told apart: count calls, not people (the dashboard says so).
 - **Never in the way:** the body is parsed once (and handed to the SDK as `parsedBody`); events are
   built and posted in one batch to `us.i.posthog.com/batch/` inside `ctx.waitUntil`, after the
   response body has finished (a 2025-era answer is a stream that ends when the tool does). A

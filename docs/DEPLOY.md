@@ -100,13 +100,30 @@ publishes. Nothing is manual, including the first publish. `workflow_dispatch` r
 PRs the workflow only validates. `mcp-publisher` is pinned to a release and its SHA-256 is
 checked; to upgrade, change both from that release's `registry_<version>_checksums.txt`.
 
-A domain name instead (`com.andrechek/room-planner`, the owner's open decision): generate an
-Ed25519 key pair, publish the public key as a TXT record on `andrechek.com`
-(`v=MCPv1; k=ed25519; p=<base64 public key>`), store the private key as the repository secret
-`MCP_DNS_PRIVATE_KEY`, then change `name` in `server.json` (and the AI Catalog identifier) and the
-workflow's login step to `mcp-publisher login dns --domain andrechek.com --private-key ...` (the
-workflow has the line in a comment). The `io.github` entry would then be marked deprecated with
-`mcp-publisher status`.
+A domain name instead: the owner approved `com.andrechek.room-planner/mcp`, verified over HTTP on
+`room-planner.andrechek.com` (the registry grants exactly `com.andrechek.room-planner/*` to that
+domain; no DNS change). It needs a private key that only the owner may store, so these steps are
+the owner's:
+
+1. Generate an Ed25519 key pair (OpenSSL 3 or later):
+   `openssl genpkey -algorithm Ed25519 -out key.pem`.
+2. Write the public half to `public/.well-known/mcp-registry-auth`:
+   `echo "v=MCPv1; k=ed25519; p=$(openssl pkey -in key.pem -pubout -outform DER | tail -c 32 | base64)" > public/.well-known/mcp-registry-auth`.
+   It is a static asset: served as is, with no Worker invocation; the service worker does not
+   precache it (only html, js, css and images) and never answers `/.well-known/`.
+3. Store the private half (hex) as the repository secret `MCP_REGISTRY_PRIVATE_KEY`:
+   `openssl pkey -in key.pem -noout -text | sed -n '/priv:/,/pub:/p' | sed '1d;$d' | tr -d ' :\n' | gh secret set MCP_REGISTRY_PRIVATE_KEY -R EricAndrechek/Room-Planner`
+   (and, if wanted, a copy in the gitignored `.env`), then delete `key.pem`.
+4. Change `name` in `server.json` to `com.andrechek.room-planner/mcp` and the AI Catalog
+   identifier to match, and in the workflow replace the OIDC login with
+   `./mcp-publisher login http --domain room-planner.andrechek.com --private-key "$MCP_REGISTRY_PRIVATE_KEY"`
+   (`env: MCP_REGISTRY_PRIVATE_KEY: ${{ secrets.MCP_REGISTRY_PRIVATE_KEY }}`), after a step that
+   waits until `https://room-planner.andrechek.com/.well-known/mcp-registry-auth` serves the record
+   (the registry fetches it from Google Cloud with `Accept: text/plain`; redirects fail).
+5. Optionally mark the `io.github` entry deprecated with `mcp-publisher status`.
+
+The workflow carries these lines in a comment. GitHub OIDC (`io.github.EricAndrechek/*`) stays
+the fallback that needs no secret.
 
 ### MCP analytics
 
