@@ -106,12 +106,32 @@ const clientKey = (request: Request) =>
 export const RATE_LIMIT = 120;
 
 /**
- * Handle /mcp and /mcp/*. `RateLimit-Policy` (IETF draft) says the limit is in force, which also
- * shows that the binding is there (previews need their own).
+ * A fixed-window counter per client in this isolate's memory: the backstop for the binding, which
+ * on this account accepted 450 requests a minute from one address without limiting (checked on
+ * the preview). Approximate, since a client can reach several isolates, but free, and enough to
+ * stop one client hammering the endpoint. Bounded: old windows are dropped.
  */
+const windows = new Map<string, { start: number; count: number }>();
+const WINDOW_MS = 60_000;
+const MAX_CLIENTS = 10_000;
+
+export function overMemoryLimit(key: string, now = Date.now()): boolean {
+  let w = windows.get(key);
+  if (!w || now - w.start >= WINDOW_MS) {
+    if (windows.size >= MAX_CLIENTS) {
+      for (const [k, v] of windows) if (now - v.start >= WINDOW_MS) windows.delete(k);
+      if (windows.size >= MAX_CLIENTS) windows.clear();
+    }
+    w = { start: now, count: 0 };
+    windows.set(key, w);
+  }
+  return ++w.count > RATE_LIMIT;
+}
+
+/** Handle /mcp and /mcp/*. `RateLimit-Policy` (IETF draft) states the limit. */
 export async function handleMcp(request: Request, env: Env): Promise<Response> {
   const response = await route(request, env);
-  if (env.MCP_LIMIT) response.headers.set('RateLimit-Policy', `"mcp";q=${RATE_LIMIT};w=60`);
+  response.headers.set('RateLimit-Policy', `"mcp";q=${RATE_LIMIT};w=60`);
   return response;
 }
 
@@ -130,8 +150,10 @@ async function route(request: Request, env: Env): Promise<Response> {
   const allow = isEndpoint ? 'POST, OPTIONS' : 'GET, HEAD, OPTIONS';
   if (request.method === 'OPTIONS') return preflight(allow);
 
+  const key = clientKey(request);
+  if (overMemoryLimit(key)) return tooManyRequests();
   if (env.MCP_LIMIT) {
-    const { success } = await env.MCP_LIMIT.limit({ key: clientKey(request) });
+    const { success } = await env.MCP_LIMIT.limit({ key });
     if (!success) return tooManyRequests();
   }
 

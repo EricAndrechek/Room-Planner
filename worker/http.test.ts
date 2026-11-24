@@ -7,7 +7,7 @@ import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/cli
 import { describe, expect, it } from 'vitest';
 import { readPlanLink } from '../src/core/share/plan';
 import worker from './index';
-import { MAX_BODY, type Env } from './http';
+import { MAX_BODY, overMemoryLimit, type Env } from './http';
 import catalog from '../public/.well-known/ai-catalog.json';
 import server from '../server.json';
 import { VIEWER_MIME_TYPE, VIEWER_URI } from './viewer';
@@ -287,6 +287,14 @@ describe('HTTP', () => {
     expect(body.error.message).toMatch(/Too many requests/);
     expect(e.calls).toEqual(['203.0.113.7', '203.0.113.7', '203.0.113.7']);
     expect(r.headers.get('ratelimit-policy')).toBe('"mcp";q=120;w=60');
+  });
+
+  it('limits a client in memory too, per minute, when the binding lets it through', () => {
+    const t = 1_000_000;
+    for (let i = 0; i < 120; i++) expect(overMemoryLimit('198.51.100.1', t)).toBe(false);
+    expect(overMemoryLimit('198.51.100.1', t + 1)).toBe(true);
+    expect(overMemoryLimit('198.51.100.2', t + 1)).toBe(false);
+    expect(overMemoryLimit('198.51.100.1', t + 60_000)).toBe(false);
   });
 
   it('serves the server card', async () => {
