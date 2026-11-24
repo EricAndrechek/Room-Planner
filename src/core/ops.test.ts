@@ -137,6 +137,15 @@ describe('corners', () => {
     expect(removeVertex(triangle, 'room-1', 0)).toBe(triangle);
   });
 
+  it('refuses a corner that would leave walls almost touching', () => {
+    // A counterexample the property below found: the triangle's corners pile up near (0, 0).
+    let p = removeVertex(plan(), 'room-1', 1);
+    p = insertVertex(p, 'room-1', 0, 0.05172476760274019);
+    p = removeVertex(p, 'room-1', 3 % p.rooms[0]!.outline.length);
+    p = insertVertex(p, 'room-1', 0, 0.05);
+    expect(checkIntegrity(p)).toEqual([]);
+  });
+
   it('after any sequence of corner edits, openings are on their walls and unchanged walls did not move', () => {
     const op = fc.oneof(
       fc.record({

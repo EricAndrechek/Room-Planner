@@ -175,7 +175,8 @@ const onWall = (o: Opening, len: number): Opening => {
 /**
  * Split wall `wall` at `t` (0 to 1 along it) with a new corner. An opening on that wall goes to
  * the half it is on; one the new corner would cut stays whole on the longer half. Openings on
- * later walls follow their wall's new index.
+ * later walls follow their wall's new index. Refused (the plan unchanged) when the new corner
+ * would come within GEOMETRY_EPSILON of a wall it does not belong to.
  */
 export function insertVertex(plan: Plan, roomId: string, wall: number, t: number): Plan {
   const r = roomIndex(plan, roomId);
@@ -188,6 +189,8 @@ export function insertVertex(plan: Plan, roomId: string, wall: number, t: number
   const corner = { x: f.origin.x + f.along.x * first, y: f.origin.y + f.along.y * first };
   const outline = [...room.outline];
   outline.splice(wall + 1, 0, corner);
+  // A corner very near another wall (a sliver of a room) leaves walls that almost touch.
+  if (!validOutline(outline)) return plan;
   const openings = room.openings.map((o) => {
     if (o.wall > wall) return { ...o, wall: o.wall + 1 };
     if (o.wall < wall) return o;
