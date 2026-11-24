@@ -286,6 +286,7 @@ describe('HTTP', () => {
     expect(body.jsonrpc).toBe('2.0');
     expect(body.error.message).toMatch(/Too many requests/);
     expect(e.calls).toEqual(['203.0.113.7', '203.0.113.7', '203.0.113.7']);
+    expect(r.headers.get('ratelimit-policy')).toBe('"mcp";q=120;w=60');
   });
 
   it('serves the server card', async () => {

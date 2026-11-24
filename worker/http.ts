@@ -102,8 +102,20 @@ export const serverCard = (origin: string) => ({
 const clientKey = (request: Request) =>
   request.headers.get('cf-connecting-ip') ?? request.headers.get('x-real-ip') ?? 'unknown';
 
-/** Handle /mcp and /mcp/*. */
+/** The limit in wrangler.jsonc, for the `RateLimit-Policy` header. */
+export const RATE_LIMIT = 120;
+
+/**
+ * Handle /mcp and /mcp/*. `RateLimit-Policy` (IETF draft) says the limit is in force, which also
+ * shows that the binding is there (previews need their own).
+ */
 export async function handleMcp(request: Request, env: Env): Promise<Response> {
+  const response = await route(request, env);
+  if (env.MCP_LIMIT) response.headers.set('RateLimit-Policy', `"mcp";q=${RATE_LIMIT};w=60`);
+  return response;
+}
+
+async function route(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   // Links and the card point at this site; behind Cloudflare it is https (wrangler dev says http).
   const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';

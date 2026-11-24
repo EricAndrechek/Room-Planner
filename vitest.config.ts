@@ -8,15 +8,18 @@ export default defineConfig({
       name: 'html-as-text',
       enforce: 'pre',
       // The built view may not exist yet: it is made in `load`.
-      resolveId(source, importer) {
+      async resolveId(source, importer) {
         if (!source.endsWith('viewer/dist/viewer.html') || !importer) return null;
-        return new URL(source, `file://${importer}`).pathname;
+        const { dirname, resolve } = await import('node:path');
+        return resolve(dirname(importer.split('?')[0]), source);
       },
       async load(id) {
         if (!id.endsWith('.html')) return null;
         const { viewerHtml, VIEWER_OUT } = await import('./scripts/build-viewer.mjs');
         const { readFile } = await import('node:fs/promises');
-        const text = id === VIEWER_OUT ? await viewerHtml() : await readFile(id, 'utf8');
+        // The id may come root-relative (`/worker/...`) when the file does not exist yet.
+        const isViewer = id === VIEWER_OUT || id.endsWith('/worker/viewer/dist/viewer.html');
+        const text = isViewer ? await viewerHtml() : await readFile(id, 'utf8');
         return `export default ${JSON.stringify(text)};`;
       },
     },
