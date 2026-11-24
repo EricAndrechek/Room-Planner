@@ -1,0 +1,63 @@
+{
+  "_comment": "A ?config= link as the first release (650f35d) built it: url.searchParams.set('config', btoa(JSON.stringify({ roomDims, door, items }))), from the layout in v2-storage.json. Lengths in feet, one door with open: 'in' | 'out', Tailwind-class colors.",
+  "url": "http://localhost:5173/?config=eyJyb29tRGltcyI6eyJ3aWR0aCI6MTAsImhlaWdodCI6OX0sImRvb3IiOnsid2lkdGgiOjIuNSwicG9zaXRpb24iOjMsIndhbGwiOiJib3R0b20iLCJoaW5nZSI6ImxlZnQiLCJvcGVuIjoib3V0In0sIml0ZW1zIjpbeyJpZCI6MSwibGFiZWwiOiJCZWQiLCJ3aWR0aCI6NiwiaGVpZ2h0Ijo0LCJ4IjoyLCJ5IjoyLCJyb3RhdGlvbiI6MCwiY29sb3IiOiJiZy1ibHVlLTIwMCBib3JkZXItYmx1ZS00MDAiLCJ2aXNpYmxlIjp0cnVlfSx7ImlkIjoyLCJsYWJlbCI6IkRlc2siLCJ3aWR0aCI6NCwiaGVpZ2h0IjoyLCJ4Ijo5LCJ5IjoyLCJyb3RhdGlvbiI6NDUsImNvbG9yIjoiYmctZW1lcmFsZC0yMDAgYm9yZGVyLWVtZXJhbGQtNDAwIiwidmlzaWJsZSI6dHJ1ZX0seyJpZCI6MywibGFiZWwiOiJXYXJkcm9iZSIsIndpZHRoIjozLCJoZWlnaHQiOjIsIngiOjIsInkiOjgsInJvdGF0aW9uIjowLCJjb2xvciI6ImJnLWFtYmVyLTIwMCBib3JkZXItYW1iZXItNDAwIiwidmlzaWJsZSI6ZmFsc2V9LHsiaWQiOjQsImxhYmVsIjoiUnVnIiwid2lkdGgiOjUsImhlaWdodCI6OCwieCI6NiwieSI6NSwicm90YXRpb24iOjAsImNvbG9yIjoiYmctcm9zZS0xMDAgYm9yZGVyLXJvc2UtMzAwIiwidmlzaWJsZSI6dHJ1ZX1dfQ%3D%3D",
+  "json": {
+    "roomDims": {
+      "width": 10,
+      "height": 9
+    },
+    "door": {
+      "width": 2.5,
+      "position": 3,
+      "wall": "bottom",
+      "hinge": "left",
+      "open": "out"
+    },
+    "items": [
+      {
+        "id": 1,
+        "label": "Bed",
+        "width": 6,
+        "height": 4,
+        "x": 2,
+        "y": 2,
+        "rotation": 0,
+        "color": "bg-blue-200 border-blue-400",
+        "visible": true
+      },
+      {
+        "id": 2,
+        "label": "Desk",
+        "width": 4,
+        "height": 2,
+        "x": 9,
+        "y": 2,
+        "rotation": 45,
+        "color": "bg-emerald-200 border-emerald-400",
+        "visible": true
+      },
+      {
+        "id": 3,
+        "label": "Wardrobe",
+        "width": 3,
+        "height": 2,
+        "x": 2,
+        "y": 8,
+        "rotation": 0,
+        "color": "bg-amber-200 border-amber-400",
+        "visible": false
+      },
+      {
+        "id": 4,
+        "label": "Rug",
+        "width": 5,
+        "height": 8,
+        "x": 6,
+        "y": 5,
+        "rotation": 0,
+        "color": "bg-rose-100 border-rose-300",
+        "visible": true
+      }
+    ]
+  }
+}

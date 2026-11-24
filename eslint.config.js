@@ -69,6 +69,17 @@ export default defineConfig(
     extends: [reactHooks.configs.flat.recommended],
     languageOptions: { globals: { ...globals.browser } },
     rules: {
+      // Zod's classic API costs three times as much as `zod/mini` for the same schema
+      // (docs/design/plan-format.md, section 2). src/core's own rule below also enforces this.
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: ['zod', 'zod/v4', 'zod/v3', 'zod/v4/classic'].map((name) => ({
+            name,
+            message: 'Import Zod as `zod/mini` (the classic API is three times the size).',
+          })),
+        },
+      ],
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_', destructuredArrayIgnorePattern: '^_' },

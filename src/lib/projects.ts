@@ -1,6 +1,7 @@
 /** Pure operations on the saved-projects list ("My Floor Plans"). */
 import type { Layout, Project, ProjectData } from '../types';
 import { layoutsEqual, normalizeLayout } from '../core/layout';
+import { NewerPlanError, newerPlanVersion } from './planVersion';
 
 export const generateProjectId = (
   now: number = Date.now(),
@@ -74,7 +75,8 @@ export const exportFileName = (projects: Project[], now: Date = new Date()): str
 
 /**
  * Parse an exported projects file (or a bare single-layout config) into new
- * projects with fresh ids. Throws on anything unrecognizable.
+ * projects with fresh ids. Throws on anything unrecognizable, and a `NewerPlanError` for a plan
+ * made by a newer Room Planner.
  */
 export const parseProjectsImport = (
   text: string,
@@ -85,6 +87,17 @@ export const parseProjectsImport = (
   if (typeof parsed !== 'object' || parsed === null) throw new Error('Invalid format');
   const obj = parsed as Record<string, unknown>;
   const iso = now.toISOString();
+
+  // A plan, or a plans file holding one, that this build cannot open: refuse the whole file.
+  const plans: unknown[] = Array.isArray(obj.projects)
+    ? obj.projects.map((p: unknown) =>
+        typeof p === 'object' && p !== null ? (p as Project).data : p,
+      )
+    : [parsed];
+  for (const plan of plans) {
+    const newer = newerPlanVersion(plan);
+    if (newer !== null) throw new NewerPlanError(newer);
+  }
 
   let incoming: Partial<Project>[];
   if (Array.isArray(obj.projects)) {

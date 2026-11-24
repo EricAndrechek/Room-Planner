@@ -1,3 +1,4 @@
+import type { Plan, Unit } from './schema';
 import type { UnitSystem } from './types';
 
 // Conversion factors (to feet). Internal storage is always feet.
@@ -264,3 +265,57 @@ export const suggestReading = (
   if (unitSystem === 'cm') return ok(Number(s) * FEET_PER_MM);
   return null;
 };
+
+// --- Plan documents in other units ----------------------------------------------------------
+
+/** One length from a document's unit to feet: the same factors `unitValueToFeet` uses. */
+const TO_FEET: Record<Unit, (v: number) => number> = {
+  ft: (v) => v,
+  in: (v) => v / 12,
+  m: (v) => v * FEET_PER_METER,
+  cm: (v) => v * FEET_PER_CM,
+};
+
+/** One length from feet to a unit, rounded like `feetToUnitValue`. */
+const FROM_FEET: Record<Unit, (feet: number) => number> = {
+  ft: (f) => roundNum(f, 6),
+  in: (f) => roundNum(f * 12, 4),
+  m: (f) => roundNum(f / FEET_PER_METER, 6),
+  cm: (f) => roundNum(f / FEET_PER_CM, 4),
+};
+
+/** The plan with every length passed through `f` and its unit set to `unit`. */
+const mapLengths = (plan: Plan, f: (v: number) => number, unit: Unit): Plan => ({
+  ...plan,
+  unit,
+  rooms: plan.rooms.map((r) => ({
+    ...r,
+    outline: r.outline.map((p) => ({ ...p, x: f(p.x), y: f(p.y) })),
+    openings: r.openings.map((o) => ({ ...o, offset: f(o.offset), width: f(o.width) })),
+  })),
+  items: plan.items.map((i) => ({
+    ...i,
+    width: f(i.width),
+    depth: f(i.depth),
+    ...(i.cut ? { cut: { ...i.cut, width: f(i.cut.width), depth: f(i.cut.depth) } } : {}),
+    ...(i.placement
+      ? { placement: { ...i.placement, x: f(i.placement.x), y: f(i.placement.y) } }
+      : {}),
+  })),
+});
+
+/**
+ * The plan in feet, the only unit the app holds (the last step of `loadPlan`). The same plan when
+ * it already is. A plan without a display preference keeps showing its own unit: `in`, `m` or
+ * `cm` becomes `settings.unitSystem`.
+ */
+export const toFeet = (plan: Plan): Plan => {
+  if (plan.unit === 'ft') return plan;
+  const out = mapLengths(plan, TO_FEET[plan.unit], 'ft');
+  if (!plan.settings?.unitSystem) out.settings = { ...plan.settings, unitSystem: plan.unit };
+  return out;
+};
+
+/** A plan in feet converted to `unit` for export (6 decimals for feet and metres, 4 otherwise). */
+export const fromFeet = (plan: Plan, unit: Unit): Plan =>
+  mapLengths(toFeet(plan), FROM_FEET[unit], unit);

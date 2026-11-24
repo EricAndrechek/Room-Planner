@@ -14,6 +14,7 @@ import {
 import { feetToDisplay } from '../../core/units';
 import type { Project, UnitSystem } from '../../types';
 import type { NewPlanStart } from '../../hooks/useProjectActions';
+import { NewerPlanError } from '../../lib/planVersion';
 import { Modal } from './Modal';
 import { newPlanChoices } from './NewPlanMenu';
 import { Tooltip } from './Tooltip';
@@ -69,8 +70,12 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
       const count = props.onImport(importText);
       if (count > 0) setImportText('');
       setImportError('');
-    } catch {
-      setImportError('Invalid file format. Please check your JSON.');
+    } catch (err) {
+      setImportError(
+        err instanceof NewerPlanError
+          ? err.message
+          : 'Invalid file format. Please check your JSON.',
+      );
     }
   };
 

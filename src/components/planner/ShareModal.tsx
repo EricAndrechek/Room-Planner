@@ -3,6 +3,7 @@ import { Check, Copy, Download, Mail, MonitorSmartphone, Share, Upload } from 'l
 import { captureError, track } from '../../lib/analytics';
 import { copyText } from '../../lib/browser';
 import { isShareConfig, type ShareConfig } from '../../core/layout';
+import { NEWER_PLAN_MESSAGE, newerPlanVersion } from '../../lib/planVersion';
 import { makeQr, qrPath, type QrMatrix } from '../../lib/qr';
 import { buildShareUrl } from '../../core/share/link';
 import { Modal } from './Modal';
@@ -146,6 +147,10 @@ export function ShareModal({ isOpen, onClose, config, onImport, showQr }: ShareM
   const handleImport = () => {
     try {
       const parsed: unknown = JSON.parse(importText);
+      if (newerPlanVersion(parsed) !== null) {
+        setImportError(NEWER_PLAN_MESSAGE);
+        return;
+      }
       if (!isShareConfig(parsed)) throw new Error('Invalid Config');
       onImport(parsed);
       setImportText('');

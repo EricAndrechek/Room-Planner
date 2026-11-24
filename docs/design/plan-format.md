@@ -188,7 +188,11 @@ issues with paths. It runs after the schema on every load path:
 - ids are unique across the whole document (one namespace for rooms, openings and items);
 - `opening.wall` is below `outline.length` and `offset + width` fits the wall;
 - `cut` is present exactly when `shape` is `l`, and is smaller than the bounding box;
-- an outline is a simple polygon with a non-zero area.
+- an outline is a simple polygon with a non-zero area, listed clockwise (PR 2: a counter-clockwise
+  outline would turn every wall's inward side outward, so strict mode rejects it; lenient mode
+  reverses it, as below);
+- "fits the wall" allows an overhang of `FIT_TOLERANCE` (0.001 in the document's unit), so the
+  share form's 4-decimal rounding never makes a valid plan invalid.
 
 ### Why it looks like this
 
@@ -254,7 +258,9 @@ round and oval.
 
 **The document names its unit.** Agents and people who paste JSON think in inches or centimetres.
 `unit` is required so the choice is explicit. `toFeet(plan)` is the last step of loading and
-returns the same type with `unit: 'ft'`; it does nothing when the plan is already in feet. The app
+returns the same type with `unit: 'ft'`; it does nothing when the plan is already in feet. A plan
+in another unit with no `settings.unitSystem` gets that unit as its display preference, so it
+keeps showing in the unit it was written in. The app
 only ever holds, stores and shares feet, so no conversion happens on its own data and no core
 function needs to know about units. `fromFeet(plan, unit)` converts back for JSON export and MCP
 output, with today's rounding (6 decimals for feet and metres, 4 for inches and centimetres).
@@ -317,7 +323,11 @@ type LoadResult =
   | { ok: false; reason: 'newer'; version: number }
   | { ok: false; reason: 'invalid'; issues: Issue[] };
 
-export function loadPlan(input: unknown, mode: 'lenient' | 'strict'): LoadResult;
+export function loadPlan(
+  input: unknown,
+  mode: 'lenient' | 'strict',
+  options?: { lengthsInFeet?: boolean },
+): LoadResult;
 ```
 
 Steps, in order:
@@ -331,6 +341,11 @@ Steps, in order:
    `repairs`. This is today's `normalize*` behaviour, kept so one bad field never costs a plan.
 5. Validate with the schema, then `checkIntegrity`.
 6. `toFeet`.
+
+`lengthsInFeet` (added in PR 2) tells the 3 → 4 step that a version 3 input is stored data: its
+lengths are feet and its `unitSystem` is only the display preference. A link or the JSON box has
+the same shape with lengths in `unitSystem`, and nothing in the document tells the two apart. The
+v3 plans-file import has always read lengths as feet, so it passes the option too.
 
 Lenient mode is for storage, share links and JSON import. Strict mode is for MCP and WebMCP, where
 the caller should get the error and fix it.
@@ -346,35 +361,35 @@ input, WebMCP tool input, and the guide examples at build time.
 | Storage `room-sim-v2-{dims,door,items}`                       | `650f35d`                             | exists: `v2-storage.json`                              |
 | Storage `room-sim-v3-*`, Tailwind colours, no units in plans  | `3bd206d`                             | exists: `early-v3-storage.json`                        |
 | Storage `room-sim-v3-*`, hex colours, `locked`, units in plan | `2c81c9d` to `2cae5c5`                | exists: `original-storage.json`                        |
-| Storage as above plus `room-planner-schema: 1`, new doors     | 2.0 (`ece4748`) and doors (`aeda08b`) | new: capture from `main` with every door type and 180° |
-| Link `?config=` `{roomDims, door, items}`                     | `650f35d`                             | new: built from the v2 storage fixture                 |
-| Link `?config=` `{roomDims, doors, windows, items}`, feet     | `3bd206d`                             | new                                                    |
+| Storage as above plus `room-planner-schema: 1`, new doors     | 2.0 (`ece4748`) and doors (`aeda08b`) | `doors-storage.json` (captured from production)        |
+| Link `?config=` `{roomDims, door, items}`                     | `650f35d`                             | `v2-config-link.json`, from the v2 storage fixture     |
+| Link `?config=` `{roomDims, doors, windows, items}`, feet     | `3bd206d`                             | `early-v3-config-link.json`                            |
 | Link `?config=` with `name` and `unitSystem`                  | `2c81c9d` to `2cae5c5`                | exists: `original-share-links.json` (ft-in and metres) |
-| Link `#s=` and `#j=`, same JSON as UTF-8                      | 2.0                                   | new: one of each, with a non-Latin name                |
+| Link `#s=` and `#j=`, same JSON as UTF-8                      | 2.0                                   | `fragment-links.json`: one of each, non-Latin name, cm |
 | Share dialog JSON box                                         | all                                   | same JSON as the link fixtures                         |
-| Plans file `{version: 1, exportedAt, projects}`               | `3bd206d` onwards                     | new                                                    |
-| Bare layout object in a plans file                            | `3bd206d` onwards                     | new                                                    |
+| Plans file `{version: 1, exportedAt, projects}`               | `3bd206d` onwards                     | `plans-file.json`                                      |
+| Bare layout object in a plans file                            | `3bd206d` onwards                     | `bare-layout-file.json`                                |
 
 The legacy-domain bridge (`24fc2a4`, removed in `1a26cc4`) never wrote a format of its own. The
 fixtures already in `src/lib/__fixtures__/` move to `src/core/__fixtures__/` unchanged.
 
 ### The 3 → 4 step
 
-| v3                                               | v4                                                                                         |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `roomDims {width, height}`                       | `rooms[0] = { id: 'room-1', outline: [(0,0), (w,0), (w,h), (0,h)] }`                       |
-| `doors[]`, `windows[]`                           | `rooms[0].openings[]` with `kind`, doors first                                             |
-| `wall: top / right / bottom / left`              | `wall: 0 / 1 / 2 / 3`                                                                      |
-| `position` (from the left or the top)            | `offset`. Same value on top and right. On bottom and left, `length - position - width`.    |
-| `hinge: left / right`                            | `start / end`. Same on top and right, swapped on bottom and left.                          |
-| `type`, `swingAngle`                             | unchanged                                                                                  |
-| item `x, y` (corner), `width`, `height`          | `placement {x: x + width/2, y: y + height/2, rotation}`, `width`, `depth`                  |
-| `visible: false`                                 | `hidden: true`                                                                             |
-| `locked`, `label`, `color`                       | unchanged (colours already hex after the 2 → 3 step)                                       |
-| `unitSystem`, numbers in that unit (links, JSON) | `unit` = `ft` for `ft-in`, `ft` or missing, otherwise the same; numbers copied as they are |
-| storage: feet, units in a separate key           | `unit: 'ft'`, `settings.unitSystem` from the key or the plan                               |
-| project `designMode`                             | storage record `ui.designMode`                                                             |
-| unknown extra fields                             | kept on the same entity                                                                    |
+| v3                                               | v4                                                                                                                                 |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `roomDims {width, height}`                       | `rooms[0] = { id: 'room-1', outline: [(0,0), (w,0), (w,h), (0,h)] }`                                                               |
+| `doors[]`, `windows[]`                           | `rooms[0].openings[]` with `kind`, doors first                                                                                     |
+| `wall: top / right / bottom / left`              | `wall: 0 / 1 / 2 / 3`                                                                                                              |
+| `position` (from the left or the top)            | `offset`. Same value on top and right. On bottom and left, `length - position - width`. First clamped onto the wall as v3 drew it. |
+| `hinge: left / right`                            | `start / end`. Same on top and right, swapped on bottom and left.                                                                  |
+| `type`, `swingAngle`                             | unchanged                                                                                                                          |
+| item `x, y` (corner), `width`, `height`          | `placement {x: x + width/2, y: y + height/2, rotation}`, `width`, `depth`                                                          |
+| `visible: false`                                 | `hidden: true`                                                                                                                     |
+| `locked`, `label`, `color`                       | unchanged (colours already hex after the 2 → 3 step)                                                                               |
+| `unitSystem`, numbers in that unit (links, JSON) | `unit` = `ft` for `ft-in`, `ft` or missing, otherwise the same; numbers copied as they are                                         |
+| storage: feet, units in a separate key           | `unit: 'ft'`, `settings.unitSystem` from the key or the plan                                                                       |
+| project `designMode`                             | storage record `ui.designMode`                                                                                                     |
+| unknown extra fields                             | kept on the same entity                                                                                                            |
 
 Bottom and left reverse because a clockwise outline runs right to left along the bottom and bottom
 to top along the left.
@@ -436,6 +451,15 @@ load it, do not write over it, say what to do.
 | MCP, WebMCP         | A validation error that names the highest supported version.                                                                                                    |
 
 After the update and reload, the link is still in the URL and opens normally.
+
+What PR 2 ships (the app still holds v3 layouts, so for this build "newer" means any version above
+3, `APP_PLAN_VERSION` in `lib/planVersion.ts`; PR 5 raises it to `PLAN_VERSION`): the share-link
+dialog for `#s=`, `#j=` and `?config=`, the JSON box and the plans-file import, all decided by
+`core/version.ts` from the document's shape, so the schema does not load with the app. The dialog
+is a lazy chunk on the native `<dialog>`. A link that cannot be decoded (bad base64 or deflate data,
+not JSON, not a plan, or empty) opens the user's own plan with "This link is damaged". The saved and
+working plan rows need the v4 keys: the v3 keys can never hold a newer document, because the v4 app
+never writes them, so those rows ship with the keys in PR 5.
 
 Builds that are already deployed cannot be changed. Given a v4 link, today's `isShareConfig` fails
 (there is no `roomDims`), so the link is ignored and nothing is touched. That is safe but silent.
@@ -854,16 +878,16 @@ review: S is under a day, M is one to two days, L is three to five.
 
 ### Test strategy per PR
 
-| PR  | Tests                                                                                                                                                                         |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | The existing unit and e2e suites pass with no edits except import paths. The planner chunk size is within 1%.                                                                 |
-| 2   | Fixture tests for every row of the table in section 4, the property tests listed there, a chunk-size check (the planner chunk does not grow in this PR).                      |
-| 3   | SVG export byte-identical to `main` for every fixture and guide example. Warnings identical. The existing snapping, openings and placement tests pass through the adapter.    |
-| 4   | Worker unit tests through the handler with both protocol eras. e2e on the preview URL: 404 page, `/mcp` call, CORS preflight, 429. CSP and PWA e2e unchanged and passing.     |
-| 5   | Storage migration e2e from each storage fixture. Rollback and recovery test. Old and new links open. Two-tab test. A newer-version plan in storage survives a save untouched. |
-| 6   | PNG decodes, has the expected size and is not blank. CPU time logged in a preview deploy.                                                                                     |
-| 7–9 | Geometry unit and property tests per shape, e2e for each new control on desktop and phone projects, axe checks, keyboard-only e2e for outline editing.                        |
-| 10  | Fake `modelContext` unit tests and one e2e, as in section 8.                                                                                                                  |
+| PR  | Tests                                                                                                                                                                                                            |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | The existing unit and e2e suites pass with no edits except import paths. The planner chunk size is within 1%.                                                                                                    |
+| 2   | Fixture tests for every row of the table in section 4, the property tests listed there, a chunk-size check (the schema stays out of the planner chunk, which grows only by the read-path checks: +0.46 KB gzip). |
+| 3   | SVG export byte-identical to `main` for every fixture and guide example. Warnings identical. The existing snapping, openings and placement tests pass through the adapter.                                       |
+| 4   | Worker unit tests through the handler with both protocol eras. e2e on the preview URL: 404 page, `/mcp` call, CORS preflight, 429. CSP and PWA e2e unchanged and passing.                                        |
+| 5   | Storage migration e2e from each storage fixture. Rollback and recovery test. Old and new links open. Two-tab test. A newer-version plan in storage survives a save untouched.                                    |
+| 6   | PNG decodes, has the expected size and is not blank. CPU time logged in a preview deploy.                                                                                                                        |
+| 7–9 | Geometry unit and property tests per shape, e2e for each new control on desktop and phone projects, axe checks, keyboard-only e2e for outline editing.                                                           |
+| 10  | Fake `modelContext` unit tests and one e2e, as in section 8.                                                                                                                                                     |
 
 ### What can run in parallel
 

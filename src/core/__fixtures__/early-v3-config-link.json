@@ -1,0 +1,74 @@
+{
+  "_comment": "A ?config= link as commit 3bd206d built it: btoa(JSON.stringify({ roomDims, doors, windows, items })), no name or unitSystem, lengths in feet, Tailwind-class colors; from the layout in early-v3-storage.json.",
+  "url": "http://localhost:5173/?config=eyJyb29tRGltcyI6eyJ3aWR0aCI6MTIsImhlaWdodCI6MTJ9LCJkb29ycyI6W3siaWQiOjEsIndpZHRoIjozLCJwb3NpdGlvbiI6Niwid2FsbCI6ImJvdHRvbSIsImhpbmdlIjoibGVmdCIsInR5cGUiOiJzd2luZy1pbiJ9XSwid2luZG93cyI6W3siaWQiOjEsIndpZHRoIjo0LCJwb3NpdGlvbiI6NCwid2FsbCI6InRvcCJ9XSwiaXRlbXMiOlt7ImlkIjoxLCJsYWJlbCI6IkJlZCIsIndpZHRoIjo2LCJoZWlnaHQiOjQsIngiOjIsInkiOjIsInJvdGF0aW9uIjowLCJjb2xvciI6ImJnLWJsdWUtMjAwIGJvcmRlci1ibHVlLTQwMCIsInZpc2libGUiOnRydWV9LHsiaWQiOjIsImxhYmVsIjoiRGVzayIsIndpZHRoIjo0LCJoZWlnaHQiOjIsIngiOjksInkiOjIsInJvdGF0aW9uIjo0NSwiY29sb3IiOiJiZy1lbWVyYWxkLTIwMCBib3JkZXItZW1lcmFsZC00MDAiLCJ2aXNpYmxlIjp0cnVlfSx7ImlkIjozLCJsYWJlbCI6IldhcmRyb2JlIiwid2lkdGgiOjMsImhlaWdodCI6MiwieCI6MiwieSI6OCwicm90YXRpb24iOjAsImNvbG9yIjoiYmctYW1iZXItMjAwIGJvcmRlci1hbWJlci00MDAiLCJ2aXNpYmxlIjpmYWxzZX0seyJpZCI6NCwibGFiZWwiOiJSdWciLCJ3aWR0aCI6NSwiaGVpZ2h0Ijo4LCJ4Ijo2LCJ5Ijo1LCJyb3RhdGlvbiI6MCwiY29sb3IiOiJiZy1yb3NlLTEwMCBib3JkZXItcm9zZS0zMDAiLCJ2aXNpYmxlIjp0cnVlfV19",
+  "json": {
+    "roomDims": {
+      "width": 12,
+      "height": 12
+    },
+    "doors": [
+      {
+        "id": 1,
+        "width": 3,
+        "position": 6,
+        "wall": "bottom",
+        "hinge": "left",
+        "type": "swing-in"
+      }
+    ],
+    "windows": [
+      {
+        "id": 1,
+        "width": 4,
+        "position": 4,
+        "wall": "top"
+      }
+    ],
+    "items": [
+      {
+        "id": 1,
+        "label": "Bed",
+        "width": 6,
+        "height": 4,
+        "x": 2,
+        "y": 2,
+        "rotation": 0,
+        "color": "bg-blue-200 border-blue-400",
+        "visible": true
+      },
+      {
+        "id": 2,
+        "label": "Desk",
+        "width": 4,
+        "height": 2,
+        "x": 9,
+        "y": 2,
+        "rotation": 45,
+        "color": "bg-emerald-200 border-emerald-400",
+        "visible": true
+      },
+      {
+        "id": 3,
+        "label": "Wardrobe",
+        "width": 3,
+        "height": 2,
+        "x": 2,
+        "y": 8,
+        "rotation": 0,
+        "color": "bg-amber-200 border-amber-400",
+        "visible": false
+      },
+      {
+        "id": 4,
+        "label": "Rug",
+        "width": 5,
+        "height": 8,
+        "x": 6,
+        "y": 5,
+        "rotation": 0,
+        "color": "bg-rose-100 border-rose-300",
+        "visible": true
+      }
+    ]
+  }
+}
