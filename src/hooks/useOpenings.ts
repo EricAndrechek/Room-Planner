@@ -12,14 +12,14 @@ import { findOpeningSpot, findOpeningSpotOnWall } from '../core/openings';
 import { clamp } from '../core/units';
 import type { Door, Id, Layout, RoomDims, RoomWindow, Selection, Wall } from '../types';
 import type { History } from './useHistory';
+import { nextCardSeq, type CardRef } from './useCardHighlight';
 import type { usePointerDrag } from './usePointerDrag';
 
 type OpeningKind = 'doors' | 'windows';
 
 /** The door/window added last, for the sidebar to scroll to and highlight. */
-export interface AddedOpening {
+export interface AddedOpening extends CardRef {
   type: 'door' | 'window';
-  id: Id;
 }
 
 /** Defaults for a new opening; it goes to the next free spot from here. */
@@ -75,7 +75,7 @@ export function useOpenings({
   /** Select a new opening, point the sidebar at it and say where it went. */
   const added = (type: 'door' | 'window', id: Id, number: number, wall: Wall) => {
     setSelection({ id, type });
-    setLastAdded({ type, id });
+    setLastAdded({ type, id, seq: nextCardSeq() });
     announce(`${type === 'door' ? 'Door' : 'Window'} ${number} added on the ${wall} wall`);
   };
   /** Forget the selection if it points at this (removed) opening. */

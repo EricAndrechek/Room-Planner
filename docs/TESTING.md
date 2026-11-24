@@ -53,10 +53,15 @@ In GitHub, run the workflow by hand: Actions > Cross-browser > Run workflow, opt
 ### Mobile projects
 
 `mobile-safari`/`mobile-chrome` run the same specs as desktop plus `e2e/mobile.spec.ts` (tap, touch
-drag via pointer events, share round-trip, no horizontal overflow). Below 768px the sidebar is an
-off-canvas sheet and the step buttons read "1. Room" / "2. Items"; specs reach the sidebar through
-`openStep()` / `viewPlan()` in `e2e/ui.ts`, which work on both layouts. Only the mouse drag/rotate
-test in `planner.spec.ts` is desktop-only (its touch twin is in `mobile.spec.ts`).
+drag via pointer events, share round-trip, no horizontal overflow). Below 768px the sidebar is a
+bottom sheet over the plan, resting at `peek`, `half` (where a session starts) or `full` height
+(`data-detent` on `[data-testid="sidebar"]`), and the step buttons read "1. Room" / "2. Items". Specs
+reach the sidebar through `openStep()` (opens a collapsed sheet) and collapse it with `viewPlan()`,
+both in `e2e/ui.ts`, which work on both layouts; `setDetent()` sets a height. `e2e/sheet.spec.ts`
+covers the sheet itself at a phone-sized viewport in every project (so the required chromium job runs
+it): detents by tap, keyboard and drag, the plan fitting above it, piece/card sync and the on-screen
+keyboard (simulated with a stand-in `visualViewport`). Only the mouse drag/rotate test in
+`planner.spec.ts` is desktop-only (its touch twin is in `mobile.spec.ts`).
 
 On iOS (`mobile-safari`), PNG/PDF export opens the share sheet (Save Image / Save to Files) instead of
 a blob download, falling back to a download if sharing is refused; `export.spec.ts` stubs

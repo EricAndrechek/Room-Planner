@@ -39,6 +39,9 @@ async function seed(page: Page, extra: Record<string, string> = {}) {
       localStorage.setItem('room-sim-v3-items', JSON.stringify(items));
       localStorage.setItem('room-sim-v3-mode', 'furniture');
       for (const [k, v] of Object.entries(extra)) localStorage.setItem(k, v);
+      // Phones: start with the editor sheet collapsed, so the plan (and its zoom, which sets the
+      // snap distance in feet) is as big as it gets.
+      sessionStorage.setItem('room-planner-sheet', 'peek');
       sessionStorage.setItem('seeded', '1');
     },
     { items: ITEMS, extra },

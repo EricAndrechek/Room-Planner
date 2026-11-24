@@ -38,8 +38,8 @@ interface RoomCanvasProps {
   highlightDoorIds?: readonly Id[];
   /** Drawn inside the room, above the furniture (guides and measurements). */
   overlay?: ReactNode;
-  /** Floating controls over the canvas (the Snap chip on phones). */
-  controls?: ReactNode;
+  /** Phones: the editor sheet covers the whole plan (full height); keep it out of reach. */
+  covered?: boolean;
 }
 
 const GRID_STYLE = {
@@ -67,7 +67,7 @@ export function RoomCanvas({
   onDoorPointerDown,
   onWindowPointerDown,
   overlay,
-  controls,
+  covered = false,
   highlightDoorIds = [],
 }: RoomCanvasProps) {
   const { roomDims, doors, windows, items } = layout;
@@ -84,6 +84,7 @@ export function RoomCanvas({
       aria-label="Floor plan"
       aria-describedby="floor-plan-help"
       tabIndex={-1}
+      inert={covered}
       data-pan-area
     >
       <p id="floor-plan-help" className="sr-only">
@@ -122,8 +123,6 @@ export function RoomCanvas({
           )}
         </div>
       )}
-
-      {controls}
 
       {/* Room - centered, panned by translate and zoomed by scale */}
       <div

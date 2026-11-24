@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { animationsSettled, openStep, viewPlan } from './ui';
+import { animationsSettled, openStep, setDetent, viewPlan } from './ui';
 
 /** Wait for the island to mount and the initial auto-fit zoom to settle. */
 async function ready(page: Page) {
@@ -42,6 +42,24 @@ for (const [name, viewport] of [
     test('planner page has no serious violations', async ({ page }) => {
       await page.goto('/');
       await ready(page);
+      await expectNoSeriousViolations(page);
+    });
+
+    test('the phone editor sheet at peek, half and full has no serious violations', async ({
+      page,
+    }) => {
+      test.skip(viewport.width >= 768, 'phones get the bottom sheet');
+      await page.goto('/');
+      await ready(page);
+      for (const detent of ['peek', 'half', 'full'] as const) {
+        await setDetent(page, detent);
+        await expectNoSeriousViolations(page);
+      }
+      // A piece selected, collapsed: its summary and the Edit action.
+      await setDetent(page, 'peek');
+      await page.getByRole('button', { name: /^Chair,/ }).click();
+      await setDetent(page, 'peek');
+      await expect(page.getByTestId('sheet-action')).toHaveText('Edit');
       await expectNoSeriousViolations(page);
     });
 

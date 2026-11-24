@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { animationsSettled } from './ui';
+import { animationsSettled, openStep, viewPlan } from './ui';
 
 // Touch-emulated smoke for the narrow layout. Runs only in the mobile projects.
 test.beforeEach(({ isMobile }) => {
@@ -58,12 +58,17 @@ test('tap through the tabs, add furniture, touch-drag it, share link round-trips
   await ready(page);
   await expect(page.getByTestId('room')).toBeVisible();
 
-  // The sidebar is an off-canvas drawer on narrow screens (a first visit starts in Furniture mode).
-  await page.getByRole('button', { name: 'Edit furniture' }).tap();
-  await page.getByRole('button', { name: /^2\. (Furniture|Items)/ }).tap();
+  // The editor is a bottom sheet, half open on a first visit (which starts in Furniture mode).
+  await openStep(page, 'furniture');
   await page.getByRole('button', { name: 'Add Item' }).tap();
   const piece = page.getByRole('button', { name: /^New Item,/ });
   await expect(piece).toBeVisible();
+  // The new piece shows on the plan above the sheet.
+  await animationsSettled(page);
+  const sheetTop = (await page.getByTestId('sidebar').boundingBox())!.y;
+  expect((await piece.boundingBox())!.y + (await piece.boundingBox())!.height).toBeLessThan(
+    sheetTop,
+  );
   const before = (await storedItems(page)).find((i: { label: string }) => i.label === 'New Item');
 
   await touchDrag(page, piece, 50, -70);
@@ -100,7 +105,7 @@ test('no horizontal page scroll on the narrow layout', async ({ page }) => {
   expect(overflow).toBeLessThanOrEqual(1);
 });
 
-test('the offline toast never covers the bottom controls: Edit Room works right away', async ({
+test('the offline toast never covers the bottom controls: the sheet handle works right away', async ({
   page,
 }) => {
   // A returning visitor (a layout is stored) whose service worker installs now: the one-time
@@ -118,9 +123,11 @@ test('the offline toast never covers the bottom controls: Edit Room works right 
   await animationsSettled(page);
   const t = (await toast.boundingBox())!;
   const controls = page
-    .getByRole('button', { name: /^(Edit room settings|Zoom out|Zoom in|Fit to view)$/ })
+    .getByRole('button', {
+      name: /^(Resize editor|Zoom out|Zoom in|Fit to view|Snap|Next: Items)$/,
+    })
     .filter({ visible: true });
-  expect(await controls.count()).toBeGreaterThanOrEqual(4);
+  expect(await controls.count()).toBeGreaterThanOrEqual(5);
   for (const control of await controls.all()) {
     const b = (await control.boundingBox())!;
     const overlaps =
@@ -129,8 +136,8 @@ test('the offline toast never covers the bottom controls: Edit Room works right 
   }
   // Tappable now, while the toast is still up (a covered button would time out here).
   await expect(toast).toBeVisible();
-  await page.getByRole('button', { name: 'Edit room settings' }).tap({ timeout: 1000 });
-  await expect(page.getByRole('button', { name: 'View floor plan' })).toBeVisible();
+  await page.getByRole('button', { name: 'Resize editor' }).tap({ timeout: 1000 });
+  await expect(page.getByTestId('sidebar')).toHaveAttribute('data-detent', 'full');
 });
 
 test('touch targets: sidebar icon buttons and the rotate handle are at least 44px; pieces keep their size', async ({
@@ -138,14 +145,14 @@ test('touch targets: sidebar icon buttons and the rotate handle are at least 44p
 }) => {
   await page.goto('/');
   await ready(page);
-  await page.getByRole('button', { name: 'Edit furniture' }).tap();
-  await page.getByRole('button', { name: /^2\. (Furniture|Items)/ }).tap();
+  await openStep(page, 'furniture');
   for (const name of [/^Lock /, /^Hide /, /^Delete /]) {
     const b = (await page.getByRole('button', { name }).first().boundingBox())!;
     expect(b.width).toBeGreaterThanOrEqual(44);
     expect(b.height).toBeGreaterThanOrEqual(44);
   }
-  await page.getByRole('button', { name: 'View floor plan' }).tap();
+  await viewPlan(page);
+  await animationsSettled(page);
 
   // A piece is drawn at its real size (no 44px minimum stretching a small piece).
   const room = (await page.getByTestId('room').boundingBox())!;
@@ -155,6 +162,9 @@ test('touch targets: sidebar icon buttons and the rotate handle are at least 44p
 
   // The rotate handle's knob is smaller, but a touch within 44px of its center lands on it.
   await page.getByRole('button', { name: /^Chair,/ }).tap();
+  // (A tap on a piece opens the collapsed sheet to half: let it settle.)
+  await animationsSettled(page);
+  await page.waitForTimeout(400);
   const knob = (await page.getByTestId('rotate-handle').boundingBox())!;
   const hit = await page.evaluate(
     ({ x, y }) => !!document.elementFromPoint(x, y)?.closest('[data-testid="rotate-handle"]'),
@@ -163,14 +173,18 @@ test('touch targets: sidebar icon buttons and the rotate handle are at least 44p
   expect(hit).toBe(true);
 });
 
-test('the Snap toggle floats on the plan, clear of the mode badge', async ({ page }) => {
+test('the Snap toggle rides on the sheet, clear of it and of the mode badge', async ({ page }) => {
   await page.goto('/');
   await ready(page);
+  await animationsSettled(page);
   const toggle = page.getByRole('button', { name: 'Snap', exact: true });
   await expect(toggle).toBeVisible();
   const t = (await toggle.boundingBox())!;
   expect(t.height).toBeGreaterThanOrEqual(44);
   expect(t.x + t.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  expect(t.y + t.height).toBeLessThanOrEqual((await page.getByTestId('sidebar').boundingBox())!.y);
+  const badge = (await page.getByTestId('mode-badge').boundingBox())!;
+  expect(badge.y + badge.height).toBeLessThan(t.y);
 });
 
 for (const size of [
@@ -189,11 +203,17 @@ for (const size of [
       await ready(page);
       await animationsSettled(page);
       const pill = (await page.getByTestId('zoom-pill').boundingBox())!;
-      const edit = (await page.getByTestId('mobile-edit-button').boundingBox())!;
-      // Side by side, never overlapping, both fully on screen.
-      expect(pill.x + pill.width, 'zoom pill overlaps the edit button').toBeLessThanOrEqual(edit.x);
+      const snap = (await page
+        .getByTestId('sheet-floating')
+        .getByTestId('snap-toggle')
+        .boundingBox())!;
+      const sheet = (await page.getByTestId('sidebar').boundingBox())!;
+      // Side by side above the sheet, never overlapping, both fully on screen.
+      expect(pill.x + pill.width, 'zoom pill overlaps the Snap chip').toBeLessThanOrEqual(snap.x);
       expect(pill.x).toBeGreaterThanOrEqual(0);
-      expect(edit.x + edit.width).toBeLessThanOrEqual(size.width);
+      expect(snap.x + snap.width).toBeLessThanOrEqual(size.width);
+      expect(pill.y + pill.height).toBeLessThanOrEqual(sheet.y);
+      expect(snap.y + snap.height).toBeLessThanOrEqual(sheet.y);
       // The mode badge is one line (about 33px tall; two lines would be ~50).
       const badge = page.getByTestId('mode-badge');
       const b = (await badge.boundingBox())!;

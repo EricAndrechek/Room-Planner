@@ -3,24 +3,42 @@ import { MAX_ZOOM, MIN_ZOOM, PIXELS_PER_UNIT, ZOOM_STEP } from '../lib/constants
 import { clampZoom, computeFitZoom } from '../core/geometry';
 import type { RoomDims } from '../types';
 
+/**
+ * Parts of the canvas covered by floating UI (px): on phones the mode badge at the top, and the
+ * bottom sheet with the zoom controls riding on it at the bottom. Fitting and revealing a piece
+ * use the area between them.
+ */
+export interface ViewInsets {
+  top: number;
+  bottom: number;
+}
+const NO_INSETS: ViewInsets = { top: 0, bottom: 0 };
+/** Space kept between a revealed piece and the edges of the visible area (px). */
+const REVEAL_MARGIN = 12;
+
 /** Elements that start their own drag; a one-finger touch on them must not pan. */
 const DRAGGABLE_SELECTOR = '[data-draggable], [role="button"], .cursor-grab, .cursor-crosshair';
 
 /**
  * Canvas zoom & pan: trackpad pinch (ctrl+wheel) zooms, two-finger scroll
  * pans, touch pinch zooms + pans, one-finger touch on the background pans.
- * The room is fitted to the view shortly after mount, on window resize and when its size changes.
+ * The room is fitted to the visible area shortly after mount, on window resize and when its size
+ * changes. When the visible area changes (the phone sheet moved) a view that is still fitted is
+ * fitted again; one the user zoomed or panned keeps the same spot in the middle.
  */
 export function usePanZoom(
   containerRef: RefObject<HTMLElement | null>,
   room: RoomDims,
   isMobile: boolean,
+  insets: ViewInsets = NO_INSETS,
 ) {
   const [zoom, setZoomState] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const zoomRef = useRef(zoom);
   // How far out zooming may go: MIN_ZOOM, or further if the last fit needed it (a very big room).
   const minZoomRef = useRef(MIN_ZOOM);
+  // Whether the user zoomed or panned since the last fit.
+  const movedRef = useRef(false);
 
   const setZoom = useCallback((value: number | ((z: number) => number)) => {
     const next = clampZoom(
@@ -37,14 +55,19 @@ export function usePanZoom(
     const rect = el.getBoundingClientRect();
     const padding = isMobile ? 32 : 64;
     const fit = computeFitZoom(
-      { width: rect.width - padding, height: rect.height - padding },
+      {
+        width: rect.width - padding,
+        height: Math.max(40, rect.height - insets.top - insets.bottom - padding),
+      },
       room,
       PIXELS_PER_UNIT,
     );
     minZoomRef.current = Math.min(MIN_ZOOM, fit);
+    movedRef.current = false;
     setZoom(fit);
-    setPan({ x: 0, y: 0 });
-  }, [containerRef, isMobile, room, setZoom]);
+    // The room is centered in the canvas; shift it to the middle of the visible part.
+    setPan({ x: 0, y: (insets.top - insets.bottom) / 2 });
+  }, [containerRef, isMobile, room, setZoom, insets.top, insets.bottom]);
 
   // Auto-fit once after layout settles (the sidebar animates for 300ms), so
   // shared links and small screens open with the whole room visible.
@@ -66,6 +89,26 @@ export function usePanZoom(
     lastRoom.current = { width: room.width, height: room.height };
     fitRef.current();
   }, [room.width, room.height]);
+
+  // The visible area changed (the phone sheet moved): fit again, or keep the user's view centered.
+  const lastInsets = useRef(insets);
+  const followInsetsRef = useRef<(prev: ViewInsets, next: ViewInsets) => void>(() => {});
+  useEffect(() => {
+    followInsetsRef.current = (prev, next) => {
+      if (!movedRef.current) {
+        fitToView();
+        return;
+      }
+      const shift = (next.top - next.bottom - (prev.top - prev.bottom)) / 2;
+      setPan((p) => ({ x: p.x, y: p.y + shift }));
+    };
+  }, [fitToView]);
+  useEffect(() => {
+    const prev = lastInsets.current;
+    if (prev.top === insets.top && prev.bottom === insets.bottom) return;
+    lastInsets.current = { top: insets.top, bottom: insets.bottom };
+    followInsetsRef.current(prev, lastInsets.current);
+  }, [insets.top, insets.bottom]);
 
   // Re-fit on window resize (debounced).
   useEffect(() => {
@@ -100,6 +143,7 @@ export function usePanZoom(
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      movedRef.current = true;
       if (e.ctrlKey) {
         setZoom(zoomRef.current - e.deltaY * 0.01);
       } else {
@@ -126,6 +170,7 @@ export function usePanZoom(
     const onTouchMove = (e: TouchEvent) => {
       if (e.touches.length === 2 && pinching) {
         e.preventDefault();
+        movedRef.current = true;
         const d = distance(e.touches);
         if (lastDistance !== null) setZoom(zoomRef.current + (d - lastDistance) * 0.008);
         lastDistance = d;
@@ -137,6 +182,7 @@ export function usePanZoom(
         lastCenter = c;
       } else if (e.touches.length === 1 && singlePanning && lastSingle) {
         e.preventDefault();
+        movedRef.current = true;
         const cur = { x: e.touches[0]!.clientX, y: e.touches[0]!.clientY };
         const prev = lastSingle;
         setPan((p) => ({ x: p.x + cur.x - prev.x, y: p.y + cur.y - prev.y }));
@@ -170,11 +216,34 @@ export function usePanZoom(
     };
   }, [containerRef, setZoom]);
 
-  const zoomIn = useCallback(() => setZoom((z) => Math.min(MAX_ZOOM, z + ZOOM_STEP)), [setZoom]);
-  const zoomOut = useCallback(
-    () => setZoom((z) => Math.max(minZoomRef.current, z - ZOOM_STEP)),
-    [setZoom],
+  const zoomIn = useCallback(() => {
+    movedRef.current = true;
+    setZoom((z) => Math.min(MAX_ZOOM, z + ZOOM_STEP));
+  }, [setZoom]);
+  const zoomOut = useCallback(() => {
+    movedRef.current = true;
+    setZoom((z) => Math.max(minZoomRef.current, z - ZOOM_STEP));
+  }, [setZoom]);
+
+  /** Pan just enough that `el` (a piece) is inside the visible area (centered if it is bigger). */
+  const reveal = useCallback(
+    (el: Element) => {
+      const c = containerRef.current?.getBoundingClientRect();
+      if (!c) return;
+      const r = el.getBoundingClientRect();
+      const along = (lo: number, hi: number, start: number, end: number) => {
+        if (end - start > hi - lo) return (lo + hi) / 2 - (start + end) / 2;
+        if (start < lo) return lo - start;
+        if (end > hi) return hi - end;
+        return 0;
+      };
+      const m = REVEAL_MARGIN;
+      const dx = along(c.left + m, c.right - m, r.left, r.right);
+      const dy = along(c.top + insets.top + m, c.bottom - insets.bottom - m, r.top, r.bottom);
+      if (dx || dy) setPan((p) => ({ x: p.x + dx, y: p.y + dy }));
+    },
+    [containerRef, insets.top, insets.bottom],
   );
 
-  return { zoom, zoomRef, pan, zoomIn, zoomOut, fitToView };
+  return { zoom, zoomRef, pan, zoomIn, zoomOut, fitToView, reveal };
 }

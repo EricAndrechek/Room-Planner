@@ -106,6 +106,11 @@ summary:focus-visible {
   outline-offset: 2px;
 }
 
+/* The phone sheet's handle spans the sheet's whole top strip: draw its focus ring inside it. */
+.sheet-handle:focus-visible {
+  outline-offset: -3px;
+}
+
 /* Canvas pieces and handles sit on arbitrary colors: add a white halo so the ring reads on any fill. */
 [data-draggable]:focus-visible {
   outline: 3px solid #4f46e5;
@@ -144,12 +149,12 @@ summary:focus-visible {
 }
 
 /*
- * Toasts (PwaNotices). Below md the floating zoom pill and the Edit Room/Furniture button sit at
- * the bottom of the screen (bottom-6, ~3rem tall, plus the safe area), so toasts stack above them
- * instead of covering them. From md up there are no floating controls: toasts sit at the bottom.
+ * Toasts (PwaNotices). Below md the editor is a bottom sheet with the zoom pill and Snap chip riding
+ * on it: the planner sets --toast-bottom so toasts stack above them instead of covering them (over
+ * the sheet when it is at full height). From md up toasts sit at the bottom.
  */
 .toast-dock {
-  padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+  padding-bottom: var(--toast-bottom, calc(6rem + env(safe-area-inset-bottom)));
 }
 @media (min-width: 48rem) {
   .toast-dock {
@@ -190,6 +195,21 @@ summary:focus-visible {
     height: var(--hit, 44px);
     transform: translate(-50%, -50%);
     border-radius: 9999px;
+  }
+}
+
+/*
+ * Touch screens: form fields render at 16px at least, or iOS Safari zooms the whole page in when one
+ * is focused (and leaves it zoomed). Unlayered, so it beats the text-xs/text-sm utilities; the line
+ * height is set too, so a field grows by a pixel or two rather than by the utility's ratio. Page
+ * zoom itself stays allowed (no maximum-scale / user-scalable=no in the viewport tag).
+ */
+@media (pointer: coarse) {
+  html.app input:not([type='color'], [type='checkbox'], [type='radio'], [type='range']),
+  html.app select,
+  html.app textarea {
+    font-size: 16px;
+    line-height: 1.25;
   }
 }
 

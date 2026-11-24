@@ -39,6 +39,7 @@ export type AnalyticsEvent =
   | 'room_resized'
   | 'pieces_moved_inside'
   | 'snap_toggled'
+  | 'sheet_resized'
   | 'undo'
   | 'redo'
   | 'pwa_install_prompted'

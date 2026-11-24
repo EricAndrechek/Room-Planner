@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openStep } from './ui';
+import { announcements, openStep, recordAnnouncements } from './ui';
 
 // Adding doors/windows (issue #25): each new one lands in its own spot, is selected, and its
 // sidebar card is scrolled into view and highlighted, on the desktop panel and the phone sheet.
@@ -31,22 +31,26 @@ async function addThreeThenDelete(page: Page, { kind, label, key }: (typeof KIND
   const cards = page.getByTestId(`${kind}-card`);
   const before = await cards.count();
   const add = page.getByRole('button', { name: `Add ${label}` });
+  // Every announcement, not just the last: "Project saved" can replace "Door 4 added" quickly.
+  await recordAnnouncements(page);
   for (let i = 1; i <= 3; i++) {
     await add.click();
     await expect(cards).toHaveCount(before + i);
+    // Highlighted at once (checked now: the highlight fades after 1.5s, which a slow run can
+    // spend on the checks below).
+    await expect(cards.last()).toHaveAttribute('data-highlighted', 'true');
     // Each new card is smooth-scrolled into view (the cards are taller with the wall control):
     // let it arrive before the next click, which would otherwise hit a moving button.
     await expect(cards.last()).toBeInViewport();
   }
 
-  // The newest card is in view and highlighted; the highlight fades.
+  // The newest card is in view and announced; its highlight fades.
   const newest = cards.last();
   await expect(newest).toContainText(`${label} ${before + 3}`);
-  await expect(newest).toHaveAttribute('data-highlighted', 'true');
   await expect(newest).toBeInViewport();
-  await expect(page.locator('[role="status"][aria-live="polite"]').first()).toContainText(
-    new RegExp(`${label} ${before + 3} added on the (top|right|bottom|left) wall`),
-  );
+  await expect
+    .poll(() => announcements(page))
+    .toMatch(new RegExp(`${label} ${before + 3} added on the (top|right|bottom|left) wall`));
   await expect(newest).not.toHaveAttribute('data-highlighted', 'true', { timeout: 4000 });
 
   // Three distinct spots: in the saved layout and on the canvas.
@@ -77,11 +81,11 @@ for (const opening of KINDS) {
   });
 }
 
-// The phone layout (off-canvas sheet) in every project, including the desktop-only `ci` run.
+// The phone layout (the bottom sheet, half open) in every project, including the desktop-only `ci` run.
 test.describe('phone-sized viewport', () => {
   test.use({ viewport: { width: 390, height: 844 } });
   for (const opening of KINDS) {
-    test(`adding ${opening.kind}s in the sidebar sheet keeps the new card in view`, async ({
+    test(`adding ${opening.kind}s in the bottom sheet keeps the new card in view`, async ({
       page,
     }) => {
       await addThreeThenDelete(page, opening);
