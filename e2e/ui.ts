@@ -58,3 +58,24 @@ export async function animationsSettled(page: Page): Promise<void> {
     );
   });
 }
+
+/**
+ * Start recording everything the screen-reader live region says. Check with `announcements()`:
+ * reading the region's current text can miss a message that a later one ("Project saved")
+ * replaced quickly.
+ */
+export async function recordAnnouncements(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const region = document.querySelector('[role="status"][aria-atomic="true"]')!;
+    const said: string[] = ((window as unknown as { __said: string[] }).__said = []);
+    new MutationObserver(() => said.push(region.textContent ?? '')).observe(region, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+  });
+}
+
+/** Everything announced since `recordAnnouncements()`, joined with " | ". */
+export const announcements = (page: Page): Promise<string> =>
+  page.evaluate(() => (window as unknown as { __said: string[] }).__said.join(' | '));
