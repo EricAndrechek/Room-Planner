@@ -41,12 +41,6 @@ async function pick(page: Page, name: string) {
   await expect(piece(page, name)).toHaveAttribute('aria-pressed', 'true');
 }
 
-/** Where a piece's middle is on screen. */
-async function centreOf(page: Page, name: string) {
-  const b = (await piece(page, name).boundingBox())!;
-  return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
-}
-
 /** The screen point of a floor point (feet), from the floor's origin marker and the zoom. */
 async function screenAt(page: Page, x: number, y: number) {
   return page.evaluate(
