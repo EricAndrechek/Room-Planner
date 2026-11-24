@@ -8,6 +8,14 @@ import type { RoomDims } from '../types';
  * bottom sheet with the zoom controls riding on it at the bottom. Fitting and revealing a piece
  * use the area between them.
  */
+/** A room's bounding box in feet. */
+interface Bounds {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
 export interface ViewInsets {
   top: number;
   bottom: number;
@@ -245,5 +253,18 @@ export function usePanZoom(
     [containerRef, insets.top, insets.bottom],
   );
 
-  return { zoom, zoomRef, pan, zoomIn, zoomOut, fitToView, reveal };
+  /**
+   * The room's bounding box is about to change from `prev` to `next` (a corner dragged or nudged):
+   * pan so the floor stays where it is on screen (the room is drawn centred on its box), and do
+   * not re-fit for the new size.
+   */
+  const keepView = useCallback((prev: Bounds, next: Bounds) => {
+    lastRoom.current = { width: next.right - next.left, height: next.bottom - next.top };
+    const s = PIXELS_PER_UNIT * zoomRef.current;
+    const dx = ((next.left + next.right - prev.left - prev.right) / 2) * s;
+    const dy = ((next.top + next.bottom - prev.top - prev.bottom) / 2) * s;
+    if (dx || dy) setPan((p) => ({ x: p.x + dx, y: p.y + dy }));
+  }, []);
+
+  return { zoom, zoomRef, pan, zoomIn, zoomOut, fitToView, reveal, keepView };
 }

@@ -80,7 +80,7 @@ export default function LinkProblemDialog({
         ? 'The plan you were working on was last saved by a newer version of Room Planner than this one. Update to keep working on it. It has not been changed, and this version will not write over it.'
         : problem.kind === 'newer'
           ? 'The link holds a plan made with a newer version of Room Planner than this one. Update to open it; the link stays in the address bar. Your own plans are not changed.'
-          : 'The link holds a plan with something this version of Room Planner cannot show yet (several rooms or a room that is not a rectangle). Update to open it; the link stays in the address bar. Your own plans are not changed.';
+          : 'The link holds a plan with something this version of Room Planner cannot show yet (several rooms). Update to open it; the link stays in the address bar. Your own plans are not changed.';
 
   useEffect(() => {
     const dialog = ref.current;

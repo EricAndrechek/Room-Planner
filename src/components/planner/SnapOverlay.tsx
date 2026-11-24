@@ -1,6 +1,6 @@
 import { memo, type CSSProperties } from 'react';
 import { Magnet } from 'lucide-react';
-import type { AngleSnap } from '../../core/geometry';
+import type { AngleSnap, Point } from '../../core/geometry';
 import { PIXELS_PER_UNIT } from '../../lib/constants';
 import {
   fitMeasurementLabels,
@@ -18,6 +18,8 @@ interface SnapOverlayProps {
   /** The placed pieces as boxes (`snapPieces`). */
   items: SnapPiece[];
   room: RoomDims;
+  /** A room that is not a rectangle: wall clearances are measured to its outline. */
+  outline?: readonly Point[];
   zoom: number;
   unitSystem: UnitSystem;
   /** The selected (or dragged) piece. */
@@ -174,6 +176,7 @@ function RotationFeedback({
 export const SnapOverlay = memo(function SnapOverlay({
   items,
   room,
+  outline,
   zoom,
   unitSystem,
   itemId,
@@ -188,7 +191,7 @@ export const SnapOverlay = memo(function SnapOverlay({
   const labels = rotation
     ? []
     : fitMeasurementLabels(
-        measureClearances(bounds, items, room, item.id),
+        measureClearances(bounds, items, room, item.id, outline),
         zoom,
         PIXELS_PER_UNIT,
         unitSystem,

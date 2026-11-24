@@ -23,7 +23,7 @@ Key facts:
 - Platform: any modern web browser on desktop, tablet or phone. Installable as a progressive web app; works offline after the first visit.
 - Privacy: plans live in the browser's local storage. Anonymous usage analytics (never layouts or plan names) can be turned off on the help page.
 - Share links: a link carries the whole layout in the URL fragment (\`#s=\` followed by base64url-encoded, deflate-compressed JSON), so the layout is never sent to a server. Opening a link adds a copy of the layout as a new plan in the recipient's browser; the link is a snapshot.
-- Scope: one rectangular room per plan, drawn in 2D from above; furniture pieces are rectangles, L-shapes or ellipses with a name, size, color and rotation. For a whole home, make one plan per room.
+- Scope: one room per plan (a rectangle, an L-shape or any outline with straight walls), drawn in 2D from above; furniture pieces are rectangles, L-shapes or ellipses with a name, size, color and rotation. For a whole home, make one plan per room.
 
 Features:
 

@@ -40,7 +40,8 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     shortcuts: [
       {
         keys: () => [['Arrow keys']],
-        action: 'Move the selected piece 3 in (5 cm); snaps to a nearby wall or edge',
+        action:
+          'Move the selected piece (or door, window or corner) 3 in (5 cm); a piece snaps to a nearby wall or edge',
       },
       { keys: (k) => [[k.shift, 'Arrow keys']], action: 'Move 1 ft (25 cm)' },
       {
@@ -50,7 +51,10 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
         ],
         action: 'Move 1 in (1 cm), exactly, without snapping',
       },
-      { keys: (k) => [[k.alt, 'drag']], action: 'Move or rotate a piece without snapping' },
+      {
+        keys: (k) => [[k.alt, 'drag']],
+        action: 'Move or rotate a piece, or drag a corner, without snapping',
+      },
     ],
   },
   {
@@ -74,7 +78,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       },
       {
         keys: () => [['Delete'], ['Backspace']],
-        action: 'Delete the selected piece (or, in Room Setup, door or window)',
+        action: 'Delete the selected piece (or, in Room Setup, door, window or corner)',
       },
       { keys: () => [['I']], action: 'Move the selected piece to the inventory' },
       { keys: () => [['Escape']], action: 'Deselect' },
@@ -86,7 +90,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       {
         keys: () => [['Tab']],
         action:
-          'Move between pieces (or door and window handles in Room Setup); focusing one selects it',
+          'Move between pieces (or door, window and corner handles in Room Setup); focusing one selects it',
       },
       { keys: () => [['?']], action: 'Show these keyboard shortcuts' },
     ],

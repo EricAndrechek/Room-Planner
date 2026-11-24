@@ -2,7 +2,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { DOOR_TYPES, PIXELS_PER_UNIT } from '../../lib/constants';
 import { SWING_ARC_STROKE, doorStyles, doorSvg, windowStyles } from './openingStyles';
 import { feetToDisplay } from '../../core/units';
-import { openingPlace, roomSize } from '../../lib/plans';
+import { openingPlace, roomSize, theWall } from '../../lib/plans';
 import type { Opening, Room, UnitSystem } from '../../types';
 
 interface OpeningProps {
@@ -36,7 +36,7 @@ const handleScale = (handle: { width?: unknown }, zoom: number) => {
 const handleLabel = (kind: 'Door' | 'Window', room: Room, o: Opening, unitSystem: UnitSystem) => {
   const { wall, position, width } = openingPlace(room, o);
   const type = kind === 'Door' ? o.type : undefined;
-  return `${kind} handle${type ? ` (${DOOR_TYPES.find((t) => t.value === type)?.label ?? type})` : ''}, ${feetToDisplay(width, unitSystem)} wide on the ${wall} wall, ${feetToDisplay(position, unitSystem)} along the wall. Arrow keys slide it.`;
+  return `${kind} handle${type ? ` (${DOOR_TYPES.find((t) => t.value === type)?.label ?? type})` : ''}, ${feetToDisplay(width, unitSystem)} wide on ${theWall(room, wall)}, ${feetToDisplay(position, unitSystem)} along the wall. Arrow keys slide it.`;
 };
 
 export function DoorShape({

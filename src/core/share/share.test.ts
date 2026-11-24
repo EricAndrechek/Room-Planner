@@ -207,7 +207,7 @@ describe('legacy ?config= links (captured from the original app)', () => {
     const doors = room.openings.filter((o) => o.kind === 'door');
     expect(doors).toHaveLength(1);
     expect(openingPlace(room, doors[0]!)).toEqual({
-      wall: 'left',
+      wall: 3, // left
       position: 3,
       width: 2.5,
       hinge: 'right',
@@ -237,7 +237,7 @@ describe('legacy ?config= links (captured from the original app)', () => {
     expect(room.openings).toHaveLength(1);
     expect(room.openings[0]).toMatchObject({ kind: 'door', width: 3, type: 'sliding' });
     expect(openingPlace(room, room.openings[0]!)).toMatchObject({
-      wall: 'top',
+      wall: 0, // top
       position: 1,
       width: 3,
     });

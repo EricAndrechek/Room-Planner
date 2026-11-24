@@ -1,7 +1,8 @@
 /**
  * The editor's edits as pure functions `(plan, args) => plan`, over core/ops.ts and core
- * placement. They are the edits of a single rectangular room whose doors and windows sit on named
- * walls (plans.ts); each returns the plan unchanged (the same object) when there is nothing to do.
+ * placement. They are the edits of a single room (any outline) whose doors and windows sit on its
+ * walls, numbered as the outline lists them (plans.ts); each returns the plan unchanged (the same
+ * object) when there is nothing to do.
  */
 import {
   insideShift,
@@ -11,12 +12,31 @@ import {
   moveInside,
   wallSpots,
 } from '../core/placement';
-import { GEOMETRY_EPSILON } from '../core/geometry';
-import { addItem, nextId, removeItem, removeOpening, toInventory, updateItem } from '../core/ops';
-import { clamp } from '../core/units';
-import type { Id, Item, Opening, Plan, Room, RoomDims, Wall } from '../types';
+import { activePieces } from '../core/check';
+import { GEOMETRY_EPSILON, type Point } from '../core/geometry';
 import {
-  WALLS,
+  addItem,
+  insertVertex,
+  moveVertex,
+  nextId,
+  removeItem,
+  removeOpening,
+  removeVertex,
+  reshapeRoom,
+  toInventory,
+  updateItem,
+} from '../core/ops';
+import {
+  isRectangle,
+  lOutline,
+  lShapeOf,
+  roomBounds,
+  wallFrame,
+  type LShape,
+} from '../core/geometry/walls';
+import { clamp } from '../core/units';
+import type { Id, Item, Opening, Plan, Room, RoomDims } from '../types';
+import {
   hingeFor,
   mainRoom,
   openingPlace,
@@ -32,8 +52,7 @@ const withMainRoom = (plan: Plan, room: Room): Plan => ({
   rooms: [room, ...plan.rooms.slice(1)],
 });
 
-const wallLen = (dims: RoomDims, wall: Wall) =>
-  wall === 'top' || wall === 'bottom' ? dims.width : dims.height;
+const wallLen = (room: Pick<Room, 'outline'>, wall: number) => wallFrame(room, wall).length;
 
 // --- Room size -------------------------------------------------------------------------------
 
@@ -46,10 +65,17 @@ export function resizeRoom(plan: Plan, dims: RoomDims): Plan {
   const room = mainRoom(plan);
   const size = roomSize(room);
   if (size.width === dims.width && size.height === dims.height) return plan;
-  const next: Room = { ...room, outline: rectOutline(dims.width, dims.height) };
+  const b = roomBounds(room);
+  const next: Room = {
+    ...room,
+    outline: rectOutline(dims.width, dims.height).map((p) => ({
+      x: p.x + b.left,
+      y: p.y + b.top,
+    })),
+  };
   next.openings = room.openings.map((o) => {
     const place = openingPlace(room, o);
-    const len = wallLen(dims, place.wall);
+    const len = wallLen(next, place.wall);
     const width = Math.min(place.width, len);
     const position = clamp(place.position, 0, Math.max(0, len - width));
     const at = placeOn(next, place.wall, position, width);
@@ -59,18 +85,106 @@ export function resizeRoom(plan: Plan, dims: RoomDims): Plan {
   return withMainRoom(plan, next);
 }
 
+// --- Room shape ------------------------------------------------------------------------------
+
+/** What the Shape control offers. */
+export type ShapeChoice = 'rect' | 'l' | 'custom';
+
+/** An L's cut-out corner by default: half the room each way, in whole feet. */
+export const defaultLShape = (dims: RoomDims): LShape => ({
+  width: dims.width,
+  height: dims.height,
+  // The bottom-right corner: the starter room's door and window stay where they are.
+  corner: 'br',
+  cutWidth: Math.max(0.5, Math.round(dims.width / 2)),
+  cutHeight: Math.max(0.5, Math.round(dims.height / 2)),
+});
+
+/** The shortest wall an L made from the Shape fields may have (feet). */
+export const L_MIN_SIDE = 0.5;
+
+/** `l` kept valid: the cut inside the bounding box, with every wall at least `L_MIN_SIDE`. */
+export const fitLShape = (l: LShape): LShape => ({
+  ...l,
+  cutWidth: clamp(l.cutWidth, L_MIN_SIDE, Math.max(L_MIN_SIDE, l.width - L_MIN_SIDE)),
+  cutHeight: clamp(l.cutHeight, L_MIN_SIDE, Math.max(L_MIN_SIDE, l.height - L_MIN_SIDE)),
+});
+
+/**
+ * The room made a rectangle (its bounding box) or the L `l` (from the room's top-left corner),
+ * with each door and window moved to the nearest wall that runs the same way (`reshapeRoom`). The
+ * same plan if the room already is that shape.
+ */
+export function setRoomShape(plan: Plan, shape: { kind: 'rect' } | { kind: 'l'; l: LShape }): Plan {
+  const room = mainRoom(plan);
+  const b = roomBounds(room);
+  const at = { x: b.left, y: b.top };
+  if (shape.kind === 'rect') {
+    if (isRectangle(room)) return plan;
+    const outline = rectOutline(b.right - b.left, b.bottom - b.top).map((p) => ({
+      x: p.x + at.x,
+      y: p.y + at.y,
+    }));
+    return reshapeRoom(plan, room.id, outline);
+  }
+  const l = fitLShape(shape.l);
+  if (l.width <= 2 * L_MIN_SIDE - 1e-9 || l.height <= 2 * L_MIN_SIDE - 1e-9) return plan;
+  const current = lShapeOf(room);
+  if (
+    current &&
+    current.width === l.width &&
+    current.height === l.height &&
+    current.corner === l.corner &&
+    current.cutWidth === l.cutWidth &&
+    current.cutHeight === l.cutHeight
+  ) {
+    return plan;
+  }
+  return reshapeRoom(plan, room.id, lOutline(l, at));
+}
+
+// --- Corners ---------------------------------------------------------------------------------
+
+/** Move corner `i` to `to` (refused, the same plan, if walls would cross or touch). */
+export const moveCorner = (plan: Plan, i: number, to: Point): Plan =>
+  moveVertex(plan, mainRoom(plan).id, i, to);
+
+/** A new corner in the middle of wall `wall` (its index is `wall + 1`). */
+export const addCorner = (plan: Plan, wall: number): Plan =>
+  insertVertex(plan, mainRoom(plan).id, wall, 0.5);
+
+/** Remove corner `i` (refused below 3 corners, or if walls would cross). */
+export const removeCorner = (plan: Plan, i: number): Plan =>
+  removeVertex(plan, mainRoom(plan).id, i);
+
+/**
+ * Wall `wall` made `length` long by moving its far corner along the wall's direction (the next
+ * wall changes with it). Refused, the same plan, if walls would cross or touch.
+ */
+export function setWallLength(plan: Plan, wall: number, length: number): Plan {
+  const room = mainRoom(plan);
+  const f = wallFrame(room, wall);
+  if (!(length > 0) || Math.abs(length - f.length) < 1e-9) return plan;
+  const n = room.outline.length;
+  const to = {
+    x: Math.round((f.origin.x + f.along.x * length) * 1e9) / 1e9 + 0,
+    y: Math.round((f.origin.y + f.along.y * length) * 1e9) / 1e9 + 0,
+  };
+  return moveVertex(plan, room.id, (wall + 1) % n, to);
+}
+
 // --- Doors and windows -----------------------------------------------------------------------
 
-/** A new door's defaults; it goes to the next free spot from here. */
+/** A new door's defaults; it goes to the next free spot from here (wall 2: a rectangle's bottom). */
 export const NEW_DOOR = {
   width: 3,
-  wall: 'bottom' as Wall,
+  wall: 2,
   position: 2,
   hinge: 'left' as const,
   type: 'swing-in' as const,
 };
-/** A new window's defaults. */
-export const NEW_WINDOW = { width: 3, wall: 'top' as Wall, position: 2 };
+/** A new window's defaults (wall 0: a rectangle's top). */
+export const NEW_WINDOW = { width: 3, wall: 0, position: 2 };
 
 /** For a door: what its swing needs kept clear, and its hinge side as drawn. */
 interface Swing {
@@ -82,39 +196,34 @@ interface Swing {
 const spots = (
   plan: Plan,
   width: number,
-  walls: Wall[],
+  walls: number[],
   position: number,
   swing: Swing | undefined,
   exclude?: string,
 ) =>
-  wallSpots(
-    plan,
-    mainRoom(plan),
-    width,
-    walls.map((w) => WALLS.indexOf(w)),
-    () => position,
-    {
-      exclude,
-      swing: swing && { type: swing.type, swingAngle: swing.swingAngle },
-      // The hinge is on the same side as drawn whichever wall the door is on.
-      hingeAtEnd: () => swing?.hinge === 'right',
-    },
-  );
+  wallSpots(plan, mainRoom(plan), width, walls, () => position, {
+    exclude,
+    swing: swing && { type: swing.type, swingAngle: swing.swingAngle },
+    // The hinge is on the same side as drawn whichever wall the door is on.
+    hingeAtEnd: () => swing?.hinge === 'right',
+  });
 
 /**
  * Where a new door or window of `width` goes: walls are tried from `preferred.wall`, then the
- * rest in top, right, bottom, left order; along a wall, `preferred.position` first, then from its
- * start (see `wallSpots` and `bestSpot` in core/placement.ts). `preferred` if nothing fits.
+ * rest in the outline's order; along a wall, `preferred.position` first, then from its start (see
+ * `wallSpots` and `bestSpot` in core/placement.ts). `preferred` if nothing fits.
  */
 export function openingSpot(
   plan: Plan,
   width: number,
-  preferred: { wall: Wall; position: number },
+  preferred: { wall: number; position: number },
   swing?: Swing,
-): { wall: Wall; position: number } {
-  const walls = [preferred.wall, ...WALLS.filter((w) => w !== preferred.wall)];
+): { wall: number; position: number } {
+  const n = mainRoom(plan).outline.length;
+  const first = Math.min(preferred.wall, n - 1);
+  const walls = [first, ...Array.from({ length: n }, (_, i) => i).filter((w) => w !== first)];
   const best = bestSpot(spots(plan, width, walls, preferred.position, swing));
-  return best ? { wall: WALLS[best.wall]!, position: best.position } : preferred;
+  return best ? { wall: best.wall, position: best.position } : { ...preferred, wall: first };
 }
 
 /** Add a door (in the order the canvas lists them: doors before windows). */
@@ -132,29 +241,31 @@ export const insertOpening = (plan: Plan, o: Opening): Plan => {
 };
 
 /** A new door at the first free spot (see `openingSpot`). Returns the plan and the new door. */
-export function addDoor(plan: Plan): { plan: Plan; door: Opening; wall: Wall } {
+export function addDoor(plan: Plan): { plan: Plan; door: Opening; wall: number } {
   const room = mainRoom(plan);
   const spot = openingSpot(plan, NEW_DOOR.width, NEW_DOOR, NEW_DOOR);
+  const width = Math.min(NEW_DOOR.width, wallLen(room, spot.wall));
   const door: Opening = {
     id: nextId(plan, 'door'),
     kind: 'door',
-    ...placeOn(room, spot.wall, spot.position, NEW_DOOR.width),
-    width: NEW_DOOR.width,
+    ...placeOn(room, spot.wall, spot.position, width),
+    width,
     type: NEW_DOOR.type,
-    hinge: hingeFor(room, WALLS.indexOf(spot.wall), NEW_DOOR.hinge),
+    hinge: hingeFor(room, spot.wall, NEW_DOOR.hinge),
   };
   return { plan: insertOpening(plan, door), door, wall: spot.wall };
 }
 
 /** A new window at the first free spot. */
-export function addWindow(plan: Plan): { plan: Plan; window: Opening; wall: Wall } {
+export function addWindow(plan: Plan): { plan: Plan; window: Opening; wall: number } {
   const room = mainRoom(plan);
   const spot = openingSpot(plan, NEW_WINDOW.width, NEW_WINDOW);
+  const width = Math.min(NEW_WINDOW.width, wallLen(room, spot.wall));
   const win: Opening = {
     id: nextId(plan, 'window'),
     kind: 'window',
-    ...placeOn(room, spot.wall, spot.position, NEW_WINDOW.width),
-    width: NEW_WINDOW.width,
+    ...placeOn(room, spot.wall, spot.position, width),
+    width,
     type: 'swing-in',
     hinge: 'start',
   };
@@ -172,7 +283,7 @@ const mapOpening = (plan: Plan, id: Id, f: (o: Opening, room: Room) => Opening):
   return withMainRoom(plan, { ...room, openings });
 };
 
-/** A door or window edit in the editor's terms (position from the left or top, hinge as drawn). */
+/** A door or window edit in the editor's terms (position along the drawing, hinge as drawn). */
 export interface OpeningPatch {
   width?: number;
   position?: number;
@@ -189,8 +300,8 @@ export interface OpeningPatch {
 export function updateOpening(plan: Plan, id: Id, patch: OpeningPatch, minWidth: number): Plan {
   return mapOpening(plan, id, (o, room) => {
     const place = openingPlace(room, o);
-    const len = wallLen(roomSize(room), place.wall);
-    const width = clamp(patch.width ?? place.width, minWidth, len);
+    const len = wallLen(room, place.wall);
+    const width = clamp(patch.width ?? place.width, Math.min(minWidth, len), len);
     const position = clamp(patch.position ?? place.position, 0, Math.max(0, len - width));
     let next: Opening = { ...o };
     if (width !== place.width || position !== place.position) {
@@ -206,12 +317,18 @@ export function updateOpening(plan: Plan, id: Id, patch: OpeningPatch, minWidth:
   });
 }
 
-/** Slide a door or window along its wall by (dx, dy) feet (the part along the wall counts). */
+/**
+ * Slide a door or window along its wall by (dx, dy) feet: the part of the move along the wall's
+ * drawing direction counts (all of it on a horizontal or vertical wall).
+ */
 export function slideOpening(plan: Plan, id: Id, dx: number, dy: number): Plan {
   return mapOpening(plan, id, (o, room) => {
     const place = openingPlace(room, o);
-    const len = wallLen(roomSize(room), place.wall);
-    const delta = place.wall === 'top' || place.wall === 'bottom' ? dx : dy;
+    const f = wallFrame(room, place.wall);
+    const len = f.length;
+    // Along the drawing (left to right, top to bottom), whichever way the outline runs.
+    const sign = f.along.x < 0 || (f.along.x === 0 && f.along.y < 0) ? -1 : 1;
+    const delta = sign * (dx * f.along.x + dy * f.along.y);
     const position = clamp(place.position + delta, 0, Math.max(0, len - place.width));
     if (position === place.position) return o;
     return { ...o, ...placeOn(room, place.wall, position, place.width) };
@@ -223,10 +340,10 @@ export function slideOpening(plan: Plan, id: Id, dx: number, dy: number): Plan {
  * never on top of another opening), with its hinge on the same side as drawn. Null if it fits
  * nowhere on that wall.
  */
-export function moveOpeningToWall(plan: Plan, id: Id, wall: Wall): Plan | null {
+export function moveOpeningToWall(plan: Plan, id: Id, wall: number): Plan | null {
   const room = mainRoom(plan);
   const o = room.openings.find((x) => x.id === id);
-  if (!o) return null;
+  if (!o || wall < 0 || wall >= room.outline.length) return null;
   const place = openingPlace(room, o);
   if (place.wall === wall) return plan;
   const swing =
@@ -236,11 +353,17 @@ export function moveOpeningToWall(plan: Plan, id: Id, wall: Wall): Plan | null {
   return mapOpening(plan, id, (cur) => ({
     ...cur,
     ...placeOn(room, wall, best.position, cur.width),
-    ...(cur.kind === 'door' ? { hinge: hingeFor(room, WALLS.indexOf(wall), place.hinge) } : {}),
+    ...(cur.kind === 'door' ? { hinge: hingeFor(room, wall, place.hinge) } : {}),
   }));
 }
 
 export const deleteOpening = (plan: Plan, id: Id): Plan => removeOpening(plan, id);
+
+/** Doors and windows wider than their wall after a change of shape (they were narrowed). */
+export const narrowedOpenings = (before: Plan, after: Plan): Opening[] => {
+  const was = new Map(mainRoom(before).openings.map((o) => [o.id, o.width]));
+  return mainRoom(after).openings.filter((o) => (was.get(o.id) ?? o.width) > o.width + 1e-9);
+};
 
 // --- Furniture -------------------------------------------------------------------------------
 
@@ -346,16 +469,27 @@ export function placePiece(plan: Plan, id: Id): Plan {
   return item.hidden ? changePiece(placed, id, { hidden: false }) : placed;
 }
 
-/** Every shown piece that is (partly) outside the room moved the least amount that brings it in. */
+/**
+ * Every shown piece that is (partly) outside the room moved the least amount that brings it in
+ * (in a room that is not a rectangle: to the nearest free spot inside, see `moveInside`).
+ */
 export function movePiecesInside(plan: Plan): Plan {
   const room = mainRoom(plan);
   let changed = false;
+  const parts = new Map(activePieces(plan).map((p) => [p.item.id, p.parts]));
   const items = plan.items.map((i) => {
     if (i.hidden || !i.placement) return i;
-    const { dx, dy } = insideShift(i, room);
-    if (Math.abs(dx) < GEOMETRY_EPSILON && Math.abs(dy) < GEOMETRY_EPSILON) return i;
+    if (isRectangle(room)) {
+      const { dx, dy } = insideShift(i, room);
+      if (Math.abs(dx) < GEOMETRY_EPSILON && Math.abs(dy) < GEOMETRY_EPSILON) return i;
+    }
+    const others = [...parts].filter(([id]) => id !== i.id).map(([, p]) => p);
+    const next = moveInside(i, room, others);
+    if (next === i) return i;
     changed = true;
-    return moveInside(i, room);
+    const moved = activePieces({ items: [next] })[0];
+    if (moved) parts.set(i.id, moved.parts);
+    return next;
   });
   return changed ? { ...plan, items } : plan;
 }
