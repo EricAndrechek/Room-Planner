@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { readPlanLink } from '../src/core/share/plan';
 import worker from './index';
 import { MAX_BODY, overMemoryLimit, type Env } from './http';
-import catalog from '../public/.well-known/ai-catalog.json';
+import { aiCatalog } from '../scripts/discovery.mjs';
 import server from '../server.json';
 import { VIEWER_MIME_TYPE, VIEWER_URI } from './viewer';
 
@@ -375,6 +375,7 @@ describe('registry entry', () => {
     expect(server.version).toBe(card.version);
     expect(server.description.length).toBeLessThanOrEqual(100);
     expect(server.remotes[0].url).toBe(`${ORIGIN}/mcp`);
-    expect(catalog.entries[0].url).toBe(`${ORIGIN}/mcp/server-card`);
+    const catalog = aiCatalog(ORIGIN, { skillDigest: 'sha256:0' });
+    expect(catalog.entries[0]!.url).toBe(`${ORIGIN}/mcp/server-card`);
   });
 });

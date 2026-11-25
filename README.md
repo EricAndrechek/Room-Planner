@@ -197,7 +197,9 @@ The public site URL used for canonical links, Open Graph tags, the sitemap and
 - `/llms.txt` (`src/pages/llms.txt.ts`) and `/llms-full.txt` (built from the rendered HTML by
   `scripts/llms-full.mjs`) for AI assistants.
 - The MCP server (`worker/`, on `/mcp`; how to connect: `/agents/`), its server card
-  (`/mcp/server-card`), `/.well-known/ai-catalog.json`, and `server.json`, the MCP Registry entry
+  (`/mcp/server-card`), the AI catalog (`/.well-known/ai-catalog.json`, `/.well-known/ard.json`), a
+  `room-planner` Agent Skill (`/.well-known/agent-skills/`), a site search for agents
+  (`/.well-known/search`), and `server.json`, the MCP Registry entry
   (`com.andrechek.room-planner/mcp`, proven by `/.well-known/mcp-registry-auth`).
   Merging a `version` bump in `server.json` publishes it to the registry
   (`.github/workflows/mcp-registry.yml`; [docs/DEPLOY.md](docs/DEPLOY.md)).

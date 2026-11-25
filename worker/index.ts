@@ -1,10 +1,12 @@
 /**
  * The site's Worker (docs/design/plan-format.md, section 7; docs/DEPLOY.md, "Discovery for
  * agents"). `assets.run_worker_first` in wrangler.jsonc sends only the page routes, `/mcp`,
- * `/mcp/*` and `/api/*` here; every asset (scripts, images, `.md`, `llms*.txt`, `/.well-known/*`,
- * `/openapi.json`) is served by the assets layer without running this code.
+ * `/mcp/*`, `/api/*` and `/.well-known/search` here; every asset (scripts, images, `.md`,
+ * `llms*.txt`, the other `/.well-known/*` files, `/openapi.json`) is served by the assets layer
+ * without running this code.
  *
  * - `/mcp`, `/mcp/*`, `/api/*`: http.ts.
+ * - `/.well-known/search`: search.ts (Search for Agents over the site's pages).
  * - Pages: @wave-rf/cloudflare-md-router, which serves a page's Markdown twin (`/faq/` ->
  *   `/faq.md`) to `Accept: text/markdown` and to known LLM crawlers, the HTML otherwise with a
  *   `Link` to the twin, and `Vary: Accept` on the Markdown (this file takes it off the HTML, for
@@ -14,8 +16,9 @@
  * The entry module exports nothing else (workerd rejects named exports that are not handlers).
  */
 import { createMdRouter } from '@wave-rf/cloudflare-md-router';
-import { API_POINTER_PAGES, linkHeader } from '../scripts/discovery.mjs';
+import { API_POINTER_PAGES, PATHS, linkHeader } from '../scripts/discovery.mjs';
 import { handleMcp, type Env } from './http';
+import { handleSearch } from './search';
 import { warmUp } from './warm';
 
 warmUp();
@@ -57,6 +60,7 @@ export default {
     if (pathname === '/mcp' || pathname.startsWith('/mcp/') || pathname.startsWith('/api/')) {
       return handleMcp(request, env, ctx);
     }
+    if (pathname === PATHS.search) return handleSearch(request, env);
     return page(request, env, ctx);
   },
 } satisfies ExportedHandler<Env>;

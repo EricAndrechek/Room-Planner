@@ -980,8 +980,11 @@ Claude.ai's code sandboxes usually have no internet, so `llms.txt` points them a
   most 100 characters), version, website, repository, icon, and the remote
   `{ type: "streamable-http", url: "https://room-planner.andrechek.com/mcp",
 supportedProtocolVersions }`, which lists 2026-07-28 and the 2025-era revisions.
-- `/.well-known/ai-catalog.json` is a static asset with one entry that points at the card, served
-  as `application/ai-catalog+json` with `Access-Control-Allow-Origin: *` (`public/_headers`).
+- `/.well-known/ai-catalog.json` (and the same document at `/.well-known/ard.json`) is a static
+  asset built from `scripts/discovery.mjs`, whose first entry points at the card, served as
+  `application/ai-catalog+json` with `Access-Control-Allow-Origin: *`. A static copy of the card is
+  at `/.well-known/mcp/server-card.json`. The full list of discovery files is in docs/DEPLOY.md,
+  "Discovery for agents".
 - `llms.txt` gains an "For AI agents" section with the endpoint and one line per tool.
 - A page `/agents/` explains how to add the server to a client and repeats the privacy statement.
 - The official MCP Registry gets a `server.json` (repository root) named

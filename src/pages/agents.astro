@@ -7,6 +7,7 @@
 import registry from '../../server.json';
 import Content from '../layouts/Content.astro';
 import { withBase } from '../lib/paths';
+import { PATHS } from '../../scripts/discovery.mjs';
 import { PLAN_SCHEMA_PATH } from '../lib/planSchema';
 import {
   API_CURL,
@@ -356,6 +357,26 @@ const code = 'block bg-slate-900 text-slate-100 rounded-lg p-3 text-sm overflow-
           GitHub
         </a>
         .
+      </p>
+      <p>
+        No authentication: the MCP server and REST API are open; there is intentionally no OAuth
+        metadata.
+      </p>
+      <p>
+        Agents can also find all of this on their own: the{' '}
+        <a href={abs(PATHS.aiCatalog.slice(1))} class="text-indigo-700 underline">
+          AI catalog
+        </a>{' '}
+        lists the MCP server, the REST API and a{' '}
+        <a href={abs(PATHS.skill.slice(1))} class="text-indigo-700 underline">
+          Room Planner skill
+        </a>{' '}
+        (also in the{' '}
+        <a href={abs(PATHS.agentSkills.slice(1))} class="text-indigo-700 underline">
+          Agent Skills index
+        </a>
+        ), and <code>{abs(PATHS.search.slice(1))}?q=…</code> searches this site's pages, answering
+        in Markdown.
       </p>
     </section>
   </article>

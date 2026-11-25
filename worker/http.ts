@@ -14,16 +14,8 @@
 import { SUPPORTED_PROTOCOL_VERSIONS, createMcpHandler } from '@modelcontextprotocol/server';
 import { environmentOf, headerProps, report, type Activity, type HostIds } from './analytics';
 import { API_PREFIX, handleApi } from './api';
-import registry from '../server.json';
-import {
-  REGISTRY_NAME,
-  SERVER_DESCRIPTION,
-  SERVER_ICONS,
-  SERVER_TITLE,
-  SERVER_VERSION,
-  WEBSITE_URL,
-  createServer,
-} from './mcp';
+import { MODERN_PROTOCOL_VERSION, serverCard as buildServerCard } from '../scripts/discovery.mjs';
+import { SERVER_VERSION, createServer } from './mcp';
 
 export interface Env {
   ASSETS: Fetcher;
@@ -34,8 +26,7 @@ export interface Env {
 /** Largest request body the endpoint reads (a 500-piece plan is about 100 KB). */
 export const MAX_BODY = 256 * 1024;
 export const RETRY_AFTER_SECONDS = 60;
-/** The per-request protocol revision (the SDK does not export its constant). */
-export const MODERN_PROTOCOL_VERSION = '2026-07-28';
+export { MODERN_PROTOCOL_VERSION };
 
 const BASE_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -114,25 +105,8 @@ const tooManyRequests = () =>
     { 'Retry-After': String(RETRY_AFTER_SECONDS) },
   );
 
-/** The MCP Server Card (SEP-2127): who the server is and where to connect. */
-export const serverCard = (origin: string) => ({
-  $schema: 'https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json',
-  name: REGISTRY_NAME,
-  version: SERVER_VERSION,
-  title: SERVER_TITLE,
-  description: SERVER_DESCRIPTION,
-  websiteUrl: WEBSITE_URL,
-  repository: registry.repository,
-  icons: SERVER_ICONS,
-  remotes: [
-    {
-      type: 'streamable-http',
-      url: `${origin}/mcp`,
-      // createMcpHandler serves the 2026-07-28 revision and every 2025-era one.
-      supportedProtocolVersions: [MODERN_PROTOCOL_VERSION, ...SUPPORTED_PROTOCOL_VERSIONS],
-    },
-  ],
-});
+/** The MCP Server Card (SEP-2127): who the server is and where to connect (scripts/discovery.mjs). */
+export const serverCard = (origin: string) => buildServerCard(origin, SUPPORTED_PROTOCOL_VERSIONS);
 
 /** The client's address, the only identity a free, account-less endpoint has. */
 const clientKey = (request: Request) =>

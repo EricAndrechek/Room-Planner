@@ -1,20 +1,8 @@
 import type { APIRoute } from 'astro';
 import registry from '../../server.json';
 import { GUIDES, guidePath } from '../lib/guides';
-import {
-  API_CURL,
-  COMPRESS_JS,
-  COMPRESS_PYTHON,
-  DEFAULT_DESCRIPTION,
-  FEATURES,
-  MCP_PATH,
-  MCP_PRIVACY,
-  PLAN_JSON_SUMMARY,
-  READABLE_EXAMPLES,
-  READABLE_SYNTAX,
-  SITE_NAME,
-  readableMarkdown,
-} from '../lib/site';
+import { planLinkGuide } from '../lib/agentGuide';
+import { DEFAULT_DESCRIPTION, FEATURES, MCP_PATH, MCP_PRIVACY, SITE_NAME } from '../lib/site';
 import { PLAN_SCHEMA_PATH } from '../lib/planSchema';
 import { PATHS, markdownPath } from '../../scripts/discovery.mjs';
 
@@ -60,7 +48,9 @@ ${FEATURES.map((f) => `- ${f}`).join('\n')}
 - [REST API](${url(PATHS.openapi)}): the same operations over plain HTTP (OpenAPI 3.1): \`POST /api/plan/check\`, \`POST /api/plan/link\`, \`GET /api/plan?url=\`. No key.
 - [Plan JSON Schema](${url(PLAN_SCHEMA_PATH)}): the plan format the tools, the API and \`#s=\` links take.
 - [Plan links](${url('agents/')}#plan-links): give the user a ready-made plan as a link, with tools, HTTP, code or none (below).
-- [API catalog](${url(PATHS.apiCatalog)}) (RFC 9727) and [AI catalog](${url(PATHS.aiCatalog)}): the same, for discovery.
+- [Agent skill](${url(PATHS.skill)}): how to make a plan for the user (the section below, the plan format and examples) as an Agent Skill, listed in the [Agent Skills index](${url(PATHS.agentSkills)}).
+- [API catalog](${url(PATHS.apiCatalog)}) (RFC 9727) and [AI catalog](${url(PATHS.aiCatalog)}) (also at ${url(PATHS.ard)}): the same, for discovery. No authentication anywhere, so there is no OAuth metadata.
+- Search: \`GET ${url(PATHS.search)}?q=<words>\` returns the best sections of this site's pages, in Markdown.
 - WebMCP: in Chrome with WebMCP, the planner page registers editing tools for the browser's own agent (below).
 
 ## Pages
@@ -75,36 +65,7 @@ ${FEATURES.map((f) => `- ${f}`).join('\n')}
 
 ## Give the user a ready-made plan
 
-Room Planner opens a whole plan from a link, saved in the user's browser and ready to edit; no account. ALWAYS give the link as markdown link text, such as [Open your bedroom in Room Planner](link), never as a bare URL: links get long, and the link text hides them (browsers accept very long links; the plan stays in the part after #, which never reaches a server). Pick the first way you can:
-
-1. **With Room Planner's tools** (the MCP server below, or WebMCP in Chrome): use them. \`create_plan\` checks the layout and returns the link.
-2. **If you can make HTTP requests** (agentic tools, custom agents, ChatGPT Custom GPT Actions): the REST API does the same as the tools, described by ${url('openapi.json')}. \`POST /api/plan/check\` returns the issues; \`POST /api/plan/link\` returns the plan, its issues and the \`url\`; \`GET /api/plan?url=<link>\` reads a plan from a link. No key. (ChatGPT's and Claude.ai's code sandboxes usually have no internet: use 3 there.)
-
-\`\`\`sh
-${API_CURL}
-\`\`\`
-
-3. **If you can run code** (offline is fine): write the plan as JSON (JSON Schema: ${url(PLAN_SCHEMA_PATH)}; the same format as the MCP tools), compress it with raw deflate, base64url-encode it without padding, and append it to ${url('')}#s= . Any size and shape.
-${PLAN_JSON_SUMMARY.map((l) => `   - ${l}`).join('\n')}
-
-   Python:
-
-\`\`\`python
-${COMPRESS_PYTHON}
-\`\`\`
-
-   JavaScript:
-
-\`\`\`js
-${COMPRESS_JS}
-\`\`\`
-
-4. **No tools, no HTTP and no code**: write the plan in this readable form after ${url('')}#p= . Best for small plans (a room or two, rectangles, round and L-shaped pieces); for bigger or odd-shaped floors, use 2 or 3.
-${READABLE_SYNTAX.map((l) => `   - ${l}`).join('\n')}
-
-   Examples:
-   - ${readableMarkdown(url(''), READABLE_EXAMPLES.bedroom, 'the bedroom')}
-   - ${readableMarkdown(url(''), READABLE_EXAMPLES.flat, 'the flat')}
+${planLinkGuide(url, 'the MCP server below')}
 
 ## MCP tools
 
