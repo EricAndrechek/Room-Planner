@@ -47,8 +47,9 @@ const decode = (s) =>
  * the markup these pages use (headings, paragraphs, lists, tables, links, inline emphasis).
  * @param {string} html
  * @param {string} origin e.g. `https://room-planner.andrechek.com`
+ * @param {string} [page] the page's URL, which relative links (`#plan-links`) resolve against
  */
-export function htmlToMarkdown(html, origin) {
+export function htmlToMarkdown(html, origin, page = `${origin}/`) {
   let s = /<main\b[^>]*>([\s\S]*?)<\/main>/i.exec(html)?.[1] ?? '';
   // Code blocks keep their lines: set aside before whitespace is collapsed, put back as fences.
   const blocks = [];
@@ -69,7 +70,7 @@ export function htmlToMarkdown(html, origin) {
 
   s = s
     .replace(/<a\b[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (_, href, text) => {
-      const url = new URL(decode(href), `${origin}/`).toString();
+      const url = new URL(decode(href), page).toString();
       return `[${text.trim()}](${url})`;
     })
     .replace(/<(strong|b)\b[^>]*>([\s\S]*?)<\/\1>/gi, '**$2**')
@@ -130,7 +131,7 @@ export function llmsFull() {
           .filter((p) => /^guides\/[^/]+\/$/.test(p))
           .sort();
         const sections = [...PAGES, ...guides].map((path) => {
-          const md = htmlToMarkdown(read(dist, path), origin);
+          const md = htmlToMarkdown(read(dist, path), origin, `${origin}/${path}`);
           return `<!-- ${origin}/${path} -->\n\n${md}`;
         });
         const head =
@@ -145,7 +146,7 @@ export function llmsFull() {
           const md = markdownPath(path);
           if (!md) continue;
           const title = /<title>([\s\S]*?)<\/title>/i.exec(read(dist, path))?.[1]?.trim() ?? '';
-          const body = htmlToMarkdown(read(dist, path), origin);
+          const body = htmlToMarkdown(read(dist, path), origin, `${origin}/${path}`);
           const source = `${origin}/${path}`;
           const text = body.startsWith('# ') ? body : `# ${title}\n\n${body}`;
           mkdirSync(dirname(join(dist, md)), { recursive: true });
