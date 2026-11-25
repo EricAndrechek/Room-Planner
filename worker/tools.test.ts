@@ -74,7 +74,7 @@ describe('reading an agent plan', () => {
 });
 
 describe('summary', () => {
-  it('describes rooms of any shape, hidden pieces and the inventory', () => {
+  it('describes rooms of any shape, hidden pieces and pieces set aside', () => {
     const input = readPlanInput({
       version: 4,
       name: 'Flat',
@@ -103,12 +103,40 @@ describe('summary', () => {
     if (!input.ok) throw new Error(input.outcome.text);
     expect(summarize(input.plan)).toBe(
       `"Flat": 2 rooms. Living room has 6 corners and 75 sq ft, with 0 doors and 0 windows. ` +
-        `room-1 is 4' × 4' (16 sq ft) with 0 doors and 0 windows. 1 piece placed. Hidden: Lamp. In the inventory: Rug.`,
+        `Room 2 is 4' × 4' (16 sq ft) with 0 doors and 0 windows. 1 piece placed. Hidden: Lamp. Set aside: Rug.`,
     );
+  });
+
+  it('names the doors between rooms', () => {
+    const input = readPlanInput({
+      version: 4,
+      unit: 'ft',
+      rooms: [
+        {
+          id: 'bed',
+          name: 'Bedroom',
+          outline: room(12, 10).outline,
+          // Wall 1 (right, x = 12) is shared with the hall.
+          openings: [{ id: 'd1', kind: 'door', wall: 1, offset: 3, width: 3 }],
+        },
+        {
+          id: 'hall',
+          name: 'Hall',
+          outline: [
+            { x: 12, y: 0 },
+            { x: 16, y: 0 },
+            { x: 16, y: 10 },
+            { x: 12, y: 10 },
+          ],
+        },
+      ],
+    });
+    if (!input.ok) throw new Error(input.outcome.text);
+    expect(summarize(input.plan)).toContain('Doors between rooms: Bedroom to Hall.');
   });
 });
 
-describe('plans the editor cannot open yet', () => {
+describe('every plan the format allows', () => {
   const lRoom = {
     id: 'living',
     outline: [
@@ -138,9 +166,9 @@ describe('plans the editor cannot open yet', () => {
           },
         ],
       },
-      /several rooms/,
+      /2 rooms\./,
     ],
-    ['a polygon room', { rooms: [lRoom] }, /not a rectangle/],
+    ['a polygon room', { rooms: [lRoom] }, /6 corners/],
     [
       'an L-shaped piece',
       {
@@ -157,7 +185,7 @@ describe('plans the editor cannot open yet', () => {
           },
         ],
       },
-      /not rectangles/,
+      /1 piece placed/,
     ],
     [
       'a round piece',
@@ -174,36 +202,29 @@ describe('plans the editor cannot open yet', () => {
           },
         ],
       },
-      /not rectangles/,
+      /1 piece placed/,
     ],
     [
-      'a piece in the inventory',
+      'a piece set aside',
       { rooms: [room(10, 10)], items: [{ id: 'c', label: 'Chair', width: 2, depth: 2 }] },
-      /not placed/,
+      /Set aside: Chair/,
     ],
   ];
-  for (const [name, parts, why] of cases) {
-    it(`accepts and checks ${name}, without a link`, async () => {
+  for (const [name, parts, said] of cases) {
+    it(`accepts and checks ${name}, with an edit link`, async () => {
       const r = await createPlan({ plan: { version: 4, unit: 'ft', ...parts } }, ORIGIN);
       expect(r.isError).toBeFalsy();
-      const s = r.structured as {
-        url: null;
-        editable: boolean;
-        notEditable: string[];
-        plan: unknown;
-        issues: unknown[];
-      };
-      expect(s.url).toBeNull();
-      expect(s.editable).toBe(false);
-      expect(s.notEditable.join(' ')).toMatch(why);
-      expect(s.plan).toBeTruthy();
-      expect(r.text).toMatch(/No edit link yet: Room Planner's editor can't open plans with/);
-      expect(r.text).not.toContain('#s=');
-      expect(r.stats.editable).toBe(false);
+      const s = r.structured as { url: string; editable: boolean; plan: unknown; summary: string };
+      expect(s.url).toMatch(/#s=/);
+      expect(s.editable).toBe(true);
+      expect(s).not.toHaveProperty('notEditable');
+      expect(s.summary).toMatch(said);
+      expect(r.text.split('\n').at(-1)).toBe(s.url);
+      expect(r.stats.editable).toBe(true);
     });
   }
 
-  it('gives the link and editable: true when the editor can open the plan', async () => {
+  it('gives the link and editable: true for one rectangular room', async () => {
     const r = await createPlan({ plan: { version: 4, unit: 'ft', rooms: [room(10, 10)] } }, ORIGIN);
     expect(r.structured).toMatchObject({ editable: true });
     expect((r.structured as { url: string }).url).toMatch(/#s=/);

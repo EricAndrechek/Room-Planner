@@ -25,7 +25,6 @@ interface ToolResult {
     summary?: string;
     url?: string | null;
     editable?: boolean;
-    notEditable?: string[];
   };
   isError?: boolean;
 }
@@ -129,7 +128,11 @@ const textOf = (result: ToolResult) =>
     .map((c) => c.text)
     .join('\n');
 
-/** The plan's drawing, tagged with entity ids, or null when the plan cannot be drawn. */
+/**
+ * The plan's drawing, tagged with entity ids, or null when the plan cannot be drawn. A floor of
+ * several rooms comes with each room's name and area, and pieces set aside are listed under it,
+ * as in the app's export.
+ */
 function drawing(plan: Plan | undefined): SVGSVGElement | null {
   if (!plan || !Array.isArray(plan.rooms) || !plan.rooms.length) return null;
   try {
@@ -172,12 +175,7 @@ function show(result: ToolResult) {
   if (svg) sheet.append(svg);
   sheet.hidden = !svg;
   if (!svg) $('note').textContent = 'The drawing could not be made; open the plan to see it.';
-  else if (data.editable === false) {
-    const why = data.notEditable?.length ? ` with ${data.notEditable.join(', ')}` : '';
-    $('note').textContent =
-      `Room Planner's editor can't open plans${why} yet; the drawing shows this one in full.`;
-  }
-  renderIssues(data.issues ?? [], svg);
+  renderIssues(data.issues ?? [], svg, (data.plan?.rooms?.length ?? 1) > 1);
 }
 
 const entities = (svg: SVGSVGElement | null, ids: string[]) =>
@@ -198,7 +196,7 @@ function issueButton(issue: Issue, onPick: (b: HTMLButtonElement, i: Issue) => v
   return button;
 }
 
-function renderIssues(issues: Issue[], svg: SVGSVGElement | null) {
+function renderIssues(issues: Issue[], svg: SVGSVGElement | null, several: boolean) {
   // Errors and warnings are marked on the drawing; info (tight gaps) only when chosen.
   for (const issue of issues) {
     if (issue.severity === 'info') continue;
@@ -237,7 +235,7 @@ function renderIssues(issues: Issue[], svg: SVGSVGElement | null) {
   if (!main.length) {
     const li = document.createElement('li');
     li.className = 'ok';
-    li.textContent = 'No overlaps, blocked doors or pieces outside the room.';
+    li.textContent = `No overlaps, blocked doors or pieces outside ${several ? 'the rooms' : 'the room'}.`;
     list.append(li);
   }
   // Tight gaps (info) are many and minor: listed under a closed disclosure.

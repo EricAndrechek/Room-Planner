@@ -21,7 +21,8 @@ import {
   fromFeet,
   roundNum,
 } from '../src/core/units';
-import { planLink, type PlanLink } from './link';
+import { doorConnections, roomName } from '../src/core/floor';
+import { planLink } from './link';
 
 type UnitSystem = (typeof UNIT_SYSTEMS)[number];
 
@@ -55,7 +56,7 @@ export type ErrorKind =
 
 export interface ToolStats {
   errorKind?: ErrorKind;
-  /** Whether the editor can open the plan (an edit link was made). */
+  /** Whether an edit link was made (always, for a valid plan). */
   editable?: boolean;
   rooms?: number;
   items?: number;
@@ -191,7 +192,10 @@ const nameList = (names: string[]): string =>
     ? names.join(', ')
     : `${names.slice(0, 5).join(', ')} and ${names.length - 5} more`;
 
-/** One paragraph: each room's size and area, its openings, and where the pieces are. */
+/**
+ * One paragraph: each room's size and area, its openings, the doors between rooms, and where the
+ * pieces are.
+ */
 export function summarize(
   plan: Plan,
   unitSystem: UnitSystem = displayUnitOf(plan),
@@ -199,7 +203,7 @@ export function summarize(
 ): string {
   const len = (feet: number) => feetToDisplay(feet, unitSystem);
   const rooms = plan.rooms.map((room) => {
-    const name = room.name || room.id;
+    const name = roomName(plan, room);
     const doors = room.openings.filter((o) => o.kind === 'door').length;
     const windows = room.openings.length - doors;
     const openings = `${count(doors, 'door')} and ${count(windows, 'window')}`;
@@ -211,15 +215,18 @@ export function summarize(
     }
     return `${name} has ${room.outline.length} corners and ${areaText(outlineArea(room), unitSystem)}, with ${openings}.`;
   });
+  const between = doorConnections(plan).map(
+    ({ room, other }) => `${roomName(plan, room)} to ${roomName(plan, other)}`,
+  );
   const placed = plan.items.filter((i) => i.placement && !i.hidden);
   const hidden = plan.items.filter((i) => i.placement && i.hidden);
-  const stored = plan.items.filter((i) => !i.placement);
+  const aside = plan.items.filter((i) => !i.placement);
   const pieces = [`${count(placed.length, 'piece')} placed.`];
   if (hidden.length) pieces.push(`Hidden: ${nameList(hidden.map((i) => i.label || i.id))}.`);
-  if (stored.length)
-    pieces.push(`In the inventory: ${nameList(stored.map((i) => i.label || i.id))}.`);
+  if (aside.length) pieces.push(`Set aside: ${nameList(aside.map((i) => i.label || i.id))}.`);
   const head = plan.rooms.length > 1 ? [`${count(plan.rooms.length, 'room')}.`] : [];
-  return [...(name ? [`"${plan.name}":`] : []), ...head, ...rooms, ...pieces].join(' ');
+  const doors = between.length ? [`Doors between rooms: ${nameList(between)}.`] : [];
+  return [...(name ? [`"${plan.name}":`] : []), ...head, ...rooms, ...doors, ...pieces].join(' ');
 }
 
 const issueLines = (issues: Issue[]): string[] =>
@@ -245,33 +252,19 @@ export async function createPlan(args: { plan?: unknown }, origin: string): Prom
   const { plan, unit, unitSystem, warnings } = input;
   const issues = [...warnings, ...checkLayout(plan, { unitSystem })];
   const summary = summarize(plan, unitSystem);
-  const link = await planLink(plan, origin);
+  const url = await planLink(plan, origin);
   return {
-    text: [summary, ...issueLines(issues), ...linkLines(link)].join('\n'),
-    structured: { plan: fromFeet(plan, unit), issues, summary, ...linkFields(link) },
-    stats: { ...planStats(plan, unit, issues), editable: link.url !== null },
+    text: [summary, ...issueLines(issues), ...linkLines(url)].join('\n'),
+    structured: { plan: fromFeet(plan, unit), issues, summary, url, editable: true },
+    stats: { ...planStats(plan, unit, issues), editable: true },
   };
 }
 
-/**
- * The link as text: last, alone on its line, or why there is none. Every valid plan is accepted
- * and drawn; only the edit link waits for the editor (link.ts).
- */
-const linkLines = (link: PlanLink): string[] =>
-  link.url === null
-    ? [
-        `No edit link yet: Room Planner's editor can't open plans with ${link.blockers.join(', ')} yet. The plan above is complete and checked, and the drawing shows it in full; editing support is coming. For a link now, use one rectangular room with rectangular pieces that all have a placement.`,
-      ]
-    : [
-        'Open and edit the plan in Room Planner (the whole plan is in the link; give it to the user exactly as it is):',
-        link.url,
-      ];
-
-/** `url` (null without one), `editable`, and `notEditable` (the reasons) when there is none. */
-const linkFields = (link: PlanLink) =>
-  link.url === null
-    ? { url: null, editable: false, notEditable: link.blockers }
-    : { url: link.url, editable: true };
+/** The link as text: last, alone on its line, so a client that shows only text shows it whole. */
+const linkLines = (url: string): string[] => [
+  'Open and edit the plan in Room Planner (the whole plan is in the link; give it to the user exactly as it is):',
+  url,
+];
 
 /** `check_layout`: every layout problem, no link and no drawing. */
 export function checkPlan(args: { plan?: unknown; minClearance?: unknown }): ToolOutcome {
@@ -340,7 +333,7 @@ export async function readPlan(args: { url?: unknown }, origin: string): Promise
   const unitSystem = displayUnitOf(plan);
   const issues = checkLayout(plan, { unitSystem });
   const summary = summarize(plan, unitSystem);
-  // A fresh link on this site (never whatever host the link named), when the editor can open it.
+  // A fresh link on this site, never whatever host the link named.
   const link = await planLink(plan, origin);
   return {
     text: [summary, ...issueLines(issues), ...linkLines(link)].join('\n'),
@@ -348,8 +341,9 @@ export async function readPlan(args: { url?: unknown }, origin: string): Promise
       plan: fromFeet(plan, unitOfDisplay(unitSystem)),
       issues,
       summary,
-      ...linkFields(link),
+      url: link,
+      editable: true,
     },
-    stats: { ...planStats(plan, unitOfDisplay(unitSystem), issues), editable: link.url !== null },
+    stats: { ...planStats(plan, unitOfDisplay(unitSystem), issues), editable: true },
   };
 }

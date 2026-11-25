@@ -79,9 +79,7 @@ const same = (a: unknown, b: unknown): void => {
 };
 
 const opened = async (plan: Plan): Promise<Plan> => {
-  const link = await planLink(plan, ORIGIN);
-  if (!link.url) throw new Error('no link');
-  const r = await readPlanLink(link.url);
+  const r = await readPlanLink(await planLink(plan, ORIGIN));
   if (!r.ok) throw new Error('unreadable link');
   return r.plan;
 };
@@ -122,7 +120,7 @@ describe('edit links', () => {
       ],
     });
     const link = await planLink(plan, 'https://preview.example.dev');
-    expect(link.url).toMatch(/^https:\/\/preview\.example\.dev\/#s=[A-Za-z0-9_-]+$/);
+    expect(link).toMatch(/^https:\/\/preview\.example\.dev\/#s=[A-Za-z0-9_-]+$/);
     const back = await opened(plan);
     expect(back.name).toBe('Café ☕');
     expect(back.rooms[0]!.name).toBe('Den');
@@ -223,7 +221,7 @@ describe('edit links', () => {
     );
   });
 
-  it('are withheld, with the reasons, exactly when the editor cannot open the plan', async () => {
+  it('come for every plan, opening as the editor stores it (several rooms, any outline, any piece)', async () => {
     const lShaped = load({
       version: 4,
       unit: 'ft',
@@ -260,12 +258,30 @@ describe('edit links', () => {
         { id: 'b', outline: rect(5, 0, 5, 5) },
       ],
     });
-    for (const plan of [lShaped, twoRooms]) {
-      const link = await planLink(plan, ORIGIN);
+    const away = load({
+      version: 4,
+      unit: 'ft',
+      rooms: [
+        {
+          id: 'c',
+          // A rectangle listed from its bottom-right corner, away from the origin.
+          outline: [
+            { x: 20, y: 18 },
+            { x: 8, y: 18 },
+            { x: 8, y: 6 },
+            { x: 20, y: 6 },
+          ],
+          openings: [{ id: 'd', kind: 'door', wall: 0, offset: 2, width: 3 }],
+        },
+      ],
+      items: [{ id: 'b', label: 'Bed', width: 5, depth: 7, placement: { x: 12, y: 11 } }],
+    });
+    for (const plan of [lShaped, twoRooms, away]) {
       const verdict = editablePlan(plan);
-      expect(verdict.ok).toBe(false);
-      expect(link).toEqual({ url: null, blockers: !verdict.ok ? verdict.why : [] });
-      expect(link.url === null && link.blockers.length).toBeGreaterThan(0);
+      if (!verdict.ok) throw new Error(verdict.why.join(', '));
+      const back = await opened(plan);
+      same(back.rooms, verdict.plan.rooms);
+      same(back.items, verdict.plan.items);
     }
   });
 });

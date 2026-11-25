@@ -1,24 +1,20 @@
 /**
  * Edit links made by the MCP server (docs/design/plan-format.md, section 7, "Edit links").
  *
- * A link is the compact v4 form (`#s=`), the same the app writes. The server accepts every plan
- * the format allows, but the editor does not open all of them yet: `editablePlan` (src/lib/
- * plans.ts) is the app's own answer to "can I open this?", so the server asks it and never hands
- * out a link the app would refuse. It also turns a rectangle that starts at another corner, or
- * sits away from the origin, into the editor's form, which changes no drawing. PRs 7a, 7b, 8 and
- * 9 loosen `editablePlan`, and links appear for those plans with no change here.
+ * A link is the compact v4 form (`#s=`), the same the app writes. `editablePlan` (src/lib/plans.ts)
+ * is the app's own answer to "how do I open this?": it accepts every valid plan and turns each
+ * room to start at its top-left corner and the floor to start at the origin, which changes no
+ * drawing. The server asks it, so a link always opens as the editor would store it.
  */
 import type { Plan } from '../src/core/schema';
 import { buildPlanUrl } from '../src/core/share/plan';
 import { editablePlan } from '../src/lib/plans';
 
-export type PlanLink = { url: string } | { url: null; blockers: string[] };
-
-/** The edit link for a plan (in feet) on `origin`, or what keeps the editor from opening it. */
-export async function planLink(plan: Plan, origin: string): Promise<PlanLink> {
+/** The edit link for a plan (in feet) on `origin`. */
+export async function planLink(plan: Plan, origin: string): Promise<string> {
   const editable = editablePlan(plan);
-  if (!editable.ok) return { url: null, blockers: editable.why };
-  return {
-    url: await buildPlanUrl(new URL('/', origin).toString(), editable.plan, { compress: true }),
-  };
+  // Unreachable for a plan that passed the schema (at least one room, three corners each).
+  if (!editable.ok)
+    throw new Error(`editablePlan refused a valid plan: ${editable.why.join(', ')}`);
+  return buildPlanUrl(new URL('/', origin).toString(), editable.plan, { compress: true });
 }

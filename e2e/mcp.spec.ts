@@ -82,6 +82,58 @@ const bedroom = {
   ],
 };
 
+/** Two rooms joined by a door, with a round table, a piece set aside and two problems. */
+const floor = {
+  version: 4,
+  name: 'Flat',
+  unit: 'ft',
+  rooms: [
+    {
+      id: 'living',
+      name: 'Living room',
+      // An L: 16 wide at the top, 10 wide below y = 8.
+      outline: [
+        { x: 0, y: 0 },
+        { x: 16, y: 0 },
+        { x: 16, y: 8 },
+        { x: 10, y: 8 },
+        { x: 10, y: 14 },
+        { x: 0, y: 14 },
+      ],
+      openings: [
+        // Wall 3 (x = 10, from y = 8 down to 14) is shared with the bedroom.
+        { id: 'd-bed', kind: 'door', wall: 3, offset: 1, width: 3, type: 'swing-out' },
+        { id: 'w-shared', kind: 'window', wall: 3, offset: 4.5, width: 1.5 },
+        { id: 'w-1', kind: 'window', wall: 0, offset: 5, width: 4 },
+      ],
+    },
+    {
+      id: 'bedroom',
+      name: 'Bedroom',
+      outline: [
+        { x: 10, y: 8 },
+        { x: 16, y: 8 },
+        { x: 16, y: 14 },
+        { x: 10, y: 14 },
+      ],
+    },
+  ],
+  items: [
+    { id: 'sofa', label: 'Sofa', width: 7, depth: 3, placement: { x: 5, y: 1.5 } },
+    {
+      id: 'table',
+      label: 'Round table',
+      shape: 'ellipse',
+      width: 3.5,
+      depth: 3.5,
+      placement: { x: 4, y: 10 },
+    },
+    // In front of the door into the bedroom.
+    { id: 'bed', label: 'Bed', width: 4, depth: 5, placement: { x: 12.5, y: 11 } },
+    { id: 'spare', label: 'Spare chair', width: 2, depth: 2 },
+  ],
+};
+
 async function ready(page: Page) {
   await page.waitForSelector('html[data-planner-ready]');
   await page.waitForTimeout(500);
@@ -132,6 +184,23 @@ test('a link from create_plan opens in the app as the same plan', async ({ page,
   expect((await workingPlan(page)).name).toBe('Guest bedroom');
   // The app shows the same problems the server reported (the desk and the chair overlap).
   await expect(page.getByText(/Overlapping/).first()).toBeVisible();
+});
+
+test('a floor of several rooms from create_plan opens in the app', async ({ page, baseURL }) => {
+  await page.goto(await serverLink(baseURL!, floor));
+  await ready(page);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const stored = await workingPlan(page);
+  expect(stored.rooms.map((r) => [r.id, r.name, r.outline.length])).toEqual([
+    ['living', 'Living room', 6],
+    ['bedroom', 'Bedroom', 4],
+  ]);
+  expect(stored.items.map((i) => [i.id, i.shape, Boolean(i.placement)])).toEqual([
+    ['sofa', 'rect', true],
+    ['table', 'ellipse', true],
+    ['bed', 'rect', true],
+    ['spare', 'rect', false],
+  ]);
 });
 
 test('read_plan reads a link the app made', async ({ page, baseURL }) => {
@@ -296,49 +365,35 @@ test.describe('plan viewer', () => {
     await expect(errorView.getByRole('button', { name: 'Open in Room Planner' })).toBeHidden();
   });
 
-  test('draws a plan the editor cannot open yet, without the Open button', async ({
+  test('draws a floor of several rooms: names, set-aside list, issues per room', async ({
     page,
     baseURL,
   }) => {
-    const flat = {
-      version: 4,
-      name: 'Flat',
-      unit: 'ft',
-      rooms: [
-        {
-          id: 'living',
-          outline: [
-            { x: 0, y: 0 },
-            { x: 12, y: 0 },
-            { x: 12, y: 6 },
-            { x: 7, y: 6 },
-            { x: 7, y: 12 },
-            { x: 0, y: 12 },
-          ],
-        },
-      ],
-      items: [
-        {
-          id: 'table',
-          label: 'Round table',
-          shape: 'ellipse',
-          width: 3,
-          depth: 3,
-          placement: { x: 3, y: 3 },
-        },
-        { id: 'chair', label: 'Spare chair', width: 2, depth: 2 },
-      ],
-    };
-    const outcome = await createPlan({ plan: flat }, new URL(baseURL!).origin);
+    const outcome = await createPlan({ plan: floor }, new URL(baseURL!).origin);
     expect(outcome.isError).toBeFalsy();
-    expect(outcome.structured).toMatchObject({ url: null, editable: false });
+    expect(outcome.structured).toMatchObject({ editable: true });
     const view = await host(page, toResult(outcome));
     await expect(view.locator('#sheet svg')).toBeVisible();
-    await expect(view.locator('g[data-id="table"]')).toHaveCount(1);
-    await expect(view.getByRole('button', { name: 'Open in Room Planner' })).toBeHidden();
-    await expect(view.locator('#note')).toContainText("editor can't open plans");
+    await expect(view.locator('#summary')).toContainText(
+      'Doors between rooms: Living room to Bedroom',
+    );
+    // Each room is labelled with its name; the piece set aside is listed under the drawing.
+    for (const name of ['Living room', 'Bedroom']) {
+      await expect(view.locator('g[data-role="room-label"] text', { hasText: name })).toHaveCount(
+        1,
+      );
+    }
+    await expect(view.locator('svg text', { hasText: 'Set aside (1)' })).toHaveCount(1);
+    await expect(view.locator('svg text', { hasText: /Spare chair/ })).toHaveCount(1);
+    // The window on the shared wall marks the window and the room that lists it.
+    await expect(view.locator('g[data-id="w-shared"]')).toHaveClass(/hl-warning/);
+    await expect(view.locator('g[data-role="room"][data-id="living"]')).toHaveClass(/hl-warning/);
+    // The bed in the doorway, in the next room, is marked too.
+    await expect(view.locator('g[data-id="bed"]')).toHaveClass(/hl-warning/);
+    await expect(view.getByRole('button', { name: 'Open in Room Planner' })).toBeVisible();
+    await expect(view.locator('#note')).toHaveText('');
     if (SHOTS && test.info().project.name === 'chromium') {
-      await page.locator('#view').screenshot({ path: `${SHOTS}/viewer-not-editable.png` });
+      await page.locator('#view').screenshot({ path: `${SHOTS}/viewer-floor.png` });
     }
   });
 

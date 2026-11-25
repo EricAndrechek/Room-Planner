@@ -106,7 +106,7 @@
         /* Not vh: the host sizes the frame to the content, so vh would grow with it. */
         max-height: 640px;
       }
-      /* Issues on the drawing: the pieces and doors an issue names. */
+      /* Issues on the drawing: the pieces, doors, windows and rooms an issue names. */
       g[data-role='item'].hl-warning > :first-child {
         stroke: #d97706;
         stroke-width: 3.5px;
@@ -126,6 +126,16 @@
       g[data-role='window'].hl-warning path,
       g[data-role='window'].hl-error path {
         stroke: #dc2626;
+      }
+      /* A room an issue names (rooms that overlap, a window between rooms): its floor is tinted. */
+      g[data-role='room'].hl-warning > [fill='#ffffff'] {
+        fill: #fffbeb;
+      }
+      g[data-role='room'].hl-error > [fill='#ffffff'] {
+        fill: #fef2f2;
+      }
+      g[data-role='room'].focus > [fill='#ffffff'] {
+        fill: #e0e7ff;
       }
       svg.focusing g[data-role='item']:not(.focus) {
         opacity: 0.35;

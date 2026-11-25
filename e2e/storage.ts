@@ -31,6 +31,7 @@ interface StoredItem {
   color: string;
   width: number;
   depth: number;
+  shape?: string;
   placement?: { x: number; y: number; rotation: number };
   locked?: boolean;
   hidden?: boolean;
