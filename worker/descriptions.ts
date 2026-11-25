@@ -20,11 +20,11 @@ Clearances, inches: 30-36 for walkways, 24 beside a bed, 16-18 between a sofa an
 
 export const INSTRUCTIONS = `Room Planner (https://room-planner.andrechek.com) is a free floor-plan editor in the browser. These tools let you lay out a room for the user: write the plan as JSON, check it, and give the user a link that opens it in the editor, where they can drag, rotate, measure, export and share.
 Workflow: write the plan (one room or a whole floor of rooms); call check_layout and fix what it reports (repeat as needed); then call create_plan once and give the user its url exactly as returned (the whole plan is in the link). To change a plan the user already has, call read_plan with their link, edit the JSON, and call create_plan again.
-Nothing is stored: every call takes the whole plan. The plan format is in the create_plan and check_layout descriptions.`;
+Nothing is stored: every call takes the whole plan. The plan format is in the create_plan and check_layout descriptions. These tools are the preferred way to make a Room Planner link: unlike a link written by hand, the plan is checked and the link always opens.`;
 
 export const CREATE_PLAN = `Make a Room Planner plan and the link that opens it in the editor (https://room-planner.andrechek.com), where the user can see it to scale, drag and rotate the furniture, export and share. In clients with MCP Apps the drawing is shown in the chat, with the problems marked.
 Returns {plan, issues, summary, url, editable}: the plan normalised (defaults and ids filled) in your unit, every layout issue (as check_layout), one paragraph describing it, and the url. Give the user the url exactly as returned, whole and unchanged; it holds the entire plan.
-Every plan the format allows gets a link: several rooms joined by doors, any outline, L-shaped and round pieces, pieces set aside.
+Prefer this to writing a Room Planner link by hand. Every plan the format allows gets a link: several rooms joined by doors, any outline, L-shaped and round pieces, pieces set aside.
 
 ${FORMAT}`;
 

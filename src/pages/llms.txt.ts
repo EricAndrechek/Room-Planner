@@ -1,7 +1,20 @@
 import type { APIRoute } from 'astro';
 import registry from '../../server.json';
 import { GUIDES, guidePath } from '../lib/guides';
-import { DEFAULT_DESCRIPTION, FEATURES, MCP_PATH, MCP_PRIVACY, SITE_NAME } from '../lib/site';
+import {
+  COMPRESS_JS,
+  COMPRESS_PYTHON,
+  DEFAULT_DESCRIPTION,
+  FEATURES,
+  MCP_PATH,
+  MCP_PRIVACY,
+  PLAN_JSON_SUMMARY,
+  READABLE_EXAMPLES,
+  READABLE_SYNTAX,
+  SITE_NAME,
+  readableMarkdown,
+} from '../lib/site';
+import { PLAN_SCHEMA_PATH } from '../lib/planSchema';
 
 /**
  * llms.txt (https://llmstxt.org): what the site is and where its content lives, for AI assistants
@@ -40,6 +53,33 @@ ${FEATURES.map((f) => `- ${f}`).join('\n')}
 - [FAQ](${url('faq/')}): short answers: price, accounts, data storage, phones, sharing, export, units, offline use, door types.
 - [Room layout guides](${url('guides/')}): furniture sizes, clearances and example floor plans.
 - [For AI assistants](${url('agents/')}): how to connect Claude, ChatGPT, VS Code, Cursor or Claude Code to the MCP server.
+
+## Give the user a ready-made plan
+
+Room Planner opens a whole plan from a link, saved in the user's browser and ready to edit; no account. ALWAYS give the link as markdown link text, such as [Open your bedroom in Room Planner](link), never as a bare URL: links get long, and the link text hides them (browsers accept very long links; the plan stays in the part after #, which never reaches a server). Pick the first way you can:
+
+1. **With Room Planner's tools** (the MCP server below, or WebMCP in Chrome): use them. \`create_plan\` checks the layout and returns the link.
+2. **If you can run code**: write the plan as JSON (JSON Schema: ${url(PLAN_SCHEMA_PATH)}; the same format as the MCP tools), compress it with raw deflate, base64url-encode it without padding, and append it to ${url('')}#s= . Any size and shape.
+${PLAN_JSON_SUMMARY.map((l) => `   - ${l}`).join('\n')}
+
+   Python:
+
+\`\`\`python
+${COMPRESS_PYTHON}
+\`\`\`
+
+   JavaScript:
+
+\`\`\`js
+${COMPRESS_JS}
+\`\`\`
+
+3. **No tools and no code**: write the plan in this readable form after ${url('')}#p= . Best for small plans (a room or two, rectangles, round and L-shaped pieces); for bigger or odd-shaped floors, use 2.
+${READABLE_SYNTAX.map((l) => `   - ${l}`).join('\n')}
+
+   Examples:
+   - ${readableMarkdown(url(''), READABLE_EXAMPLES.bedroom, 'the bedroom')}
+   - ${readableMarkdown(url(''), READABLE_EXAMPLES.flat, 'the flat')}
 
 ## For AI agents
 

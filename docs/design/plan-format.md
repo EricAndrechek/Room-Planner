@@ -537,6 +537,66 @@ an object without one (versions 2 and 3), from `#s=`, `#j=` and `?config=`. The 
 keeps its Latin-1 behaviour and its "+ arrived as a space" tolerance. All of them end in
 `loadPlan`. The fixture table in section 4 covers each.
 
+### Links assistants write (Agents release)
+
+Most chat users never add a connector, so an assistant must be able to hand over a plan without
+tools. Every plan link is opened by `readSharePayload` (`src/core/share/link.ts`), as a new saved
+plan with the link removed from the address bar, and reported as `share_link_opened` with its
+`source`: `share` (`#s=`/`#j=`), `legacy` (`?config=`), `compact` (`#p=`) or `plan_param`
+(`#plan=`). Nothing is stored on a server (the owner's decision: no short links). `llms.txt`,
+`/agents/#plan-links` and the MCP instructions tier the ways, and every assistant is told to show
+a link as Markdown link text, never the raw URL:
+
+1. **Tools** (MCP, WebMCP): preferred; the plan is checked and the link always opens.
+2. **Code** (ChatGPT data analysis, Claude's analysis tool, Gemini code execution): the canonical
+   v4 JSON, raw deflate, base64url without padding, after `#s=`. `#s=` already reads any JSON a
+   plan loader accepts, so nothing in the app changed for this. `/plan.schema.json` publishes the
+   format (`z.toJSONSchema(Plan, { io: 'input' })`, the MCP tools' schema), and `llms.txt` has a
+   six-line Python and a five-line JavaScript snippet; a unit test runs both.
+   `src/lib/agentExample.json` holds a three-room plan and its link, written by a test with the
+   documented algorithm, validated against the published schema and opened in e2e. Any size and
+   shape: the 1 KB three-room plan is a 608-character link.
+3. **Neither**: the readable form after `#p=` (below), for small plans.
+
+`#plan=<JSON>` (or `?plan=`) is a silent fallback, not documented for assistants: raw or
+percent-encoded JSON in the MCP tools' format, read tolerantly (typographic quotes, trailing
+punctuation, a stray `%`, a `#` from a colour that ends `?plan=`, no `version`, a room as
+`{width, depth}`), capped at 16 KB of JSON (`src/core/share/planParam.ts`).
+
+### Readable links (`#p=`)
+
+A compact text a model writes straight into a link (`src/core/share/readable.ts`). It uses only
+characters chat apps, Markdown and browsers leave alone: letters, digits and `- . _ ~ , ; : @`
+(not the brackets and `!` that URLs also allow, since a `)` ends a Markdown link).
+
+```
+#p=ft;room:Bedroom:12x11;door:bottom:8:3;window:top:4:4;item:Queen_bed:5x6.7@6,3.35;item:Nightstand:1.7x1.3@2.65,0.65;item:Dresser:5x1.5@4.5,10.25
+```
+
+| Statement                              | Meaning                                                                                                                                                                                                                                                                                                       |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ft`, `in`, `m`, `cm` (or `unit:cm`)   | The unit of every length; default `ft`.                                                                                                                                                                                                                                                                       |
+| `name:<plan name>`                     | The plan's name; default the only room's name.                                                                                                                                                                                                                                                                |
+| `room:<name>:<W>x<L>[@x,y]`            | A rectangle, top-left corner at x,y. Without `@`: the first at 0,0, each next one right of the one before, top-aligned (so they share a wall).                                                                                                                                                                |
+| `room:<name>:x1,y1,x2,y2,...[@x,y]`    | An outline, corners clockwise, shifted by `@`.                                                                                                                                                                                                                                                                |
+| `door:<wall>:<offset>:<width>[:...]`   | On the room before it. Rectangles: `top`/`right`/`bottom`/`left`, offset from the wall's left or top end. Otherwise the wall index, offset clockwise from its start corner. Options: `in`, `out`, `double`, `double-out`, `sliding`, `pocket`, `bifold`, `opening`; `right` (hinge, seen from inside); `180`. |
+| `window:<wall>:<offset>:<width>`       | As a door.                                                                                                                                                                                                                                                                                                    |
+| `item:<label>:<W>x<D>[@x,y[,r]][:...]` | A piece, centre at x,y, r clockwise degrees; no `@`: set aside. Options: `round`, `L-<tl/tr/br/bl>-<w>x<d>` (the cut), `color-<rrggbb>`.                                                                                                                                                                      |
+
+- `;` separates statements and `:` fields; `_` in a name is a space (`%5F` is an underscore, and
+  any other character is percent-encoded by the writer).
+- Offsets on named walls run from the left or top end, unlike the format's clockwise offsets,
+  because that is how people and models describe them ("1 ft from the left").
+- Forgiving: keywords are case-insensitive, spaces around fields, empty statements and a trailing
+  `;` are ignored, `×`, `X` and `*` work as the `x` of a size, an unknown statement is skipped with
+  a note, and a door before any room is skipped. The key is read as `#p=` or `#P=`. A text with no
+  readable room is a damaged link. The reader never throws (property-tested), returns a v4
+  document, and leaves ids, outline direction and the rest to `loadPlan(..., 'lenient')`.
+- Pieces without a colour get the presets in turn, so a plan written by hand is not all blue.
+- A writer, `toReadable(plan)`, round-trips every guide example and every fixture (ids, notes and
+  the locked and hidden flags are not part of the syntax). The bedroom above is 143 characters after `#p=`;
+  the two-room flat in `llms.txt` 283.
+
 ### QR
 
 Nothing changes in `qr.ts`. Codes get smaller for the same plan (the sample goes from version 15 to

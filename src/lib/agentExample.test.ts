@@ -7,7 +7,8 @@ import { loadPlan } from '../core/load';
 import { readSharePayload } from '../core/share/link';
 import { readSharedPlan } from './boot';
 import { publishedPlanSchema } from './planSchema';
-import { READABLE_EXAMPLES } from './site';
+import { COMPRESS_JS, COMPRESS_PYTHON, READABLE_EXAMPLES } from './site';
+import { spawnSync } from 'node:child_process';
 import { parseReadable } from '../core/share/readable';
 
 // The plan an assistant with code builds (llms.txt, "Can run code"), and the link it makes with
@@ -64,5 +65,28 @@ describe('the assistant-made link example', () => {
       if (!loaded?.ok) throw new Error('unreadable');
       expect(validate(loaded.plan), JSON.stringify(validate.errors)).toBe(true);
     }
+  });
+
+  it('is what the documented JavaScript and Python snippets make', async () => {
+    const plan = JSON.stringify(example.plan);
+    const js = COMPRESS_JS.replace(/^const plan = .*$/m, `const plan = ${plan};`).replace(
+      /console\.log\((.*)\);$/m,
+      'return $1;',
+    );
+    const run = new Function(`return (async () => { ${js} })();`) as () => Promise<string>;
+    const fromJs = await run();
+    const decoded = await readSharePayload(fromJs);
+    expect(decoded.status === 'ok' && decoded.data).toEqual(example.plan);
+
+    const py = COMPRESS_PYTHON.replace(
+      /^plan = .*$/m,
+      `plan = json.loads(${JSON.stringify(plan)})`,
+    );
+    const out = spawnSync('python3', ['-I', '-c', py], { encoding: 'utf8' });
+    if (out.error) return; // no Python here; CI has it
+    expect(out.stderr).toBe('');
+    // Node's zlib and Python's may pick different (equally valid) deflate streams.
+    const fromPython = await readSharePayload(out.stdout.trim());
+    expect(fromPython.status === 'ok' && fromPython.data).toEqual(example.plan);
   });
 });

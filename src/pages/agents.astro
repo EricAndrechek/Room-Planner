@@ -7,7 +7,16 @@
 import registry from '../../server.json';
 import Content from '../layouts/Content.astro';
 import { withBase } from '../lib/paths';
-import { MCP_PATH, MCP_PRIVACY, SITE_NAME } from '../lib/site';
+import { PLAN_SCHEMA_PATH } from '../lib/planSchema';
+import {
+  COMPRESS_JS,
+  COMPRESS_PYTHON,
+  MCP_PATH,
+  MCP_PRIVACY,
+  READABLE_EXAMPLES,
+  READABLE_SYNTAX,
+  SITE_NAME,
+} from '../lib/site';
 
 const title = 'Room Planner for AI Assistants: Free MCP Server for Claude, ChatGPT & More';
 const description =
@@ -16,6 +25,13 @@ const description =
 const site = Astro.site ?? new URL(Astro.url.origin);
 const abs = (path: string) => new URL(withBase(path), site).toString();
 const endpoint = abs(MCP_PATH);
+const readable = (text: string) => `${abs('')}#p=${text}`;
+/** Inline `code` in the syntax lines, as HTML (the lines are this site's own text). */
+const codeHtml = (line: string) =>
+  line
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/`([^`]+)`/g, '<code>$1</code>');
 
 const vscode = JSON.stringify(
   { servers: { 'room-planner': { type: 'http', url: endpoint } } },
@@ -73,7 +89,11 @@ const code = 'block bg-slate-900 text-slate-100 rounded-lg p-3 text-sm overflow-
     {SITE_NAME} has a free MCP server. Connect it to Claude, ChatGPT or your code editor and ask the
     assistant to lay out a room: it writes the plan to scale, checks it for clashes and blocked
     doors, and gives you a link that opens the plan in the planner, where you can drag, rotate,
-    measure, export and share it. No account and no API key.
+    measure, export and share it. No account and no API key. Without it, any assistant can still
+    <a href="#plan-links" class="text-indigo-700 underline">
+      give you a plan as a link
+    </a>
+    .
   </p>
 
   <article class="space-y-10 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:mb-3 [&_h3]:font-semibold [&_h3]:text-slate-800 [&_h3]:mt-5 [&_h3]:mb-1 [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_ul]:mb-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1 [&_ol]:mb-3">
@@ -188,6 +208,63 @@ const code = 'block bg-slate-900 text-slate-100 rounded-lg p-3 text-sm overflow-
         <code>chrome://flags/#enable-webmcp-testing</code>, relaunch, and open {SITE_NAME}. Other
         browsers don't load any of this.
       </p>
+    </section>
+
+    <section id="plan-links">
+      <h2>No setup: plan links</h2>
+      <p>
+        {SITE_NAME} opens a whole plan from a link: it is saved in your browser, ready to edit. The
+        plan is in the part of the link after <code>#</code>, which never reaches a server. So an
+        assistant without any connector can still hand you a plan. Ask it to “give me a Room Planner
+        link (see {abs('llms.txt')})”. Assistants should show the link as text such as{' '}
+        <a href={readable(READABLE_EXAMPLES.bedroom)} class="text-indigo-700 underline">
+          Open your bedroom in Room Planner
+        </a>
+        , never the raw address: links get long, and browsers accept them.
+      </p>
+      <h3>1. Assistants with Room Planner's tools</h3>
+      <p>
+        With the MCP server below, or WebMCP in Chrome, the assistant uses the tools: they check the
+        layout and return the link.
+      </p>
+      <h3>2. Assistants that can run code</h3>
+      <p>
+        ChatGPT's data analysis, Claude's analysis tool or Gemini's code execution can build the
+        plan as JSON (the format is{' '}
+        <a href={abs(PLAN_SCHEMA_PATH)} class="text-indigo-700 underline">
+          /{PLAN_SCHEMA_PATH}
+        </a>
+        , the same as the MCP tools take), compress it and make a <code>#s=</code> link. This works
+        for a plan of any size and shape.
+      </p>
+      <pre class={code} tabindex="0">{COMPRESS_PYTHON}</pre>
+      <pre class={`${code} mt-3`} tabindex="0">{COMPRESS_JS}</pre>
+      <h3>3. Assistants with neither: the readable form</h3>
+      <p>
+        For a small plan (a room or two, rectangles, round and L-shaped pieces), an assistant can
+        write the plan itself after <code>#p=</code>. For a bigger or odd-shaped floor, the code way
+        is better.
+      </p>
+      <ul>
+        {READABLE_SYNTAX.map((l) => (
+          <li set:html={codeHtml(l)} />
+        ))}
+      </ul>
+      <p>Examples:</p>
+      <ul>
+        <li>
+          <a href={readable(READABLE_EXAMPLES.bedroom)} class="text-indigo-700 underline">
+            A 12 × 11 ft bedroom
+          </a>
+          : <code class="break-all">#p={READABLE_EXAMPLES.bedroom}</code>
+        </li>
+        <li>
+          <a href={readable(READABLE_EXAMPLES.flat)} class="text-indigo-700 underline">
+            A flat with a living room and a bedroom
+          </a>
+          : <code class="break-all">#p={READABLE_EXAMPLES.flat}</code>
+        </li>
+      </ul>
     </section>
 
     <section id="examples">

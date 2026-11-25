@@ -55,7 +55,7 @@ export const READABLE_EXAMPLES = {
 } as const;
 
 export const READABLE_SYNTAX = [
-  'Statements are separated by `;`, fields by `:`. Use `_` for spaces in names. Only letters, digits and `- . _ ~ , ; : @ ( ) !`.',
+  'Statements are separated by `;`, fields by `:`. Use `_` for spaces in names. Only letters, digits and `- . _ ~ , ; : @` (no spaces, quotes or brackets).',
   'Start with the unit: `ft` (default), `in`, `m` or `cm`. Every length is in it. Optional: `name:My_flat`.',
   'x grows to the right and y grows DOWN; the floor starts at 0,0.',
   '`room:<name>:<W>x<L>` is a W wide, L long rectangle. The first room is at 0,0; each next one goes to the right of the one before, sharing its wall. `@x,y` puts its top-left corner elsewhere. An odd shape: `room:<name>:x1,y1,x2,y2,...` (its corners, clockwise).',
@@ -64,3 +64,28 @@ export const READABLE_SYNTAX = [
   '`item:<label>:<W>x<D>@x,y` is a piece W wide (along x) and D deep, its CENTRE at x,y. `@x,y,90` turns it 90° clockwise. Leave out `@...` to set it aside.',
   'Item options: `round` (a round or oval piece), `L-tr-6x4` (an L: a 6 × 4 cut from its top-right corner; tl, tr, br, bl).',
 ] as const;
+
+/** The plan as JSON, in a few lines (the full format: /plan.schema.json and the MCP tools). */
+export const PLAN_JSON_SUMMARY = [
+  '`{"version": 4, "name": "...", "unit": "ft", "rooms": [...], "items": [...]}`; unit is "ft", "in", "m" or "cm", and every length is in it. x grows right, y grows DOWN.',
+  'Room: `{"id", "name", "outline": [{"x","y"}, ...], "openings": [...]}`, corners clockwise; a W × L rectangle at the origin is `[{"x":0,"y":0},{"x":W,"y":0},{"x":W,"y":L},{"x":0,"y":L}]` and its walls are 0 top, 1 right, 2 bottom, 3 left (wall i runs from corner i to corner i+1). Rooms share a wall by touching.',
+  'Opening: `{"id", "kind": "door"|"window", "wall", "offset", "width"}`, offset along the wall clockwise from its start corner (right to left on a bottom wall); doors may have "type" ("swing-in", "swing-out", "sliding", "pocket", "double-in", "bifold", "opening") and "hinge" ("start"|"end"). A door on a wall two rooms share connects them.',
+  'Item: `{"id", "label", "width", "depth", "placement": {"x", "y", "rotation"}}`, placement the CENTRE, rotation clockwise degrees; "shape": "ellipse", or "l" with "cut": {"corner": "tl"|"tr"|"br"|"bl", "width", "depth"}; "color": "#rrggbb". No placement: set aside.',
+] as const;
+
+export const COMPRESS_PYTHON = `import base64, json, zlib
+plan = {"version": 4, "name": "Bedroom", "unit": "ft", "rooms": [...], "items": [...]}
+c = zlib.compressobj(9, zlib.DEFLATED, -15)  # raw deflate
+data = c.compress(json.dumps(plan, separators=(",", ":")).encode()) + c.flush()
+link = "https://room-planner.andrechek.com/#s=" + base64.urlsafe_b64encode(data).decode().rstrip("=")
+print(link)`;
+
+export const COMPRESS_JS = `const plan = { version: 4, name: 'Bedroom', unit: 'ft', rooms: [/* ... */], items: [/* ... */] };
+const raw = new Blob([JSON.stringify(plan)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+const bytes = new Uint8Array(await new Response(raw).arrayBuffer());
+const b64 = btoa(String.fromCharCode(...bytes)).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
+console.log('https://room-planner.andrechek.com/#s=' + b64);`;
+
+/** A readable example as an assistant should present it: markdown link text. */
+export const readableMarkdown = (origin: string, text: string, what: string): string =>
+  `[Open ${what} in Room Planner](${new URL('/', origin).toString()}#p=${text})`;

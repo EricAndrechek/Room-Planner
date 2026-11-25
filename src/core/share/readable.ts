@@ -1,7 +1,7 @@
 /**
  * Readable plan links, `#p=...`: a plan in a compact text that an assistant with no tools writes
  * straight into a link (docs/design/plan-format.md, section 5, "Readable links"). Only characters
- * that chat apps and browsers leave alone: letters, digits and `- . _ ~ , ; : @ ( ) !`.
+ * that chat apps, Markdown and browsers leave alone: letters, digits and `- . _ ~ , ; : @`.
  *
  *   #p=ft;room:Bedroom:12x11;door:bottom:8:3;window:top:4:4;item:Queen_bed:5x6.7@6,3.35
  *
@@ -329,7 +329,7 @@ const writeName = (s: string): string =>
     .map((c) =>
       c === ' '
         ? '_'
-        : /[A-Za-z0-9\-.~,()!]/.test(c)
+        : /[A-Za-z0-9\-.~,]/.test(c)
           ? c
           : [...new TextEncoder().encode(c)]
               .map((byte) => `%${byte.toString(16).toUpperCase().padStart(2, '0')}`)
