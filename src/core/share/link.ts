@@ -14,11 +14,13 @@
  * `loadPlan`. UTF-8 is used throughout, so emoji / non-Latin names round-trip (the old
  * `btoa(JSON)` encoder threw on them and silently produced an empty link).
  *
- * Legacy links `?config=<btoa(JSON)>` are still decoded exactly as before, and `#plan=<JSON>` (or
- * `?plan=`), a plan written by hand or by an assistant, is read by planParam.ts.
+ * Legacy links `?config=<btoa(JSON)>` are still decoded exactly as before. Two more forms are
+ * written by people and assistants rather than by the app: `#p=<readable text>` (readable.ts) and
+ * `#plan=<JSON>` or `?plan=` (planParam.ts, a tolerant fallback).
  */
 import { base64UrlToBytes, bytesToBase64Url, deflate, inflate, supportsCompression } from './codec';
 import { hasPlanParam, readPlanParam, stripPlanParam } from './planParam';
+import { hasReadableLink, readReadableLink, stripReadableLink } from './readable';
 
 export const HASH_KEY_DEFLATE = 's';
 export const HASH_KEY_PLAIN = 'j';
@@ -103,12 +105,13 @@ export const hasShareLink = (href: string): boolean => {
     url.searchParams.has(LEGACY_QUERY_KEY) ||
     hash.has(HASH_KEY_DEFLATE) ||
     hash.has(HASH_KEY_PLAIN) ||
-    hasPlanParam(href)
+    hasPlanParam(href) ||
+    hasReadableLink(href)
   );
 };
 
-/** Where a link's plan came from: a share link (`#s=`, `#j=`), `?config=`, or `#plan=`. */
-export type LinkSource = 'share' | 'legacy' | 'plan_param';
+/** Where a link's plan came from: a share link (`#s=`, `#j=`), `?config=`, `#p=` or `#plan=`. */
+export type LinkSource = 'share' | 'legacy' | 'compact' | 'plan_param';
 
 export type SharePayload =
   | { status: 'none' }
@@ -121,6 +124,11 @@ export type SharePayload =
  * fragment first, then legacy `?config=` (also when the fragment is damaged).
  */
 export const readSharePayload = async (href: string): Promise<SharePayload> => {
+  const readable = readReadableLink(href);
+  if (readable.status === 'ok') {
+    return { status: 'ok', data: readable.data, legacy: false, source: 'compact' };
+  }
+  if (readable.status === 'damaged') return { status: 'damaged', legacy: false, source: 'compact' };
   const param = readPlanParam(href);
   if (param.status !== 'none') {
     return { ...param, legacy: false, source: 'plan_param' } as SharePayload;
@@ -140,7 +148,7 @@ export const readSharePayload = async (href: string): Promise<SharePayload> => {
 
 /** The current URL with any share payload removed (used after importing it). */
 export const stripShareLink = (href: string): string => {
-  const url = new URL(stripPlanParam(href));
+  const url = new URL(stripReadableLink(stripPlanParam(href)));
   url.searchParams.delete(LEGACY_QUERY_KEY);
   const hash = new URLSearchParams(url.hash.replace(/^#/, ''));
   if (hash.has(HASH_KEY_DEFLATE) || hash.has(HASH_KEY_PLAIN)) url.hash = '';
