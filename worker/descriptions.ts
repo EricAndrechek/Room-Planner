@@ -5,7 +5,8 @@
  * typical sizes and clearances. No catalogue.
  */
 
-const FORMAT = `Plan format (version 4):
+/** The plan format, typical sizes and clearances; also in the room-planner Agent Skill. */
+export const FORMAT = `Plan format (version 4):
 - Lengths: every length is in plan.unit: "in", "cm", "m" or "ft". Use the unit the user speaks. Answers come back in the same unit.
 - Coordinates: one floor coordinate system for every room and piece. x grows to the right, y grows DOWN (as on a screen). Start the floor's top-left corner at {x:0,y:0}.
 - Room: {id, name, outline, openings}. outline = interior corners, clockwise as drawn, 3 to 64 of them. A W x D rectangle at (X,Y) is [{x:X,y:Y},{x:X+W,y:Y},{x:X+W,y:Y+D},{x:X,y:Y+D}]; its walls are then 0 = top, 1 = right, 2 = bottom, 3 = left. Wall i always runs from outline[i] to outline[i+1] (the last back to outline[0]); an L-shaped room is 6 corners. Give each room a name ("Bedroom").

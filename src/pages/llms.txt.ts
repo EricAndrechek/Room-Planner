@@ -48,7 +48,9 @@ ${FEATURES.map((f) => `- ${f}`).join('\n')}
 - [REST API](${url(PATHS.openapi)}): the same operations over plain HTTP (OpenAPI 3.1): \`POST /api/plan/check\`, \`POST /api/plan/link\`, \`GET /api/plan?url=\`. No key.
 - [Plan JSON Schema](${url(PLAN_SCHEMA_PATH)}): the plan format the tools, the API and \`#s=\` links take.
 - [Plan links](${url('agents/')}#plan-links): give the user a ready-made plan as a link, with tools, HTTP, code or none (below).
-- [API catalog](${url(PATHS.apiCatalog)}) (RFC 9727) and [AI catalog](${url(PATHS.aiCatalog)}): the same, for discovery.
+- [Agent skill](${url(PATHS.skill)}): how to make a plan for the user (the section below, the plan format and examples) as an Agent Skill, listed in the [Agent Skills index](${url(PATHS.agentSkills)}).
+- [API catalog](${url(PATHS.apiCatalog)}) (RFC 9727) and [AI catalog](${url(PATHS.aiCatalog)}) (also at ${url(PATHS.ard)}): the same, for discovery. No authentication anywhere, so there is no OAuth metadata.
+- Search: \`GET ${url(PATHS.search)}?q=<words>\` returns the best sections of this site's pages, in Markdown.
 - WebMCP: in Chrome with WebMCP, the planner page registers editing tools for the browser's own agent (below).
 
 ## Pages

@@ -1,10 +1,12 @@
 import type { APIRoute } from 'astro';
+import { PATHS } from '../../scripts/discovery.mjs';
 
 /**
  * robots.txt: every crawler, AI crawlers included, may read everything (the owner's choice;
  * docs/DEPLOY.md, "Discovery for agents"), with Cloudflare's Content Signals saying the same for
  * search, AI answers and AI training. Nothing is disallowed: not /mcp, /api/, /openapi.json or
  * /.well-known/. Previews are kept out of indexes by Cloudflare's own `X-Robots-Tag: noindex`.
+ * `Agentmap` points agents at the AI catalog (ARD v0.91, section 5.1); crawlers ignore the line.
  */
 export const GET: APIRoute = ({ site }) => {
   const base = import.meta.env.BASE_URL.replace(/\/+$/, '');
@@ -18,6 +20,7 @@ export const GET: APIRoute = ({ site }) => {
     'Allow: /',
     '',
     `Sitemap: ${url('sitemap-index.xml')}`,
+    `Agentmap: ${url(PATHS.ard.slice(1))}`,
     '',
     `# For AI agents: ${url('llms.txt')} (MCP server, REST API ${url('openapi.json')}, plan links).`,
     '',
