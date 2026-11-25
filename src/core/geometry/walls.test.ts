@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { WALL_FRAMES } from '../testing/v3/openings';
-import { drawingFrame, isRectangle, openingInFrame, outlineArea, wallFrame } from './walls';
+import {
+  drawingFrame,
+  firstCorner,
+  isRectangle,
+  lOutline,
+  lShapeOf,
+  openingInFrame,
+  outlineArea,
+  roomShapeOf,
+  wallAngle,
+  wallFrame,
+} from './walls';
 
 const rect = {
   outline: [
@@ -90,5 +101,75 @@ describe('isRectangle', () => {
       }),
     ).toBe(false);
     expect(outlineArea(rect)).toBe(140);
+  });
+});
+
+describe('room shapes', () => {
+  const L = { width: 12, height: 10, cutWidth: 4, cutHeight: 3 };
+  const corners = ['tl', 'tr', 'br', 'bl'] as const;
+
+  it('lOutline is a clockwise six-corner outline listed from its top-left-most corner', () => {
+    for (const corner of corners) {
+      const outline = lOutline({ ...L, corner });
+      expect(outline).toHaveLength(6);
+      expect(firstCorner(outline)).toBe(0);
+      expect(outlineArea({ outline })).toBe(12 * 10 - 4 * 3);
+      // Clockwise as drawn (y down): positive signed area.
+      let a = 0;
+      outline.forEach((p, i) => {
+        const q = outline[(i + 1) % 6]!;
+        a += p.x * q.y - q.x * p.y;
+      });
+      expect(a).toBeGreaterThan(0);
+    }
+  });
+
+  it('lShapeOf reads an L back from any starting corner and anywhere on the floor', () => {
+    for (const corner of corners) {
+      const outline = lOutline({ ...L, corner }, { x: 3, y: -2 });
+      for (let k = 0; k < 6; k++) {
+        const turned = [...outline.slice(k), ...outline.slice(0, k)];
+        expect(lShapeOf({ outline: turned })).toEqual({ ...L, corner });
+        expect(roomShapeOf({ outline: turned })).toBe('l');
+      }
+    }
+  });
+
+  it('lShapeOf is null for rectangles, counter-clockwise outlines and other six-corner shapes', () => {
+    expect(lShapeOf(rect)).toBeNull();
+    expect(lShapeOf({ outline: [...lOutline({ ...L, corner: 'tr' })].reverse() })).toBeNull();
+    // A U-ish notch in the middle of a side: six corners, but not a cut-out corner.
+    const notch = [
+      { x: 0, y: 0 },
+      { x: 4, y: 0 },
+      { x: 4, y: 2 },
+      { x: 8, y: 2 },
+      { x: 8, y: 6 },
+      { x: 0, y: 6 },
+    ];
+    expect(lShapeOf({ outline: notch })).toEqual({
+      width: 8,
+      height: 6,
+      corner: 'tr',
+      cutWidth: 4,
+      cutHeight: 2,
+    });
+    const angled = [...notch];
+    angled[1] = { x: 4, y: 1 };
+    expect(lShapeOf({ outline: angled })).toBeNull();
+    expect(roomShapeOf({ outline: angled })).toBe('custom');
+    expect(roomShapeOf(rect)).toBe('rect');
+  });
+
+  it('wallAngle is clockwise from pointing right', () => {
+    expect([0, 1, 2, 3].map((i) => wallAngle(rect, i))).toEqual([0, 90, 180, 270]);
+    const tri = {
+      outline: [
+        { x: 0, y: 0 },
+        { x: 4, y: 4 },
+        { x: 0, y: 4 },
+      ],
+    };
+    expect(wallAngle(tri, 0)).toBe(45);
   });
 });

@@ -2,13 +2,18 @@
  * Snapping, alignment guides and clearance measurements for furniture.
  *
  * Everything works on a piece's axis-aligned bounding box (for a rotated piece, the box around its
- * rotated corners), in feet, in room coordinates (0,0 is the inner corner of the top and left
- * walls). Pure functions: the drag/keyboard code calls them with the visible items and draws the
- * result.
+ * rotated outline: an L's six corners, an ellipse's curve), in feet, in room coordinates (0,0 is
+ * the inner corner of the top and left walls). An L turned by a multiple of 90 degrees also offers
+ * the two inner edges of its notch, to snap and measure to. Pure functions: the drag/keyboard code
+ * calls them with the visible items and draws the result.
  *
  * Cost: {@link buildSnapCandidates} is O(n) once per drag; {@link snapBounds} and
  * {@link measureClearances} are O(n) per pointer move, with no allocation beyond the result.
  */
+import { normalizeDegrees, pointInPolygon, type Point } from './geometry';
+import { distanceToWall } from './geometry/corners';
+import { isL, itemParts, notchEdges, partsBounds, shapeExtents } from './geometry/shapes';
+import type { Item } from './schema';
 import type { Id, RoomDims } from './types';
 import { feetToDisplay } from './units';
 
@@ -27,8 +32,26 @@ export interface Bounds {
   bottom: number;
 }
 
-/** A piece's unrotated box: top-left corner, size, and rotation about its centre (degrees). */
-type Box = { x: number; y: number; width: number; height: number; rotation: number };
+/**
+ * A piece's unrotated box: top-left corner, size, and rotation about its centre (degrees), with its
+ * shape (a rectangle when left out).
+ */
+type Box = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  shape?: Item['shape'];
+  cut?: Item['cut'];
+};
+
+const shapeOf = (item: Box) => ({
+  shape: item.shape ?? 'rect',
+  width: item.width,
+  depth: item.height,
+  cut: item.cut,
+});
 
 /** A piece as snapping and the measurements see it (`itemBox` of a plan's item, with its id). */
 export interface SnapPiece extends Box {
@@ -47,6 +70,12 @@ export const itemBounds = (item: Box): Bounds => {
   }
   let halfW = item.height / 2;
   let halfH = item.width / 2;
+  if (rot % 90 !== 0 && (item.shape === 'ellipse' || isL(item))) {
+    const e = shapeExtents(shapeOf(item), rot);
+    const cx = item.x + item.width / 2;
+    const cy = item.y + item.height / 2;
+    return { left: cx + e.left, top: cy + e.top, right: cx + e.right, bottom: cy + e.bottom };
+  }
   if (rot % 90 !== 0) {
     const rad = (rot * Math.PI) / 180;
     const cos = Math.abs(Math.cos(rad));
@@ -57,6 +86,22 @@ export const itemBounds = (item: Box): Bounds => {
   const cx = item.x + item.width / 2;
   const cy = item.y + item.height / 2;
   return { left: cx - halfW, top: cy - halfH, right: cx + halfW, bottom: cy + halfH };
+};
+
+/**
+ * The axis-aligned rectangles a piece is measured against: its two parts for an L turned by a
+ * multiple of 90 degrees (so a gap into its notch is measured to the notch), else its bounds.
+ */
+export const itemRects = (item: Box): Bounds[] => {
+  if (!isL(item) || normalizeDegrees(item.rotation) % 90 !== 0) return [itemBounds(item)];
+  return itemParts({
+    ...shapeOf(item),
+    placement: {
+      x: item.x + item.width / 2,
+      y: item.y + item.height / 2,
+      rotation: item.rotation,
+    },
+  }).map((part) => partsBounds([part]));
 };
 
 /** Which feature of a box a line belongs to (left/top = start, right/bottom = end). */
@@ -83,16 +128,8 @@ export interface SnapCandidates {
   y: SnapLine[];
 }
 
-/**
- * Every line a moving piece can snap to: the inner faces of the four walls, the room's center
- * lines, and the edges and centers of every other *visible* piece. Built once when a drag starts
- * (the other pieces do not move meanwhile).
- */
-export function buildSnapCandidates(
-  items: readonly SnapPiece[],
-  room: RoomDims,
-  movingId: Id,
-): SnapCandidates {
+/** The four walls of a rectangular room from the origin, and its centre lines. */
+const rectangleLines = (room: RoomDims): SnapCandidates => {
   const x: SnapLine[] = [
     { pos: 0, edge: 'start', source: { kind: 'wall', wall: 'left' }, span: [0, room.height] },
     {
@@ -123,6 +160,22 @@ export function buildSnapCandidates(
       span: [0, room.width],
     },
   ];
+  return { x, y };
+};
+
+/**
+ * Every line a moving piece can snap to: the inner faces of the four walls, the room's center
+ * lines, and the edges and centers of every other *visible* piece. Built once when a drag starts
+ * (the other pieces do not move meanwhile).
+ */
+export function buildSnapCandidates(
+  items: readonly SnapPiece[],
+  room: RoomDims,
+  movingId: Id,
+  /** A room that is not a rectangle: its own wall and centre lines (`roomSnapLines`). */
+  roomLines?: SnapCandidates,
+): SnapCandidates {
+  const { x, y } = roomLines ? { x: [...roomLines.x], y: [...roomLines.y] } : rectangleLines(room);
   for (const item of items) {
     if (item.id === movingId || item.visible === false) continue;
     const b = itemBounds(item);
@@ -137,6 +190,10 @@ export function buildSnapCandidates(
       { pos: (b.top + b.bottom) / 2, edge: 'center', source, span: [b.left, b.right] },
       { pos: b.bottom, edge: 'end', source, span: [b.left, b.right] },
     );
+    const centre = { x: item.x + item.width / 2, y: item.y + item.height / 2 };
+    for (const e of notchEdges(shapeOf(item), centre, item.rotation)) {
+      (e.axis === 'x' ? x : y).push({ pos: e.pos, edge: e.facing, source, span: e.span });
+    }
   }
   return { x, y };
 }
@@ -396,6 +453,8 @@ export function measureClearances(
   items: readonly SnapPiece[],
   room: RoomDims,
   movingId: Id,
+  /** A room that is not a rectangle: the wall on each side is found along the measuring line. */
+  outline?: readonly Point[],
 ): Measurement[] {
   const nearest: Record<Side, { gap: number; lo: number; hi: number; item: boolean }> = {
     left: { gap: bounds.left, lo: bounds.top, hi: bounds.bottom, item: false },
@@ -403,25 +462,56 @@ export function measureClearances(
     top: { gap: bounds.top, lo: bounds.left, hi: bounds.right, item: false },
     bottom: { gap: room.height - bounds.bottom, lo: bounds.left, hi: bounds.right, item: false },
   };
+  if (outline) {
+    const midY = (bounds.top + bounds.bottom) / 2;
+    const midX = (bounds.left + bounds.right) / 2;
+    const quarterX = bounds.left + (bounds.right - bounds.left) / 4;
+    const rays: Record<Side, [Point, Point]> = {
+      left: [
+        { x: bounds.left, y: midY },
+        { x: -1, y: 0 },
+      ],
+      right: [
+        { x: bounds.right, y: midY },
+        { x: 1, y: 0 },
+      ],
+      top: [
+        { x: quarterX, y: bounds.top },
+        { x: 0, y: -1 },
+      ],
+      bottom: [
+        { x: midX, y: bounds.bottom },
+        { x: 0, y: 1 },
+      ],
+    };
+    for (const side of ['left', 'right', 'top', 'bottom'] as const) {
+      const [from, dir] = rays[side];
+      // Just inside the piece's edge: outside the room there is no wall to measure to.
+      const probe = { x: from.x - dir.x * 1e-6, y: from.y - dir.y * 1e-6 };
+      const d = pointInPolygon(probe, [...outline]) ? distanceToWall({ outline }, from, dir) : null;
+      nearest[side].gap = d ?? -1;
+    }
+  }
   const consider = (side: Side, gap: number, lo: number, hi: number) => {
     if (gap < -SAME || gap >= nearest[side].gap) return;
     nearest[side] = { gap: Math.max(0, gap), lo, hi, item: true };
   };
   for (const other of items) {
     if (other.id === movingId || other.visible === false) continue;
-    const o = itemBounds(other);
-    // Overlap across the side (strictly positive, so a corner-to-corner touch is no clear line).
-    const vLo = Math.max(bounds.top, o.top);
-    const vHi = Math.min(bounds.bottom, o.bottom);
-    if (vHi - vLo > SAME) {
-      consider('left', bounds.left - o.right, vLo, vHi);
-      consider('right', o.left - bounds.right, vLo, vHi);
-    }
-    const hLo = Math.max(bounds.left, o.left);
-    const hHi = Math.min(bounds.right, o.right);
-    if (hHi - hLo > SAME) {
-      consider('top', bounds.top - o.bottom, hLo, hHi);
-      consider('bottom', o.top - bounds.bottom, hLo, hHi);
+    for (const o of itemRects(other)) {
+      // Overlap across the side (strictly positive, so a corner-to-corner touch is no clear line).
+      const vLo = Math.max(bounds.top, o.top);
+      const vHi = Math.min(bounds.bottom, o.bottom);
+      if (vHi - vLo > SAME) {
+        consider('left', bounds.left - o.right, vLo, vHi);
+        consider('right', o.left - bounds.right, vLo, vHi);
+      }
+      const hLo = Math.max(bounds.left, o.left);
+      const hHi = Math.min(bounds.right, o.right);
+      if (hHi - hLo > SAME) {
+        consider('top', bounds.top - o.bottom, hLo, hHi);
+        consider('bottom', o.top - bounds.bottom, hLo, hHi);
+      }
     }
   }
   const out: Measurement[] = [];

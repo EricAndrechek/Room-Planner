@@ -1,20 +1,32 @@
-import { ArrowLeftRight, ArrowRight, Home, Plus, Trash2, Unlock } from 'lucide-react';
-import { useId, useState } from 'react';
+import {
+  AlertTriangle,
+  ArrowLeftRight,
+  ArrowRight,
+  DoorOpen,
+  Home,
+  Plus,
+  Trash2,
+  Unlock,
+} from 'lucide-react';
+import { doorConnections, neighbourOf, roomName, sharedLength } from '../../core/floor';
+import { useId } from 'react';
 import { glowClass, useCardHighlight } from '../../hooks/useCardHighlight';
 import type { AddedOpening } from '../../hooks/useOpenings';
 import { DOOR_TYPES, WALL_OPTIONS } from '../../lib/constants';
-import { wallLength } from '../../core/geometry';
+import { isRectangle, lShapeOf, wallLength, type LShape } from '../../core/geometry/walls';
 import {
   doorSwingAngle,
   hasHingeSide,
   isSwingDoor,
   type DoorType,
 } from '../../core/geometry/doors';
-import { feetToDisplay, formatArea, roomConfirmAboveFeet, roomMaxFeet } from '../../core/units';
-import type { OpeningPatch } from '../../lib/edits';
-import { openingPlace, roomSize } from '../../lib/plans';
-import type { Id, Opening, Room, RoomDims, UnitSystem, Wall } from '../../types';
+import { feetToDisplay } from '../../core/units';
+import type { OpeningPatch, ShapeChoice } from '../../lib/edits';
+import { areaText, floorArea, openingPlace, roomSize, wallLabel } from '../../lib/plans';
+import type { Id, Opening, Plan, Room, RoomDims, UnitSystem } from '../../types';
+import { RoomsList, type RoomsListProps } from './RoomsList';
 import { DimensionInput } from './DimensionInput';
+import { RoomShapeFields } from './RoomShapeFields';
 import { StepHeader } from './StepHeader';
 import { Segmented } from './Segmented';
 
@@ -24,11 +36,23 @@ interface RoomSetupPanelProps {
   onToggleExpanded: () => void;
   onActivate: () => void;
   onContinue: () => void;
+  /** The whole floor (for the rooms list and the doors between rooms). */
+  plan: Plan;
+  /** The rooms list and what it does. */
+  rooms: Omit<RoomsListProps, 'plan' | 'unitSystem'>;
   room: Room;
   doors: Opening[];
   windows: Opening[];
   unitSystem: UnitSystem;
   onRoomDimsChange: (dims: RoomDims) => void;
+  /** Rectangle, L-shape or Custom (see `useRoomShape`). */
+  shape: ShapeChoice;
+  onShapeChange: (shape: ShapeChoice) => void;
+  onLShapeChange: (l: LShape) => void;
+  /** False if the wall cannot have that length (walls would cross). */
+  onWallLengthChange: (wall: number, length: number) => boolean;
+  highlightedWall: number | null;
+  onHighlightWall: (wall: number | null) => void;
   onAddDoor: () => void;
   onUpdateDoor: (id: Id, updates: OpeningPatch) => void;
   onDeleteDoor: (id: Id) => void;
@@ -36,7 +60,7 @@ interface RoomSetupPanelProps {
   onUpdateWindow: (id: Id, updates: OpeningPatch) => void;
   onDeleteWindow: (id: Id) => void;
   /** Move a door/window to another wall (at a free spot there). */
-  onChangeWall: (type: 'door' | 'window', id: Id, wall: Wall) => void;
+  onChangeWall: (type: 'door' | 'window', id: Id, wall: number) => void;
   /** The door/window just added: its card is scrolled into view and briefly highlighted. */
   highlight?: AddedOpening | null;
 }
@@ -45,19 +69,75 @@ interface RoomSetupPanelProps {
 const hingeWord = (type: DoorType | undefined) =>
   type === 'bifold' ? 'Folds to' : type === 'pocket' ? 'Pocket' : 'Hinge';
 
-const WALL_SEGMENTS = WALL_OPTIONS.map((w) => ({
-  value: w,
+/** A rectangle's walls by name (walls 0 to 3), for the segmented wall control. */
+const WALL_SEGMENTS = WALL_OPTIONS.map((w, i) => ({
+  value: String(i),
   label: w.charAt(0).toUpperCase() + w.slice(1),
 }));
+
+/**
+ * Which wall a door or window is on: on a rectangle the four names in a segmented control, on
+ * any other outline a list of its walls with their lengths ("Wall 3 · 9'").
+ */
+function WallPicker({
+  room,
+  label,
+  value,
+  unitSystem,
+  onChange,
+  ring,
+  activeText,
+  selectClass,
+}: {
+  room: Room;
+  label: string;
+  value: number;
+  unitSystem: UnitSystem;
+  onChange: (wall: number) => void;
+  ring?: string;
+  activeText?: string;
+  selectClass: string;
+}) {
+  if (isRectangle(room)) {
+    return (
+      <Segmented
+        label={label}
+        options={WALL_SEGMENTS}
+        value={String(value)}
+        onChange={(w) => onChange(Number(w))}
+        ring={ring}
+        activeText={activeText}
+      />
+    );
+  }
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(Number(e.target.value))}
+      className={`${selectClass} bg-white`}
+      aria-label={label}
+      data-testid="wall-select"
+    >
+      {room.outline.map((_, w) => (
+        <option key={w} value={w}>
+          {wallLabel(room, w)} · {feetToDisplay(wallLength(room, w), unitSystem)}
+        </option>
+      ))}
+    </select>
+  );
+}
 const plural = (n: number, word: string) => `${n} ${word}${n !== 1 ? 's' : ''}`;
 
 /** Step 1 group in the sidebar: room size, doors and windows. */
 export function RoomSetupPanel(props: RoomSetupPanelProps) {
-  const { isActiveMode, expanded, room, doors, windows, unitSystem } = props;
+  const { isActiveMode, expanded, room, doors, windows, unitSystem, plan } = props;
+  const several = plan.rooms.length > 1;
+  const name = roomName(plan, room);
+  // Doors listed by another room that open into this one (drawn once, edited in their room).
+  const incoming = several ? doorConnections(plan).filter((c) => c.other.id === room.id) : [];
   const roomDims: RoomDims = roomSize(room);
   const { register, isHighlighted } = useCardHighlight(props.highlight);
-  // Full-width row under Width and Length for their errors and "did you mean?" prompts.
-  const [dimsMessages, setDimsMessages] = useState<HTMLDivElement | null>(null);
+  const l = lShapeOf(room);
   // Ids for the visible field labels (`htmlFor`), unique per panel and per door/window row.
   const uid = useId();
   const fid = (...parts: (string | number)[]) => [uid, ...parts].join('-');
@@ -80,11 +160,18 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
         icon={<Home className="w-4 h-4" />}
         title="Room Setup"
         summary={
-          <>
-            {feetToDisplay(roomDims.width, unitSystem)} ×{' '}
-            {feetToDisplay(roomDims.height, unitSystem)} • {plural(doors.length, 'door')} •{' '}
-            {plural(windows.length, 'window')}
-          </>
+          several ? (
+            <>
+              {plan.rooms.length} rooms • {areaText(floorArea(plan), unitSystem)}
+            </>
+          ) : (
+            <>
+              {isRectangle(room) ? '' : l ? 'L-shape ' : `${room.outline.length} walls, `}
+              {feetToDisplay(roomDims.width, unitSystem)} ×{' '}
+              {feetToDisplay(roomDims.height, unitSystem)} • {plural(doors.length, 'door')} •{' '}
+              {plural(windows.length, 'window')}
+            </>
+          )
         }
         activeIcon="bg-indigo-100 text-indigo-600"
         activeText="text-indigo-700"
@@ -110,56 +197,28 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
           className={`p-4 pt-2 space-y-6 border-t border-slate-100 ${!isActiveMode ? 'opacity-60 pointer-events-none' : ''}`}
           inert={!isActiveMode}
         >
-          {/* Room Dimensions */}
-          <section>
-            <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
-              Room Dimensions
+          <RoomsList plan={plan} unitSystem={unitSystem} {...props.rooms} />
+          {several && (
+            <h2
+              className="flex items-center gap-2 text-sm font-semibold text-slate-800 border-t border-slate-100 pt-4"
+              data-testid="editing-room"
+            >
+              {name}
             </h2>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor={fid('room-width')} className="block text-xs font-medium mb-1">
-                  Width
-                </label>
-                <DimensionInput
-                  id={fid('room-width')}
-                  value={roomDims.width}
-                  onChange={(val) => props.onRoomDimsChange({ ...roomDims, width: val })}
-                  className={inputClass}
-                  placeholder="e.g. 12"
-                  min={1}
-                  max={roomMaxFeet(unitSystem)}
-                  confirmAbove={roomConfirmAboveFeet(unitSystem)}
-                  messageSlot={dimsMessages}
-                  messageLabel="Width"
-                  label="Room width"
-                  unitSystem={unitSystem}
-                />
-              </div>
-              <div>
-                <label htmlFor={fid('room-length')} className="block text-xs font-medium mb-1">
-                  Length
-                </label>
-                <DimensionInput
-                  id={fid('room-length')}
-                  value={roomDims.height}
-                  onChange={(val) => props.onRoomDimsChange({ ...roomDims, height: val })}
-                  className={inputClass}
-                  placeholder="e.g. 12"
-                  min={1}
-                  max={roomMaxFeet(unitSystem)}
-                  confirmAbove={roomConfirmAboveFeet(unitSystem)}
-                  messageSlot={dimsMessages}
-                  messageLabel="Length"
-                  label="Room length"
-                  unitSystem={unitSystem}
-                />
-              </div>
-            </div>
-            <div ref={setDimsMessages} data-testid="room-dims-messages" />
-            <div className="mt-2 text-xs text-slate-500">
-              Total area: <strong>{formatArea(roomDims.width, roomDims.height)}</strong>
-            </div>
-          </section>
+          )}
+          <RoomShapeFields
+            room={room}
+            shape={props.shape}
+            unitSystem={unitSystem}
+            inputClass={inputClass}
+            smallInputClass={smallInput('focus:ring-indigo-500')}
+            onShapeChange={props.onShapeChange}
+            onRoomDimsChange={props.onRoomDimsChange}
+            onLShapeChange={props.onLShapeChange}
+            onWallLengthChange={props.onWallLengthChange}
+            highlightedWall={props.highlightedWall}
+            onHighlightWall={props.onHighlightWall}
+          />
 
           {/* Doors */}
           <section>
@@ -178,9 +237,16 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
             <div className="space-y-3">
               {doors.map((door, index) => {
                 const place = openingPlace(room, door);
-                const wallLen = wallLength(roomDims, place.wall);
+                const wallLen = wallLength(room, place.wall);
                 const card = { type: 'door', id: door.id } as const;
                 const lit = isHighlighted(card);
+                const other = several ? neighbourOf(plan, room, door) : null;
+                const into =
+                  other && isSwingDoor(door.type)
+                    ? door.type === 'swing-out' || door.type === 'double-out'
+                      ? roomName(plan, other)
+                      : name
+                    : null;
                 return (
                   <div
                     key={door.id}
@@ -190,7 +256,17 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                     data-highlighted={lit || undefined}
                   >
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-xs font-medium text-slate-700">Door {index + 1}</span>
+                      <span className="flex items-center gap-1.5 min-w-0 text-xs font-medium text-slate-700">
+                        Door {index + 1}
+                        {other && (
+                          <span
+                            className="truncate rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700"
+                            data-testid="door-connects"
+                          >
+                            {name} ↔ {roomName(plan, other)}
+                          </span>
+                        )}
+                      </span>
                       <button
                         type="button"
                         onClick={() => props.onDeleteDoor(door.id)}
@@ -205,11 +281,13 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                       <span className="block text-[10px] text-slate-500 mb-1" aria-hidden="true">
                         Wall
                       </span>
-                      <Segmented
+                      <WallPicker
+                        room={room}
                         label={`Door ${index + 1} wall`}
-                        options={WALL_SEGMENTS}
                         value={place.wall}
+                        unitSystem={unitSystem}
                         onChange={(wall) => props.onChangeWall('door', door.id, wall)}
+                        selectClass={smallInput('focus:ring-indigo-500')}
                       />
                     </div>
                     <div className="mb-2">
@@ -234,6 +312,14 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                           </option>
                         ))}
                       </select>
+                      {into && (
+                        <p
+                          className="mt-1 text-[10px] text-slate-600"
+                          data-testid="door-opens-into"
+                        >
+                          Opens into {into}
+                        </p>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 mb-2">
@@ -333,11 +419,30 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                 );
               })}
 
-              {doors.length === 0 && (
+              {doors.length === 0 && incoming.length === 0 && (
                 <div className="text-center py-3 text-slate-500 text-xs italic border-2 border-dashed border-slate-200 rounded-lg">
                   No doors added yet
                 </div>
               )}
+              {incoming.map((c) => (
+                <div
+                  key={c.door.id}
+                  className="flex items-center gap-2 p-2.5 rounded-lg border border-dashed border-slate-300 bg-slate-50 text-xs text-slate-600"
+                  data-testid="incoming-door"
+                >
+                  <DoorOpen className="w-3.5 h-3.5 shrink-0 text-slate-500" aria-hidden="true" />
+                  <span className="flex-1 min-w-0">
+                    A door from {roomName(plan, c.room)} opens here.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => props.rooms.onSelect(c.room.id)}
+                    className="shrink-0 px-2 py-1 rounded-sm font-medium text-indigo-700 hover:bg-indigo-50"
+                  >
+                    Edit in {roomName(plan, c.room)}
+                  </button>
+                </div>
+              ))}
             </div>
           </section>
 
@@ -358,7 +463,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
             <div className="space-y-3">
               {windows.map((win, index) => {
                 const place = openingPlace(room, win);
-                const wallLen = wallLength(roomDims, place.wall);
+                const wallLen = wallLength(room, place.wall);
                 const card = { type: 'window', id: win.id } as const;
                 const lit = isHighlighted(card);
                 return (
@@ -369,6 +474,17 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                     data-testid="window-card"
                     data-highlighted={lit || undefined}
                   >
+                    {several && sharedLength(plan, room, win) > 1e-3 && (
+                      <p
+                        className="mb-2 flex items-start gap-1.5 rounded-sm border border-amber-300 bg-amber-50 px-2 py-1.5 text-[10px] text-amber-900"
+                        data-testid="window-shared-wall"
+                      >
+                        <AlertTriangle className="w-3 h-3 shrink-0 mt-px" aria-hidden="true" />
+                        This wall is shared with{' '}
+                        {roomName(plan, neighbourOf(plan, room, win) ?? room)}: windows belong on
+                        outside walls.
+                      </p>
+                    )}
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-xs font-medium text-slate-700">Window {index + 1}</span>
                       <button
@@ -385,13 +501,15 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                       <span className="block text-[10px] text-slate-500 mb-1" aria-hidden="true">
                         Wall
                       </span>
-                      <Segmented
+                      <WallPicker
+                        room={room}
                         label={`Window ${index + 1} wall`}
-                        options={WALL_SEGMENTS}
                         value={place.wall}
+                        unitSystem={unitSystem}
                         onChange={(wall) => props.onChangeWall('window', win.id, wall)}
                         ring="focus-visible:ring-blue-500"
                         activeText="text-blue-700"
+                        selectClass={smallInput('focus:ring-blue-500')}
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-2">

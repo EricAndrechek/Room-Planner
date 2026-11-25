@@ -61,7 +61,19 @@ const faqs: { q: string; a: string }[] = [
   },
   {
     q: 'Can it draw a whole house, odd-shaped rooms or 3D?',
-    a: 'No. Room Planner draws one rectangular room at a time, in 2D, seen from above, and furniture pieces are rectangles you size yourself. For a home with several rooms, make one plan per room.',
+    a: 'It draws a whole floor of connected rooms (each a rectangle, an L-shape or any outline you draw), in 2D, seen from above, but not 3D or several storeys. Rooms share walls with no thickness, so a plan comes out a little narrower than the real building. Furniture pieces are rectangles, L-shapes or rounds (circles and ovals) you size yourself.',
+  },
+  {
+    q: 'Can I plan several rooms or a whole apartment?',
+    a: 'Yes. A plan is one floor with any number of rooms. In Room Setup, use Add room to put a new room against a wall of the selected room, name it, and drag it into place; its walls snap to the other rooms. A door on a wall two rooms share connects them.',
+  },
+  {
+    q: 'How do I move furniture to another room?',
+    a: 'Drag the piece through a doorway into the other room, and it belongs to that room. For a room far away, set the piece aside, then drag it from the Set aside list onto the plan, or tap Place and tap where it should go.',
+  },
+  {
+    q: 'What is Set aside?',
+    a: 'A place for pieces you want out of the plan for now. Select a piece and use Set aside (or press I), and it leaves the plan but keeps its name, size, color and shape. Switch to Set aside in the Items step to see them, and place one back whenever you like. Set-aside pieces never raise warnings and are listed under the drawing in exports.',
   },
   {
     q: 'What size should my furniture be, and how much space should I leave around it?',

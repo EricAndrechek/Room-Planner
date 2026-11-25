@@ -13,6 +13,8 @@ export interface SidebarSheet {
   summary: string;
   /** The key action while collapsed. */
   action?: SheetAction;
+  /** The selected piece's actions, in the sheet's top row. */
+  actions?: ReactNode;
   /** Controls riding on top of the sheet, over the plan (zoom, Snap); hidden at full height. */
   floating: ReactNode;
 }
@@ -108,6 +110,7 @@ export function Sidebar({
           isRoomSetup={isRoomSetup}
           summary={sheet.summary}
           action={sheet.action}
+          actions={sheet.actions}
           contentId={contentId}
         />
       )}

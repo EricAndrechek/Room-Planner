@@ -18,8 +18,16 @@ import {
   updateOpening,
   type OpeningPatch,
 } from '../lib/edits';
-import { doorsOf, mainRoom, openingPlace, roomSize, windowsOf } from '../lib/plans';
-import type { Id, Plan, RoomDims, Selection, Wall } from '../types';
+import {
+  doorsOf,
+  openingPlace,
+  roomById,
+  roomOfOpening,
+  roomSize,
+  theWall,
+  windowsOf,
+} from '../lib/plans';
+import type { Id, Plan, RoomDims, Selection } from '../types';
 import type { History } from './useHistory';
 import { nextCardSeq, type CardRef } from './useCardHighlight';
 import type { usePointerDrag } from './usePointerDrag';
@@ -41,6 +49,8 @@ interface Options {
   isRoomSetup: boolean;
   startDrag: ReturnType<typeof usePointerDrag>;
   zoomRef: RefObject<number>;
+  /** The room being edited: new doors and windows go there, and its size fields. */
+  roomId: Id;
 }
 
 /**
@@ -56,18 +66,24 @@ export function useOpenings({
   isRoomSetup,
   startDrag,
   zoomRef,
+  roomId,
 }: Options) {
   const { present: plan, set: setPlan, apply: applyPlan, commit } = history;
   const [lastAdded, setLastAdded] = useState<AddedOpening | null>(null);
-  const room = mainRoom(plan);
+  const room = roomById(plan, roomId);
   const doors = doorsOf(room);
   const windows = windowsOf(room);
+  /** The doors or windows of the room an opening is in (numbered per room). */
+  const listOf = (type: 'door' | 'window', id: Id) => {
+    const r = roomOfOpening(plan, id) ?? room;
+    return { r, list: type === 'door' ? doorsOf(r) : windowsOf(r) };
+  };
 
   /** Select a new opening, point the sidebar at it and say where it went. */
-  const added = (type: 'door' | 'window', id: Id, number: number, wall: Wall) => {
+  const added = (type: 'door' | 'window', id: Id, number: number, wall: number) => {
     setSelection({ id, type });
     setLastAdded({ type, id, seq: nextCardSeq() });
-    announce(`${type === 'door' ? 'Door' : 'Window'} ${number} added on the ${wall} wall`);
+    announce(`${type === 'door' ? 'Door' : 'Window'} ${number} added on ${theWall(room, wall)}`);
   };
   /** Forget the selection if it points at this (removed) opening. */
   const deselect = (type: 'door' | 'window', id: Id) =>
@@ -78,15 +94,15 @@ export function useOpenings({
     const next = { width: Math.max(1, dims.width || 1), height: Math.max(1, dims.height || 1) };
     const prev = roomSize(room);
     if (next.width === prev.width && next.height === prev.height) return null;
-    applyPlan((p) => resizeRoom(p, next));
+    applyPlan((p) => resizeRoom(p, next, room.id));
     const area = next.width * next.height - prev.width * prev.height;
     track('room_resized', { direction: area > 0 ? 'larger' : area < 0 ? 'smaller' : 'same_area' });
     return next;
   };
 
   const addDoor = () => {
-    const { door, wall } = addDoorEdit(plan);
-    applyPlan((p) => insertOpening(p, door));
+    const { door, wall } = addDoorEdit(plan, room.id);
+    applyPlan((p) => insertOpening(p, door, room.id));
     track('door_added', { count: doors.length + 1 });
     added('door', door.id, doors.length + 1, wall);
   };
@@ -99,8 +115,8 @@ export function useOpenings({
   };
 
   const addWindow = () => {
-    const { window: win, wall } = addWindowEdit(plan);
-    applyPlan((p) => insertOpening(p, win));
+    const { window: win, wall } = addWindowEdit(plan, room.id);
+    applyPlan((p) => insertOpening(p, win, room.id));
     track('window_added', { count: windows.length + 1 });
     added('window', win.id, windows.length + 1, wall);
   };
@@ -117,17 +133,17 @@ export function useOpenings({
    * never on top of another opening). One undo step; the opening is selected and the move
    * announced. False, and nothing changes, if it fits nowhere on that wall.
    */
-  const moveOpeningToWall = (type: 'door' | 'window', id: Id, wall: Wall): boolean => {
-    const list = type === 'door' ? doors : windows;
+  const moveOpeningToWall = (type: 'door' | 'window', id: Id, wall: number): boolean => {
+    const { r, list } = listOf(type, id);
     const index = list.findIndex((o) => o.id === id);
     const opening = list[index];
     if (!opening) return false;
-    if (openingPlace(room, opening).wall === wall) return true;
+    if (openingPlace(r, opening).wall === wall) return true;
     const next = moveToWall(plan, id, wall);
     if (next === null) return false;
     applyPlan((p) => moveToWall(p, id, wall) ?? p);
     setSelection({ id, type });
-    announce(`${type === 'door' ? 'Door' : 'Window'} ${index + 1} moved to the ${wall} wall`);
+    announce(`${type === 'door' ? 'Door' : 'Window'} ${index + 1} moved to ${theWall(r, wall)}`);
     return true;
   };
 
@@ -171,7 +187,7 @@ export function useOpenings({
   const deleteSelectedOpening = (): boolean => {
     if (!isRoomSetup || (selection?.type !== 'door' && selection?.type !== 'window')) return false;
     const isDoor = selection.type === 'door';
-    const list = isDoor ? doors : windows;
+    const { list } = listOf(selection.type, selection.id);
     const index = list.findIndex((o) => o.id === selection.id);
     if (index < 0) return false;
     if (isDoor) deleteDoor(selection.id);

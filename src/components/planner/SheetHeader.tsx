@@ -28,6 +28,8 @@ interface SheetHeaderProps extends SheetParts {
   summary: string;
   /** Shown only while collapsed (at peek); at half and full the controls are in view. */
   action?: SheetAction;
+  /** The selected piece's actions (Rotate, Duplicate, Set aside, Delete): a second row, at every height. */
+  actions?: ReactNode;
   /** Id of the scrolling content the handle resizes. */
   contentId: string;
 }
@@ -54,6 +56,7 @@ export function SheetHeader({
   isRoomSetup,
   summary,
   action,
+  actions,
   contentId,
 }: SheetHeaderProps) {
   const id = useId();
@@ -69,7 +72,9 @@ export function SheetHeader({
       <button
         ref={handleRef}
         type="button"
-        className="sheet-handle absolute inset-0 w-full rounded-t-2xl cursor-grab active:cursor-grabbing"
+        // With the piece actions under it, the handle covers the summary row only (its middle stays
+        // clear of the action buttons).
+        className={`sheet-handle absolute inset-x-0 top-0 w-full rounded-t-2xl cursor-grab active:cursor-grabbing ${actions ? 'h-[4.25rem]' : 'bottom-0'}`}
         aria-label="Resize editor"
         aria-expanded={!collapsed}
         aria-controls={contentId}
@@ -117,6 +122,8 @@ export function SheetHeader({
           </button>
         )}
       </div>
+      {/* A second row with the selected piece's actions (clear of the handle's middle). */}
+      {actions && <div className="relative -mt-1 px-3 pb-2 pointer-events-none">{actions}</div>}
     </div>
   );
 }
