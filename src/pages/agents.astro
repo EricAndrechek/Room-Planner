@@ -9,6 +9,7 @@ import Content from '../layouts/Content.astro';
 import { withBase } from '../lib/paths';
 import { PLAN_SCHEMA_PATH } from '../lib/planSchema';
 import {
+  API_CURL,
   COMPRESS_JS,
   COMPRESS_PYTHON,
   MCP_PATH,
@@ -227,7 +228,27 @@ const code = 'block bg-slate-900 text-slate-100 rounded-lg p-3 text-sm overflow-
         With the MCP server below, or WebMCP in Chrome, the assistant uses the tools: they check the
         layout and return the link.
       </p>
-      <h3>2. Assistants that can run code</h3>
+      <h3>2. Agents that can make web requests</h3>
+      <p>
+        Agentic tools, custom agents and ChatGPT Custom GPTs can call the same operations over plain
+        HTTP, with no key: <code>POST /api/plan/check</code>, <code>POST /api/plan/link</code> (the
+        plan, its problems and the link) and <code>GET /api/plan?url=…</code> (read a link). The
+        description is{' '}
+        <a href={abs('openapi.json')} class="text-indigo-700 underline">
+          /openapi.json
+        </a>
+        (OpenAPI 3.1). Code sandboxes in ChatGPT and Claude.ai usually have no internet; they use
+        the next way.
+      </p>
+      <pre class={code} tabindex="0">{API_CURL}</pre>
+      <p class="mt-3">
+        <strong>As a ChatGPT Custom GPT Action:</strong> in the GPT editor, choose{' '}
+        <strong>Configure → Create new action → Import from URL</strong>, paste{' '}
+        <code>{abs('openapi.json')}</code>, set authentication to <strong>None</strong> and the
+        privacy policy to <code>{abs('privacy/')}</code>. Then tell the GPT: “Use createPlanLink and
+        give me the link as text.”
+      </p>
+      <h3>3. Assistants that can run code</h3>
       <p>
         ChatGPT's data analysis, Claude's analysis tool or Gemini's code execution can build the
         plan as JSON (the format is{' '}
@@ -239,7 +260,7 @@ const code = 'block bg-slate-900 text-slate-100 rounded-lg p-3 text-sm overflow-
       </p>
       <pre class={code} tabindex="0">{COMPRESS_PYTHON}</pre>
       <pre class={`${code} mt-3`} tabindex="0">{COMPRESS_JS}</pre>
-      <h3>3. Assistants with neither: the readable form</h3>
+      <h3>4. Assistants with none of these: the readable form</h3>
       <p>
         For a small plan (a room or two, rectangles, round and L-shaped pieces), an assistant can
         write the plan itself after <code>#p=</code>. For a bigger or odd-shaped floor, the code way

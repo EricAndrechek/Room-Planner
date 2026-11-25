@@ -1,0 +1,120 @@
+---
+/**
+ * /privacy/: the privacy policy, in plain English, for people and for the Claude and ChatGPT
+ * directories (docs/DIRECTORY-LISTINGS.md). One section per way data can leave the browser, so a
+ * new one (a new service, a new kind of data) is one more entry in `sections`. Keep it in step with
+ * the help page's privacy section, MCP_PRIVACY (src/lib/site.ts) and worker/analytics.ts.
+ */
+import Content from '../layouts/Content.astro';
+import { withBase } from '../lib/paths';
+import { MCP_PRIVACY, SITE_NAME } from '../lib/site';
+
+const title = `Privacy Policy | ${SITE_NAME}`;
+const description = `What ${SITE_NAME}, its MCP server and its API collect: your plans stay in your browser; anonymous usage analytics; nothing sold.`;
+const UPDATED = '2026-11-25';
+const ISSUES = 'https://github.com/EricAndrechek/Room-Planner/issues';
+const link = (href: string, text: string) =>
+  `<a href="${href}" class="text-indigo-700 underline">${text}</a>`;
+
+const sections: { id: string; title: string; html: string[] }[] = [
+  {
+    id: 'summary',
+    title: 'In short',
+    html: [
+      `${SITE_NAME} is a free floor-plan editor with no accounts. Your plans are kept in your browser and the planner never uploads them. To improve the site we collect anonymous usage analytics, never your plans. Nothing is sold or shared for advertising.`,
+    ],
+  },
+  {
+    id: 'plans',
+    title: 'Your plans',
+    html: [
+      `Plans are saved in your browser's local storage on your device. Clearing the site's data deletes them; they do not sync between devices. A share link carries the whole plan in the part after <code>#</code>, which browsers do not send to any server, so opening or sending one uploads nothing to ${SITE_NAME}.`,
+    ],
+  },
+  {
+    id: 'analytics',
+    title: 'Analytics on the website',
+    html: [
+      `We use PostHog (US cloud) for anonymous usage analytics: which features are used, error reports, and session replays, which record the page as you use it (including the plan on screen) with every text field masked. Your browser sends these to PostHog directly; PostHog uses your IP address to work out an approximate location (country and city) and does not keep a profile of you. Analytics events never include your plans, plan names or furniture labels. Your browser's Do Not Track setting is respected, and you can ${link(withBase('help/#privacy'), 'turn analytics off')} on this device.`,
+      `Cloudflare, which hosts the site, also counts page views with Cloudflare Web Analytics (no cookies, aggregate only).`,
+    ],
+  },
+  {
+    id: 'assistants',
+    title: 'AI assistants: the MCP server and the API',
+    html: [
+      `If you ask an AI assistant to use ${SITE_NAME} (${link(withBase('agents/'), 'how')}), the assistant sends the plan it is working on to ${SITE_NAME}'s server at <code>/mcp</code> or <code>/api/</code>. ${MCP_PRIVACY}`,
+      `The REST API (<code>/api/</code>) follows the same rules: the plan is processed in memory and discarded, and analytics record only the operation, whether it worked, counts, the client's user agent family and the request's location data.`,
+      `Cloudflare keeps request logs for this server (time, address, headers and timing; never the request body or the plan) for about a week, to run and debug it.`,
+      `Your assistant's own privacy terms cover the conversation itself.`,
+    ],
+  },
+  {
+    id: 'browser-assistant',
+    title: "Chrome's built-in assistant (WebMCP)",
+    html: [
+      `In Chrome with WebMCP turned on, the planner offers its edits to the browser's own assistant. Those edits happen in your browser; nothing is sent to ${SITE_NAME}. Analytics record only which tool was used and whether it worked.`,
+    ],
+  },
+  {
+    id: 'recipients',
+    title: 'Who receives data',
+    html: [
+      `PostHog, Inc. (analytics) and Cloudflare, Inc. (hosting), each as a processor for the purposes above. No one else. There are no ads, no data sales and no tracking across other sites.`,
+    ],
+  },
+  {
+    id: 'retention',
+    title: 'How long it is kept',
+    html: [
+      `Analytics events: up to 1 year. Session replays: up to 30 days. Server request logs at Cloudflare: about 7 days. Plans: never kept by us, except as seen in a session replay (only in your browser, until you delete them).`,
+    ],
+  },
+  {
+    id: 'choices',
+    title: 'Your choices',
+    html: [
+      `Turn analytics off on the ${link(withBase('help/#privacy'), 'help page')}, block it with a content blocker (the planner works the same), or delete your plans by clearing the site's data. Because we keep no account or profile, we have nothing that identifies you to look up or delete; if you think we do, ask us.`,
+      `${SITE_NAME} is for a general audience and is not directed at children under 13.`,
+    ],
+  },
+  {
+    id: 'contact',
+    title: 'Contact and changes',
+    html: [
+      `Questions or requests: open an issue at ${link(ISSUES, 'github.com/EricAndrechek/Room-Planner/issues')}. If this policy changes, this page changes with it, with a new date below.`,
+    ],
+  },
+];
+
+const jsonLd = [
+  {
+    '@type': 'WebPage',
+    name: title,
+    description,
+    url: new URL(withBase('privacy/'), Astro.site ?? Astro.url.origin).toString(),
+    inLanguage: 'en',
+    dateModified: UPDATED,
+  },
+];
+---
+
+<Content
+  title={title}
+  description={description}
+  breadcrumbs={[{ name: 'Privacy', path: 'privacy/' }]}
+  jsonLd={jsonLd}
+>
+  <h1 class="text-3xl font-bold text-slate-900 mb-3">Privacy Policy</h1>
+  <p class="text-slate-600 mb-8">Last updated {UPDATED}.</p>
+  <article class="space-y-8 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:mb-3 [&_p]:mb-3">
+    {sections.map((s) => (
+      <section id={s.id}>
+        <h2>{s.title}</h2>
+        {s.html.map((h) => (
+          <p set:html={h} />
+        ))}
+      </section>
+    ))}
+  </article>
+</Content>

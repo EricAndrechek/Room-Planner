@@ -133,6 +133,21 @@ If the key is lost or the domain is unavailable, the fallback needs no secret: G
 `id-token: write` to the publish job, and log in with `./mcp-publisher login github-oidc`. That
 is a new registry entry, not a rename of the existing one.
 
+### REST API and static descriptions
+
+`/api/*` is the REST API (`worker/api.ts`), run by the Worker (`run_worker_first` lists `/mcp`,
+`/mcp/*` and `/api/*`) with the MCP endpoint's rate limit, CORS and analytics. `/openapi.json` and
+`/plan.schema.json` are static files built by Astro from the Zod schema, so they never invoke the
+Worker; `public/_headers` gives them CORS. The service worker never answers `/api/`.
+
+### Assistant directories
+
+`/privacy/`, `/support/` and `/terms/` are the URLs the Claude and ChatGPT directories ask for;
+`docs/DIRECTORY-LISTINGS.md` has the listing copy and each directory's checklist. ChatGPT's
+domain verification is a token from its dashboard served as plain text at
+`/.well-known/openai-apps-challenge`: add it as `public/.well-known/openai-apps-challenge` with a
+`Content-Type: text/plain` rule in `public/_headers` (as for `mcp-registry-auth`).
+
 ### MCP analytics
 
 The Worker sends MCP usage events to PostHog (`worker/analytics.ts`, project key in the code). It

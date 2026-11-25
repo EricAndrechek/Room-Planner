@@ -207,6 +207,9 @@ for (const [name, viewport] of [
     for (const path of [
       '/faq/',
       '/agents/',
+      '/privacy/',
+      '/support/',
+      '/terms/',
       '/guides/',
       '/guides/bedroom-layout/',
       '/guides/living-room-layout/',

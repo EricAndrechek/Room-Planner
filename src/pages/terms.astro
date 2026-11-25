@@ -1,0 +1,58 @@
+---
+/**
+ * /terms/: short terms of use. ChatGPT's app directory requires a terms URL for MCP review
+ * (docs/DIRECTORY-LISTINGS.md). Plain English; the code itself is MIT licensed.
+ */
+import Content from '../layouts/Content.astro';
+import { withBase } from '../lib/paths';
+import { SITE_NAME } from '../lib/site';
+
+const title = `Terms of Use | ${SITE_NAME}`;
+const description = `The terms for using ${SITE_NAME}, its MCP server and its API: free, as is, used fairly.`;
+const UPDATED = '2026-11-25';
+const a = 'text-indigo-700 underline';
+---
+
+<Content title={title} description={description} breadcrumbs={[{ name: 'Terms', path: 'terms/' }]}>
+  <h1 class="text-3xl font-bold text-slate-900 mb-3">Terms of Use</h1>
+  <p class="text-slate-600 mb-8">Last updated {UPDATED}.</p>
+  <article class="space-y-4 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-2">
+    <ul>
+      <li>
+        {SITE_NAME} (the website, its MCP server and its API) is free to use, with no account. Its
+        source code is open under the{' '}
+        <a href="https://github.com/EricAndrechek/Room-Planner/blob/main/LICENSE" class={a}>
+          MIT License
+        </a>
+        .
+      </li>
+      <li>
+        It is provided as is, without warranty. Plans are drawn to the measurements you or your
+        assistant enter; check real measurements before you buy or build anything.
+      </li>
+      <li>
+        Your plans are yours. They stay in your browser (see the{' '}
+        <a href={withBase('privacy/')} class={a}>
+          Privacy Policy
+        </a>
+        ); we claim no rights to them.
+      </li>
+      <li>
+        Use the MCP server and the API fairly: within the rate limit (about 120 requests a minute
+        per address), without trying to disrupt the service or others' use of it. We may block
+        traffic that does.
+      </li>
+      <li>
+        The service may change or stop. Your plans keep working in your browser and in the links you
+        have.
+      </li>
+      <li>
+        Questions: see{' '}
+        <a href={withBase('support/')} class={a}>
+          Support
+        </a>
+        .
+      </li>
+    </ul>
+  </article>
+</Content>

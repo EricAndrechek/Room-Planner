@@ -881,6 +881,30 @@ a whole request cannot be replayed. None of about 200 MCP invocations on the pre
 `exceededCpu`. Watch that outcome in the Worker's metrics after launch; if it shows up regularly,
 the options are Workers Paid or trimming the SDK's per-request work.
 
+### REST API
+
+For agents that make HTTP requests but have no MCP client (agentic tools, custom agents, ChatGPT
+Custom GPT Actions), `worker/api.ts` maps three routes to the tools' own functions in `tools.ts`,
+with no logic of its own:
+
+| Route                                                    | Function     | Answer                                   |
+| -------------------------------------------------------- | ------------ | ---------------------------------------- |
+| `POST /api/plan/check` (plan, or `{plan, minClearance}`) | `checkPlan`  | `{ok, issues, summary}`                  |
+| `POST /api/plan/link` (plan, or `{plan}`)                | `createPlan` | `{plan, issues, summary, url, editable}` |
+| `GET /api/plan?url=` (or `?s=`, `?p=`)                   | `readPlan`   | as `/link`                               |
+
+Errors are `application/problem+json` (RFC 9457) with `error_kind` from the tools' vocabulary: 400
+when the request cannot be read (not JSON: `bad_json`; no plan, a bad argument or URL), 422 when
+it was read but the plan is invalid (`errors`, one `plan.path: message` line each) or the link is
+damaged or too new, 405 with `Allow`, 413 over 256 KB, and 429 from the shared per-IP limit. CORS
+is `*`. `/openapi.json` (OpenAPI 3.1; operationIds `checkLayout`, `createPlanLink`,
+`readPlanLink`) and `/plan.schema.json` are built by Astro from the Zod schema
+(`src/lib/openapi.ts`), static, so they never invoke the Worker; a unit test validates the
+OpenAPI document. Analytics: `api_called` with `{op, ok, error_kind, rooms, items, unit,
+transport: 'rest'}` and the MCP events' common properties and privacy rules. ChatGPT's and
+Claude.ai's code sandboxes usually have no internet, so `llms.txt` points them at the offline
+`#s=` way instead (section 5).
+
 ### Rate limiting and abuse
 
 - One Workers rate-limit binding (`ratelimits` in `wrangler.jsonc`), keyed by client IP because

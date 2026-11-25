@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import registry from '../../server.json';
 import { GUIDES, guidePath } from '../lib/guides';
 import {
+  API_CURL,
   COMPRESS_JS,
   COMPRESS_PYTHON,
   DEFAULT_DESCRIPTION,
@@ -53,13 +54,20 @@ ${FEATURES.map((f) => `- ${f}`).join('\n')}
 - [FAQ](${url('faq/')}): short answers: price, accounts, data storage, phones, sharing, export, units, offline use, door types.
 - [Room layout guides](${url('guides/')}): furniture sizes, clearances and example floor plans.
 - [For AI assistants](${url('agents/')}): how to connect Claude, ChatGPT, VS Code, Cursor or Claude Code to the MCP server.
+- [Privacy](${url('privacy/')}), [Support](${url('support/')}) and [Terms](${url('terms/')}).
 
 ## Give the user a ready-made plan
 
 Room Planner opens a whole plan from a link, saved in the user's browser and ready to edit; no account. ALWAYS give the link as markdown link text, such as [Open your bedroom in Room Planner](link), never as a bare URL: links get long, and the link text hides them (browsers accept very long links; the plan stays in the part after #, which never reaches a server). Pick the first way you can:
 
 1. **With Room Planner's tools** (the MCP server below, or WebMCP in Chrome): use them. \`create_plan\` checks the layout and returns the link.
-2. **If you can run code**: write the plan as JSON (JSON Schema: ${url(PLAN_SCHEMA_PATH)}; the same format as the MCP tools), compress it with raw deflate, base64url-encode it without padding, and append it to ${url('')}#s= . Any size and shape.
+2. **If you can make HTTP requests** (agentic tools, custom agents, ChatGPT Custom GPT Actions): the REST API does the same as the tools, described by ${url('openapi.json')}. \`POST /api/plan/check\` returns the issues; \`POST /api/plan/link\` returns the plan, its issues and the \`url\`; \`GET /api/plan?url=<link>\` reads a plan from a link. No key. (ChatGPT's and Claude.ai's code sandboxes usually have no internet: use 3 there.)
+
+\`\`\`sh
+${API_CURL}
+\`\`\`
+
+3. **If you can run code** (offline is fine): write the plan as JSON (JSON Schema: ${url(PLAN_SCHEMA_PATH)}; the same format as the MCP tools), compress it with raw deflate, base64url-encode it without padding, and append it to ${url('')}#s= . Any size and shape.
 ${PLAN_JSON_SUMMARY.map((l) => `   - ${l}`).join('\n')}
 
    Python:
@@ -74,7 +82,7 @@ ${COMPRESS_PYTHON}
 ${COMPRESS_JS}
 \`\`\`
 
-3. **No tools and no code**: write the plan in this readable form after ${url('')}#p= . Best for small plans (a room or two, rectangles, round and L-shaped pieces); for bigger or odd-shaped floors, use 2.
+4. **No tools, no HTTP and no code**: write the plan in this readable form after ${url('')}#p= . Best for small plans (a room or two, rectangles, round and L-shaped pieces); for bigger or odd-shaped floors, use 2 or 3.
 ${READABLE_SYNTAX.map((l) => `   - ${l}`).join('\n')}
 
    Examples:
@@ -88,6 +96,8 @@ Room Planner has a free remote MCP server (Streamable HTTP, no authentication): 
 - \`create_plan\`: a plan (one room or a floor of connected rooms, doors, windows, furniture of any shape, pieces set aside; in ft, in, m or cm) checked for layout problems, and a link that opens it in the planner. Clients with MCP Apps show the drawing.
 - \`check_layout\`: overlapping pieces, pieces outside every room, blocked doors and doorways (on both sides of a door between rooms), overlapping rooms and tight clearances, without a link.
 - \`read_plan\`: the plan in a Room Planner link, to edit and send back to create_plan.
+
+The same operations over plain HTTP: ${url('openapi.json')} (OpenAPI 3.1).
 
 In Chrome with WebMCP (\`chrome://flags/#enable-webmcp-testing\`, or the origin trial), the planner page itself registers tools on \`document.modelContext\` for the browser's agent: \`get_plan\`, \`check_layout\`, \`add_item\`, \`update_item\`, \`set_aside_item\`, \`place_item\`, \`remove_item\`, \`add_opening\`, \`update_opening\`, \`remove_opening\`, \`add_room\`, \`update_room\`, \`remove_room\` and \`replace_plan\` (which asks the user first). Each edit is one undo step on the user's open plan, in its display unit; nothing is sent anywhere.
 

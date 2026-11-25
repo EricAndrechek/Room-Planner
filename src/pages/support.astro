@@ -1,0 +1,86 @@
+---
+/**
+ * /support/: where to get help and report problems, for people and for the Claude and ChatGPT
+ * directories (docs/DIRECTORY-LISTINGS.md). Support is GitHub issues: no email address is published.
+ */
+import Content from '../layouts/Content.astro';
+import { withBase } from '../lib/paths';
+import { SITE_NAME } from '../lib/site';
+
+const title = `Support | ${SITE_NAME}`;
+const description = `Get help with ${SITE_NAME}, its AI assistant connector and its API, and report a problem.`;
+const REPO = 'https://github.com/EricAndrechek/Room-Planner';
+const a = 'text-indigo-700 underline';
+---
+
+<Content
+  title={title}
+  description={description}
+  breadcrumbs={[{ name: 'Support', path: 'support/' }]}
+>
+  <h1 class="text-3xl font-bold text-slate-900 mb-3">Support</h1>
+  <article class="space-y-8 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:mb-3 [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1">
+    <section id="help">
+      <h2>Help with the planner</h2>
+      <p>
+        The{' '}
+        <a href={withBase('help/')} class={a}>
+          help page
+        </a>{' '}
+        explains every feature and the{' '}
+        <a href={withBase('faq/')} class={a}>
+          FAQ
+        </a>{' '}
+        answers the common questions.
+      </p>
+    </section>
+    <section id="assistants">
+      <h2>AI assistants, the MCP server and the API</h2>
+      <p>
+        How to connect Claude, ChatGPT and other assistants, and how they hand you a plan:{' '}
+        <a href={withBase('agents/')} class={a}>
+          For AI assistants
+        </a>
+        . The API is described at{' '}
+        <a href={withBase('openapi.json')} class={a}>
+          /openapi.json
+        </a>
+        .
+      </p>
+    </section>
+    <section id="report">
+      <h2>Report a problem or ask a question</h2>
+      <p>
+        Open an issue on GitHub:{' '}
+        <a href={`${REPO}/issues/new`} class={a}>
+          new issue
+        </a>{' '}
+        (a free GitHub account is needed). Say what you did, what you expected and what happened;
+        for an assistant, which app (Claude, ChatGPT, …) and, if you can, the plan link. Don't post
+        anything private: issues are public.
+      </p>
+      <p>
+        Security problems: report them privately through{' '}
+        <a href={`${REPO}/security/advisories/new`} class={a}>
+          GitHub's private vulnerability reporting
+        </a>
+        .
+      </p>
+    </section>
+    <section id="policies">
+      <h2>Policies</h2>
+      <ul>
+        <li>
+          <a href={withBase('privacy/')} class={a}>
+            Privacy Policy
+          </a>
+        </li>
+        <li>
+          <a href={withBase('terms/')} class={a}>
+            Terms of Use
+          </a>
+        </li>
+      </ul>
+    </section>
+  </article>
+</Content>
