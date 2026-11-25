@@ -25,7 +25,6 @@
       "/privacy/",
       "/support/",
       "/terms/",
-      "/guides/",
       "/guides/*",
       "!/guides/*.md",
       "/mcp",

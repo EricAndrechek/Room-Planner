@@ -191,11 +191,13 @@ images and fonts, and falls back to the shell for `/` alone.
 - `worker/index.ts` appends the API `Link`s on `/` and `/agents/` to the router's, rather than
   replacing them.
 - `run_worker_first` lists only the page routes (`/`, `/help/`, `/faq/`, `/agents/`, `/privacy/`,
-  `/support/`, `/terms/`, `/guides/`, `/guides/*` but not `!/guides/*.md`), plus `/mcp`, `/mcp/*`
+  `/support/`, `/terms/`, `/guides/*` but not `!/guides/*.md`), plus `/mcp`, `/mcp/*`
   and `/api/*`. Assets (scripts, styles, images, `.md`, `.txt`, `.json`, `/.well-known/`) stay
   off the Worker: a Worker invocation costs CPU and counts against Workers Free's 100,000 requests
   a day, while assets are free.
-- When you add a page, add its route there and to `MARKDOWN_PAGES`.
+- When you add a page, add its route there and to `MARKDOWN_PAGES`. Wrangler rejects a route
+  that another one already covers (for example `/guides/` next to `/guides/*`), and only at
+  deploy time. CI runs `wrangler deploy --dry-run`, which makes the same check.
 
 ### Assistant directories
 
