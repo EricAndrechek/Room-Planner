@@ -8,6 +8,14 @@ import type { RoomDims } from '../types';
  * bottom sheet with the zoom controls riding on it at the bottom. Fitting and revealing a piece
  * use the area between them.
  */
+/** A room's bounding box in feet. */
+interface Bounds {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
 export interface ViewInsets {
   top: number;
   bottom: number;
@@ -245,5 +253,50 @@ export function usePanZoom(
     [containerRef, insets.top, insets.bottom],
   );
 
-  return { zoom, zoomRef, pan, zoomIn, zoomOut, fitToView, reveal };
+  /**
+   * The room's bounding box is about to change from `prev` to `next` (a corner dragged or nudged):
+   * pan so the floor stays where it is on screen (the room is drawn centred on its box), and do
+   * not re-fit for the new size.
+   */
+  const keepView = useCallback((prev: Bounds, next: Bounds) => {
+    lastRoom.current = { width: next.right - next.left, height: next.bottom - next.top };
+    const s = PIXELS_PER_UNIT * zoomRef.current;
+    const dx = ((next.left + next.right - prev.left - prev.right) / 2) * s;
+    const dy = ((next.top + next.bottom - prev.top - prev.bottom) / 2) * s;
+    if (dx || dy) setPan((p) => ({ x: p.x + dx, y: p.y + dy }));
+  }, []);
+
+  /**
+   * Zoom to one part of the floor (`area`, feet, inside the floor's box `floor`): fit it to the
+   * visible area and centre it there. The floor is drawn centred on its box, so the area's centre
+   * is panned that far from the middle.
+   */
+  const zoomToArea = useCallback(
+    (area: Bounds, floor: Bounds) => {
+      const el = containerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const padding = isMobile ? 48 : 96;
+      const z = clampZoom(
+        computeFitZoom(
+          {
+            width: rect.width - padding,
+            height: Math.max(40, rect.height - insets.top - insets.bottom - padding),
+          },
+          { width: area.right - area.left, height: area.bottom - area.top },
+          PIXELS_PER_UNIT,
+        ),
+        minZoomRef.current,
+      );
+      movedRef.current = true;
+      setZoom(z);
+      const s = PIXELS_PER_UNIT * z;
+      const dx = ((area.left + area.right - floor.left - floor.right) / 2) * s;
+      const dy = ((area.top + area.bottom - floor.top - floor.bottom) / 2) * s;
+      setPan({ x: -dx, y: -dy + (insets.top - insets.bottom) / 2 });
+    },
+    [containerRef, isMobile, insets.top, insets.bottom, setZoom],
+  );
+
+  return { zoom, zoomRef, pan, zoomIn, zoomOut, fitToView, reveal, keepView, zoomToArea };
 }

@@ -14,6 +14,8 @@ export interface ShortcutHandlers {
   nudge: (dx: number, dy: number, size: NudgeSize) => boolean;
   /** Rotate the selected item by `degrees` (clockwise if positive); true if it was rotated. */
   rotateSelected: (degrees: number) => boolean;
+  /** `I`: move the selected piece to the inventory; true if it was moved. */
+  toInventory: () => boolean;
   /** `?`: show the keyboard shortcuts. */
   showShortcuts: () => void;
 }
@@ -44,7 +46,8 @@ export const isCanvasTarget = (target: EventTarget | null, canvas: HTMLElement |
  * undo, Ctrl/Cmd+Shift+Z redo, `?` the shortcuts panel.
  * Only with focus on the canvas or one of its pieces (or nothing focused): Delete/Backspace
  * delete, Escape deselect, arrows nudge (Shift: a bigger step; Alt/Option or Ctrl/Cmd: a fine
- * step), R rotate 90deg (Shift+R: back), Alt/Option+R rotate 1deg (with Shift: back). Off when
+ * step), R rotate 90deg (Shift+R: back), Alt/Option+R rotate 1deg (with Shift: back), I move to the
+ * inventory. Off when
  * `enabled` is false (a modal is open).
  */
 export function useKeyboardShortcuts(
@@ -96,6 +99,10 @@ export function useKeyboardShortcuts(
         // Shift = bigger (Figma, Keynote, Slides); Alt/Option, or Ctrl/Cmd as in PowerPoint = finer.
         const size: NudgeSize = e.altKey || mod ? 'fine' : e.shiftKey ? 'coarse' : 'normal';
         if (h.nudge(...arrows[key]!, size)) e.preventDefault();
+        return;
+      }
+      if (!mod && !e.altKey && !e.shiftKey && (e.code === 'KeyI' || key === 'i' || key === 'I')) {
+        if (h.toInventory()) e.preventDefault();
         return;
       }
       // By physical key: Option+R types "®" on a Mac keyboard.

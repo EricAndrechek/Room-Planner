@@ -22,7 +22,7 @@ import {
 import { buildPlanUrl } from '../core/share/plan';
 import type { Plan, Project } from '../types';
 import { applySharedLink, boot, bootFromStorage } from './boot';
-import { changePiece, resizeRoom } from './edits';
+import { changePiece, resizeRoom, takeOutPiece } from './edits';
 import { DEFAULT_PLAN_NAME, samePlan, starterPlan, withDoc } from './plans';
 import { createProject } from './projects';
 import {
@@ -76,9 +76,10 @@ const NEWER_RECORD =
   '{ "id":"project-v5",  "createdAt":"2027-01-01T00:00:00.000Z","updatedAt":"2027-01-02T00:00:00.000Z",' +
   '"plan":{"version":5,"name":"From the future","floors":[{"x":1.50}]} }';
 
-const L_SHAPED: Plan = {
+/** Two rooms: in the format, not yet in the editor (PR 9). */
+const TWO_ROOMS: Plan = {
   version: 4,
-  name: 'L room',
+  name: 'Two rooms',
   unit: 'ft',
   rooms: [
     {
@@ -87,9 +88,17 @@ const L_SHAPED: Plan = {
         { x: 0, y: 0 },
         { x: 10, y: 0 },
         { x: 10, y: 6 },
-        { x: 5, y: 6 },
-        { x: 5, y: 10 },
-        { x: 0, y: 10 },
+        { x: 0, y: 6 },
+      ],
+      openings: [],
+    },
+    {
+      id: 'room-2',
+      outline: [
+        { x: 10, y: 0 },
+        { x: 16, y: 0 },
+        { x: 16, y: 6 },
+        { x: 10, y: 6 },
       ],
       openings: [],
     },
@@ -293,15 +302,13 @@ describe('plans this build cannot open', () => {
     expect(s.getItem(KEYS.plans)).toBe(`[${NEWER_RECORD}]`);
   });
 
-  it('a saved plan with what the editor cannot show yet is kept the same way', () => {
-    const record = JSON.stringify(createProject('L room', L_SHAPED, NOW));
+  it('a saved floor of several rooms opens (PR 9), and is not locked', () => {
+    const record = JSON.stringify(createProject('Two rooms', TWO_ROOMS, NOW));
     const { s } = withNewKeys(`[${record}]`);
     const store = createPlanStore(s);
     const state = store.load(LATER);
-    expect(state.projects).toEqual([]);
-    expect(state.locked.map((l) => l.name)).toEqual(['L room']);
-    store.savePlans([createProject('Mine', starterPlan(), LATER)]);
-    expect(splitJsonArray(s.getItem(KEYS.plans)!)![0]).toBe(record);
+    expect(state.locked).toEqual([]);
+    expect(state.projects.map((p) => p.plan.rooms.length)).toEqual([2]);
   });
 
   it('a working plan from a newer build is not loaded and never written', () => {
@@ -574,6 +581,18 @@ describe('opening share links at boot', () => {
     expect((await boot(url, createPlanStore(s))).shared?.createdProject).toBe(false);
   });
 
+  it('a link keeps the pieces in the inventory, and they stay out of the room', async () => {
+    const s = createMemoryStorage();
+    const plan = withDoc(takeOutPiece(starterPlan(), 'item-6'), 'Aside', 'ft-in');
+    const url = await buildPlanUrl('https://example.com/', plan);
+    const result = await boot(url, createPlanStore(s));
+    expect(result.linkProblem ?? null).toBeNull();
+    expect(samePlan(result.state.plan, plan)).toBe(true);
+    const chair = result.state.plan.items.find((i) => i.label === 'Chair')!;
+    expect(chair).not.toHaveProperty('placement');
+    expect(chair).toMatchObject({ width: 1.5, depth: 1.5, color: '#fdba74' });
+  });
+
   it('a link without a name gets its own project instead of overwriting the current one', () => {
     const s = fixture(originalStorage);
     const store = createPlanStore(s);
@@ -597,15 +616,13 @@ describe('opening share links at boot', () => {
     expect(result.state.plan.settings?.unitSystem).toBe('cm');
   });
 
-  it('a link holding what the editor cannot show is not opened, and nothing is written', async () => {
+  it('a link holding a floor of several rooms opens it (PR 9)', async () => {
     const s = createMemoryStorage();
     const store = createPlanStore(s);
     bootFromStorage(store, NOW);
-    const before = s.dump();
-    const result = await boot(await buildPlanUrl('https://example.com/', L_SHAPED), store, LATER);
-    expect(result.linkProblem).toEqual({ kind: 'unsupported', where: 'link' });
-    expect(result.shared).toBeNull();
-    expect(s.dump()).toEqual(before);
+    const result = await boot(await buildPlanUrl('https://example.com/', TWO_ROOMS), store, LATER);
+    expect(result.linkProblem).toBeUndefined();
+    expect(result.state.plan.rooms).toHaveLength(2);
   });
 
   it('an invalid link is ignored', async () => {

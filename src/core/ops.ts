@@ -9,7 +9,13 @@
  */
 import { GEOMETRY_EPSILON, pointInPolygon, type Point } from './geometry';
 import { isSimplePolygon, signedArea2 } from './load';
-import { wallFrame } from './geometry/walls';
+import {
+  drawingFrame,
+  frameAt,
+  offsetFromPosition,
+  openingInFrame,
+  wallFrame,
+} from './geometry/walls';
 import type { Item, Opening, Plan, Room } from './schema';
 
 type Kind = 'room' | 'door' | 'window' | 'item';
@@ -269,6 +275,45 @@ export function moveVertex(plan: Plan, roomId: string, i: number, to: Point): Pl
   return withRoom(plan, r, { ...room, outline, openings });
 }
 
+/**
+ * Replace a room's outline with another (a new shape: a rectangle made an L, an L's cut changed).
+ * Each opening moves to the wall of the new outline nearest to where it was among the walls that
+ * run the same way (any wall if none does), keeping the floor position of the start of its
+ * drawing, kept on the wall. Refused when the outline is not one an edit may produce.
+ */
+export function reshapeRoom(plan: Plan, roomId: string, outline: Point[]): Plan {
+  const r = roomIndex(plan, roomId);
+  const room = plan.rooms[r];
+  if (!room || !validOutline(outline)) return plan;
+  const next = { outline };
+  const frames = outline.map((_, k) => wallFrame(next, k));
+  const openings = room.openings.map((o) => {
+    const f = wallFrame(room, o.wall);
+    const { frame, position, width } = openingInFrame(room, o);
+    // Where its drawing starts (its left or top end, as the editor shows it) and its middle.
+    const start = frameAt(frame, position, 0);
+    const mid = frameAt(frame, position + width / 2, 0);
+    const distance = (k: number) => {
+      const g = frames[k]!;
+      const end = { x: g.origin.x + g.along.x * g.length, y: g.origin.y + g.along.y * g.length };
+      return pointToSegment(mid, g.origin, end);
+    };
+    const same = frames
+      .map((g, k) => ({ k, dot: g.along.x * f.along.x + g.along.y * f.along.y }))
+      .filter((c) => c.dot > 1 - 1e-6)
+      .map((c) => c.k);
+    const pool = same.length ? same : frames.map((_, k) => k);
+    let wall = pool[0]!;
+    for (const k of pool) if (distance(k) < distance(wall) - 1e-9) wall = k;
+    const g = drawingFrame(next, wall);
+    const w = Math.min(width, g.length);
+    const at = Math.min(Math.max(project(start, g), 0), Math.max(0, g.length - w));
+    const offset = offsetFromPosition(next, wall, Math.round(at * 1e9) / 1e9, w);
+    return onWall({ ...o, wall, width: w, offset: Math.round(offset * 1e9) / 1e9 }, g.length);
+  });
+  return withRoom(plan, r, { ...room, outline, openings });
+}
+
 // --- Rooms ------------------------------------------------------------------------------------
 
 const centreIn = (item: Item, room: Room) =>
@@ -309,4 +354,21 @@ export function removeRoom(plan: Plan, roomId: string): Plan {
       return rest as Item;
     }),
   };
+}
+
+/** Add a room (given an id with `nextId` if it has none). Its outline must be clockwise. */
+export const addRoom = (plan: Plan, room: Partial<Room> & Pick<Room, 'outline'>): Plan => ({
+  ...plan,
+  rooms: [...plan.rooms, { openings: [], ...room, id: room.id ?? nextId(plan, 'room') } as Room],
+});
+
+/** Rename a room: an empty name removes it (the room is then called "Room N"). */
+export function renameRoom(plan: Plan, roomId: string, name: string): Plan {
+  const r = roomIndex(plan, roomId);
+  const room = plan.rooms[r];
+  if (!room) return plan;
+  const trimmed = name.trim().slice(0, 80);
+  if ((room.name ?? '') === trimmed) return plan;
+  const { name: _old, ...rest } = room;
+  return withRoom(plan, r, (trimmed ? { ...rest, name: trimmed } : rest) as Room);
 }

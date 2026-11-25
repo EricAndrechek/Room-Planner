@@ -1,9 +1,10 @@
 /**
  * Furniture in the exported plan: the piece's `width` x `depth` box around its centre, rotated
  * clockwise about it (as in core/geometry/shapes.ts), drawn as a rounded rectangle, an L or an
- * ellipse, with its name and size along the longer side, kept upright.
+ * ellipse, with its name and size along the longer side of its label area (the box, an L's larger
+ * part, or the rectangle inside an ellipse), kept upright.
  */
-import { itemBox } from '../../geometry/shapes';
+import { isL, itemBox, labelArea, lOutline } from '../../geometry/shapes';
 import type { Item } from '../../schema';
 import type { UnitSystem } from '../../types';
 import { DARK_TEXT, getBorderColor, migrateColor, readableTextOn } from '../../colors';
@@ -55,46 +56,11 @@ const shapePath = (
       ['Z'],
     ];
   }
-  const cut = item.cut!;
-  const cw = cut.width * s;
-  const cd = cut.depth * s;
-  const r = x + w;
-  const b = y + h;
-  const corners: [number, number][] = {
-    tl: [
-      [x + cw, y],
-      [r, y],
-      [r, b],
-      [x, b],
-      [x, y + cd],
-      [x + cw, y + cd],
-    ],
-    tr: [
-      [x, y],
-      [r - cw, y],
-      [r - cw, y + cd],
-      [r, y + cd],
-      [r, b],
-      [x, b],
-    ],
-    br: [
-      [x, y],
-      [r, y],
-      [r, b - cd],
-      [r - cw, b - cd],
-      [r - cw, b],
-      [x, b],
-    ],
-    bl: [
-      [x, y],
-      [r, y],
-      [r, b],
-      [x + cw, b],
-      [x + cw, b - cd],
-      [x, b - cd],
-    ],
-  }[cut.corner] as [number, number][];
-  return [...corners.map(([px, py], i): PathCommand => [i === 0 ? 'M' : 'L', px, py]), ['Z']];
+  const corners = lOutline(item.width, item.depth, item.cut!);
+  return [
+    ...corners.map((p, i): PathCommand => [i === 0 ? 'M' : 'L', x + p.x * s, y + p.y * s]),
+    ['Z'],
+  ];
 };
 
 export const itemNode = (item: Item, unitSystem: UnitSystem, s: number): GroupNode => {
@@ -110,20 +76,33 @@ export const itemNode = (item: Item, unitSystem: UnitSystem, s: number): GroupNo
   const rotate = rotation ? { deg: rotation, cx, cy } : undefined;
   const paint = { fill, stroke: getBorderColor(fill), strokeWidth: 1.5, rotate };
   const children: SceneNode[] = [
-    item.shape === 'ellipse' || (item.shape === 'l' && item.cut)
+    item.shape === 'ellipse' || isL(item)
       ? { kind: 'path', d: shapePath(item, x, y, w, h, s), ...paint }
       : { kind: 'rect', x, y, w, h, rx: Math.min(4, w / 4, h / 4), ...paint },
   ];
 
-  // Label along the piece's longer side, kept upright.
-  const alongWidth = w >= h;
-  const length = (alongWidth ? w : h) - 8;
-  const thickness = (alongWidth ? h : w) - 4;
+  // Label along the longer side of its area, kept upright. The area's centre turns with the
+  // piece (for a rectangle it is the piece's centre).
+  const area = labelArea(item);
+  const aw = area.width * s;
+  const ah = area.height * s;
+  let lx = cx;
+  let ly = cy;
+  const ox = x + area.x * s + aw / 2 - cx;
+  const oy = y + area.y * s + ah / 2 - cy;
+  if (ox || oy) {
+    const rad = (rotation * Math.PI) / 180;
+    lx = cx + ox * Math.cos(rad) - oy * Math.sin(rad);
+    ly = cy + ox * Math.sin(rad) + oy * Math.cos(rad);
+  }
+  const alongWidth = aw >= ah;
+  const length = (alongWidth ? aw : ah) - 8;
+  const thickness = (alongWidth ? ah : aw) - 4;
   const angle = readable(rotation + (alongWidth ? 0 : 90));
   const color = textOn(fill);
   const name = item.label.trim();
   const dims = `${feetToDisplay(item.width, unitSystem)} × ${feetToDisplay(item.depth, unitSystem)}`;
-  const labelRotate = angle ? { deg: r2(angle), cx, cy } : undefined;
+  const labelRotate = angle ? { deg: r2(angle), cx: lx, cy: ly } : undefined;
 
   // Shrink a long name to fit (then truncate it at the minimum size); a piece too
   // thin for even the minimum size gets no label.
@@ -138,11 +117,11 @@ export const itemNode = (item: Item, unitSystem: UnitSystem, s: number): GroupNo
     const dimSize = Math.max(FONT_LABEL_MIN, size * 0.8);
     const twoLines =
       thickness >= size * 1.2 + dimSize * 1.25 && measureText(dims, dimSize) <= length;
-    const nameY = twoLines ? cy - dimSize * 0.62 : cy;
+    const nameY = twoLines ? ly - dimSize * 0.62 : ly;
     if (text)
       children.push({
         kind: 'text',
-        x: r2(cx),
+        x: r2(lx),
         y: r2(nameY + size * 0.35),
         text,
         size: r2(size),
@@ -154,8 +133,8 @@ export const itemNode = (item: Item, unitSystem: UnitSystem, s: number): GroupNo
     if (twoLines)
       children.push({
         kind: 'text',
-        x: r2(cx),
-        y: r2(cy + size * 0.62 + dimSize * 0.35),
+        x: r2(lx),
+        y: r2(ly + size * 0.62 + dimSize * 0.35),
         text: dims,
         size: r2(dimSize),
         anchor: 'middle',

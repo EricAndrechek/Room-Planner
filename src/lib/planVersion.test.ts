@@ -109,7 +109,7 @@ describe('share links at boot', () => {
 });
 
 describe('the JSON box', () => {
-  it('reads v3 configs and v4 plans, and says why it will not read others', () => {
+  it('reads v3 configs and v4 plans (several rooms too), and says why it will not read others', () => {
     expect(readSharedPlan({ roomDims: { width: 9, height: 9 }, items: [] })).toMatchObject({
       ok: true,
       named: false,
@@ -126,7 +126,8 @@ describe('the JSON box', () => {
       ...starterPlan(),
       rooms: [...starterPlan().rooms, { ...starterPlan().rooms[0]!, id: 'room-2' }],
     };
-    expect(readSharedPlan(twoRooms)).toEqual({ ok: false, problem: 'unsupported' });
+    // Floors of several rooms open (PR 9).
+    expect(readSharedPlan(twoRooms)).toMatchObject({ ok: true });
   });
 });
 

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { warningText, type ItemWarning } from '../core/geometry';
 import { feetToDisplay } from '../core/units';
-import { boxOf, doorsOf, mainRoom, windowsOf } from '../lib/plans';
+import { roomAt, roomName } from '../core/floor';
+import { boxOf } from '../lib/plans';
 import type { Id, Item, Plan, SaveStatus, UnitSystem } from '../types';
 
 /** Rapid changes (key repeat, drags) are coalesced into one announcement. */
@@ -15,6 +16,23 @@ const describeItem = (item: Item, unitSystem: UnitSystem) => {
 
 const rotationOf = (item: Item) => item.placement?.rotation ?? 0;
 
+/** A piece's shape as spoken: "a rectangle", "L-shaped", "round" (or "oval"). */
+const shapeName = (item: Item) =>
+  item.shape === 'l'
+    ? 'L-shaped'
+    : item.shape === 'ellipse'
+      ? item.width === item.depth
+        ? 'round'
+        : 'oval'
+      : 'a rectangle';
+
+const CORNER_NAMES = {
+  tl: 'top left',
+  tr: 'top right',
+  br: 'bottom right',
+  bl: 'bottom left',
+} as const;
+
 /** Spoken summary of what changed between two plans (pieces only), or ''. */
 export function describeLayoutChange(prev: Plan, next: Plan, unitSystem: UnitSystem): string {
   const before = new Map(prev.items.map((i) => [i.id, i]));
@@ -23,6 +41,13 @@ export function describeLayoutChange(prev: Plan, next: Plan, unitSystem: UnitSys
     const old = before.get(item.id);
     if (!old) {
       parts.push(`${item.label} added`);
+      continue;
+    }
+    if (!!old.placement !== !!item.placement) {
+      const room = item.placement && next.rooms.length > 1 ? roomAt(next, item.placement) : null;
+      parts.push(
+        `${item.label} ${item.placement ? `placed in ${room ? roomName(next, room) : 'the room'}` : 'set aside'}`,
+      );
       continue;
     }
     if (
@@ -41,6 +66,11 @@ export function describeLayoutChange(prev: Plan, next: Plan, unitSystem: UnitSys
     if (rotationOf(old) !== rotationOf(item)) {
       parts.push(`${item.label} rotated ${rotationOf(item)}°`);
     }
+    if (old.shape !== item.shape) {
+      parts.push(`${item.label} is now ${shapeName(item)}`);
+    } else if (old.cut && item.cut && old.cut.corner !== item.cut.corner) {
+      parts.push(`${item.label}: cut at the ${CORNER_NAMES[item.cut.corner]} corner`);
+    }
     if (!!old.locked !== !!item.locked) {
       parts.push(`${item.label} ${item.locked ? 'locked' : 'unlocked'}`);
     }
@@ -57,8 +87,11 @@ export function describeOpeningsChange(prev: Plan, next: Plan): string {
     if (after > before) parts.push(`${kind} restored`);
     else if (after < before) parts.push(`${kind} removed`);
   };
-  diff(doorsOf(mainRoom(prev)).length, doorsOf(mainRoom(next)).length, 'Door');
-  diff(windowsOf(mainRoom(prev)).length, windowsOf(mainRoom(next)).length, 'Window');
+  const count = (p: Plan, kind: 'door' | 'window') =>
+    p.rooms.reduce((n, r) => n + r.openings.filter((o) => o.kind === kind).length, 0);
+  diff(count(prev, 'door'), count(next, 'door'), 'Door');
+  diff(count(prev, 'window'), count(next, 'window'), 'Window');
+  diff(prev.rooms.length, next.rooms.length, 'Room');
   return parts.join('. ');
 }
 

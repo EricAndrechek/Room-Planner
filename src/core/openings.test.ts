@@ -22,7 +22,7 @@ import {
 import { loadPlan } from './load';
 import { defaultLayout } from './testing/v3/layout';
 import { doorSvg } from '../components/planner/openingStyles';
-import { doorBlockText, itemWarnings, mainRoom, openingPlace } from '../lib/plans';
+import { doorBlockText, itemWarnings, mainRoom, openingPlace, wallIndex } from '../lib/plans';
 import { resizeRoom } from '../lib/edits';
 
 /** The plan the app holds for a v3 layout (what the storage migration makes of it). */
@@ -111,7 +111,7 @@ describe('doorSwingGeometry', () => {
     const swingIn = type === 'swing-in';
 
     const placed = withDoor(door, room);
-    expect(openingPlace(placed.room, placed.opening).wall).toBe(wall);
+    expect(openingPlace(placed.room, placed.opening).wall).toBe(wallIndex(wall));
     expect(g.side).toBe(swingIn ? 'inside' : 'outside');
     expect(g.radius).toBe(WIDTH);
 

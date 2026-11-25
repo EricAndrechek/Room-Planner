@@ -130,10 +130,12 @@ describe('checkLayout', () => {
       ],
     });
     const issues = checkLayout(p, { codes: ['door_blocked', 'doorway_blocked'] });
-    expect(codes(issues)).toEqual(['doorway_blocked chair,door-1']);
-    expect(issues[0]!.message).toBe(
-      'Chair stands in the doorway of the door on the right wall of a.',
-    );
+    // The door is between the two rooms (on the wall they share): its swing into room b counts.
+    expect(codes(issues)).toEqual(['doorway_blocked chair,door-1', 'door_blocked plant,door-1']);
+    expect(issues.map((i) => i.message)).toEqual([
+      'Chair stands in the doorway of the door between Room 1 and Room 2.',
+      'Plant is in the way of the door between Room 1 and Room 2.',
+    ]);
   });
 
   it('openings that overlap, rooms that overlap (sharing a wall is fine), tight gaps', () => {

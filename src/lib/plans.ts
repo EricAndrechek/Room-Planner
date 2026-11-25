@@ -1,23 +1,29 @@
 /**
- * The editor's view of a plan. The app holds a v4 `Plan` (core/schema.ts) in feet; its editor
- * shows one rectangular room at the origin with doors and windows on the walls named top, right,
- * bottom and left, and pieces by the top-left corner of their unrotated box, exactly as before the
- * plan format existed (docs/design/plan-format.md, section 9: "Rectangles keep the four names").
- * These helpers translate between the two; nothing here changes what a plan means.
+ * The editor's view of a plan. The app holds a v4 `Plan` (core/schema.ts) in feet: a floor of one
+ * or more rooms of any outline, each listed from its top-left corner, with doors and windows on its
+ * walls (on a rectangle named top, right, bottom and left, otherwise "Wall 1" to "Wall N"), and
+ * pieces by the top-left corner of their unrotated box (docs/design/plan-format.md, section 9:
+ * "Rectangles keep the four names"). These helpers translate between the two; nothing here
+ * changes what a plan means.
  */
 import { checkLayout, type IssueCode } from '../core/check';
 import { normalizeDegrees, type ItemWarning } from '../core/geometry';
-import { itemBox } from '../core/geometry/shapes';
+import { clampCut, defaultCut, itemBox } from '../core/geometry/shapes';
 import {
   drawingFrame,
+  firstCorner,
   isRectangle,
   offsetFromPosition,
   openingInFrame,
+  outlineArea,
   roomBounds,
 } from '../core/geometry/walls';
 import type { Unit } from '../core/schema';
+import { FEET_PER_METER } from '../core/units';
 import { compact } from '../core/share/compact';
-import type { SnapPiece } from '../core/snapping';
+import type { SnapCandidates, SnapPiece } from '../core/snapping';
+import { roomSnapLines } from '../core/geometry/corners';
+import { floorBounds, roomAt } from '../core/floor';
 import type { Id, Item, Opening, Plan, Room, RoomDims, UnitSystem, Wall } from '../types';
 
 export const WALLS: readonly Wall[] = ['top', 'right', 'bottom', 'left'];
@@ -109,8 +115,64 @@ export const blankPlan = (): Plan => ({
 
 // --- Rooms ------------------------------------------------------------------------------------
 
-/** The room the editor shows (a plan always has at least one). */
+/** The first room (a plan always has at least one). */
 export const mainRoom = (plan: Pick<Plan, 'rooms'>): Room => plan.rooms[0]!;
+
+/** The room with this id, or the first room (the id is gone, or none was given). */
+export const roomById = (plan: Pick<Plan, 'rooms'>, id?: Id | null): Room =>
+  (id != null ? plan.rooms.find((r) => r.id === id) : undefined) ?? plan.rooms[0]!;
+
+/** The room a door or window is in, or undefined. */
+export const roomOfOpening = (plan: Pick<Plan, 'rooms'>, id: Id): Room | undefined =>
+  plan.rooms.find((r) => r.openings.some((o) => o.id === id));
+
+/** The room a placed piece's centre is in, or null (set aside, or outside every room). */
+export const pieceRoom = (plan: Pick<Plan, 'rooms'>, item: Item): Room | null =>
+  item.placement ? roomAt(plan, item.placement) : null;
+
+/** A box (feet): its top-left corner and size. */
+export interface Frame {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+const frameOf = (b: { left: number; top: number; right: number; bottom: number }): Frame => ({
+  left: b.left,
+  top: b.top,
+  width: b.right - b.left,
+  height: b.bottom - b.top,
+});
+
+/** The box a piece's position fields measure from: its room's, else the whole floor's. */
+export const pieceFrame = (plan: Pick<Plan, 'rooms'>, item: Item): Frame => {
+  const room = pieceRoom(plan, item);
+  return frameOf(room ? roomBounds(room) : floorBounds(plan));
+};
+
+/** The floor's box: every room together. */
+export const floorFrame = (plan: Pick<Plan, 'rooms'>): Frame => frameOf(floorBounds(plan));
+
+/**
+ * The wall lines furniture snaps to when that is not just one rectangle at the origin (which
+ * snapping knows by its size): every room's walls and centre lines.
+ */
+export const snapLines = (plan: Pick<Plan, 'rooms'>): SnapCandidates | undefined => {
+  const only = plan.rooms.length === 1 ? plan.rooms[0]! : null;
+  if (only && isRectangle(only)) {
+    const b = roomBounds(only);
+    if (b.left === 0 && b.top === 0) return undefined;
+  }
+  const x: SnapCandidates['x'] = [];
+  const y: SnapCandidates['y'] = [];
+  for (const r of plan.rooms) {
+    const lines = roomSnapLines(r);
+    x.push(...lines.x);
+    y.push(...lines.y);
+  }
+  return { x, y };
+};
 
 /** A room's width and length (its bounding box). */
 export const roomSize = (room: Pick<Room, 'outline'>): RoomDims => {
@@ -124,16 +186,45 @@ export const doorsOf = (room: Pick<Room, 'openings'>): Opening[] =>
 export const windowsOf = (room: Pick<Room, 'openings'>): Opening[] =>
   room.openings.filter((o) => o.kind === 'window');
 
-// --- Doors and windows on a rectangle -------------------------------------------------------
+/** A room's floor area (square feet): the shoelace formula, so any outline. */
+export const roomArea = (room: Pick<Room, 'outline'>): number => outlineArea(room);
+
+/** An area in square feet as shown: square metres for metric units, else square feet. */
+export const areaText = (sqft: number, units: UnitSystem): string =>
+  units === 'm' || units === 'cm'
+    ? `${Math.round((sqft / (FEET_PER_METER * FEET_PER_METER)) * 10) / 10} m²`
+    : `${Math.round(sqft * 10) / 10} sq ft`;
+
+/** Every room's floor area together (square feet). */
+export const floorArea = (plan: Pick<Plan, 'rooms'>): number =>
+  plan.rooms.reduce((sum, r) => sum + outlineArea(r), 0);
+
+// --- Walls -------------------------------------------------------------------------------------
+
+/** A wall's name in a sentence: "top" on a rectangle, otherwise "wall 3" (numbered from 1). */
+export const wallName = (room: Pick<Room, 'outline'>, wall: number): string =>
+  isRectangle(room) ? (WALLS[wall] ?? 'top') : `wall ${wall + 1}`;
+
+/** A wall's name as a label: "Top" on a rectangle, otherwise "Wall 3". */
+export const wallLabel = (room: Pick<Room, 'outline'>, wall: number): string => {
+  const name = wallName(room, wall);
+  return name.charAt(0).toUpperCase() + name.slice(1);
+};
+
+/** "the top wall" on a rectangle, otherwise "wall 3". */
+export const theWall = (room: Pick<Room, 'outline'>, wall: number): string =>
+  isRectangle(room) ? `the ${wallName(room, wall)} wall` : wallName(room, wall);
+
+// --- Doors and windows ------------------------------------------------------------------------
 
 /**
- * Where an opening is, in the editor's terms: its wall by name, `position` from the wall's left
- * (top, for the side walls) end, and the hinge on the left or right as drawn. On the bottom and
- * left walls these run against the outline (whose walls go clockwise), so `offset` and `hinge`
- * are mirrored there.
+ * Where an opening is, in the editor's terms: its wall, `position` from the start of the wall's
+ * drawing (its left end, or its top end for an upright wall), and the hinge on the left or right
+ * as drawn. Where a wall runs against the drawing (the bottom and left walls of a rectangle,
+ * whose outline goes clockwise), `offset` and `hinge` are mirrored.
  */
 export interface OpeningPlace {
-  wall: Wall;
+  wall: number;
   position: number;
   width: number;
   hinge: 'left' | 'right';
@@ -141,7 +232,7 @@ export interface OpeningPlace {
 
 export const openingPlace = (room: Pick<Room, 'outline'>, o: Opening): OpeningPlace => {
   const { position, width, hingeAtEnd } = openingInFrame(room, o);
-  return { wall: WALLS[o.wall] ?? 'top', position, width, hinge: hingeAtEnd ? 'right' : 'left' };
+  return { wall: o.wall, position, width, hinge: hingeAtEnd ? 'right' : 'left' };
 };
 
 /** The v4 `hinge` for a hinge on the `side` (as drawn) of wall `wall`. */
@@ -151,16 +242,19 @@ export const hingeFor = (
   side: 'left' | 'right',
 ): Opening['hinge'] => ((side === 'right') !== drawingFrame(room, wall).reversed ? 'end' : 'start');
 
-/** The `wall` and `offset` of an opening at `position` (from the left or top) on `wall`. */
+/** The `wall` and `offset` of an opening at `position` (along the drawing) on `wall`. */
 export const placeOn = (
   room: Pick<Room, 'outline'>,
-  wall: Wall,
+  wall: number,
   position: number,
   width: number,
-): Pick<Opening, 'wall' | 'offset'> => {
-  const index = WALLS.indexOf(wall);
-  return { wall: index, offset: offsetFromPosition(room, index, position, width) };
-};
+): Pick<Opening, 'wall' | 'offset'> => ({
+  wall,
+  offset: offsetFromPosition(room, wall, position, width),
+});
+
+/** The index of a rectangle's wall by name. */
+export const wallIndex = (wall: Wall): number => WALLS.indexOf(wall);
 
 // --- Pieces ------------------------------------------------------------------------------------
 
@@ -188,16 +282,25 @@ export interface PiecePatch {
   rotation?: number;
   locked?: boolean;
   hidden?: boolean;
+  /** Another shape in the same box; an L gets `defaultCut` unless `cut` is given. */
+  shape?: Item['shape'];
+  /** An L's cut, merged into the current one. */
+  cut?: Partial<NonNullable<Item['cut']>>;
 }
 
 /**
  * `item` with `patch` applied. Changing the size keeps the box's top-left corner where it was (as
  * the size fields always have); the centre is recomputed only when the box changes, so other edits
- * never move a piece by a rounding error.
+ * never move a piece by a rounding error. An L's cut is kept inside its box.
  */
 export function patchPiece(item: Item, patch: PiecePatch): Item {
-  const { x, y, rotation, locked, hidden, ...fields } = patch;
+  const { x, y, rotation, locked, hidden, shape, cut, ...fields } = patch;
   const next: Item = { ...item, ...fields };
+  if (shape !== undefined) next.shape = shape;
+  if (next.shape === 'l') {
+    const base = item.cut ?? defaultCut(next.width, next.depth);
+    next.cut = clampCut(cut ? { ...base, ...cut } : base, next.width, next.depth);
+  } else delete next.cut;
   if (
     x !== undefined ||
     y !== undefined ||
@@ -232,15 +335,30 @@ export function patchPiece(item: Item, patch: PiecePatch): Item {
 
 export type { SnapPiece };
 
+/** A piece as snapping sees it: its box and shape. */
+export const snapBox = (item: Item): PieceBox & Pick<SnapPiece, 'shape' | 'cut'> => ({
+  ...boxOf(item),
+  shape: item.shape,
+  ...(item.cut && { cut: item.cut }),
+});
+
 /** Placed pieces as the boxes snapping works on. */
 export const snapPieces = (plan: Pick<Plan, 'items'>): SnapPiece[] =>
   plan.items
     .filter((i) => i.placement)
-    .map((i) => ({ ...boxOf(i), id: i.id, label: i.label, visible: !i.hidden }));
+    .map((i) => ({ ...snapBox(i), id: i.id, label: i.label, visible: !i.hidden }));
 
 /** Placed, visible pieces: the ones the canvas draws and the checks consider. */
 export const shownPieces = (plan: Pick<Plan, 'items'>): Item[] =>
   plan.items.filter((i) => i.placement && !i.hidden);
+
+/** Pieces in the room (shown or not): the furniture list. */
+export const placedPieces = (plan: Pick<Plan, 'items'>): Item[] =>
+  plan.items.filter((i) => i.placement);
+
+/** Pieces set aside (no `placement`, "the inventory" in the format), in plan order. */
+export const inventoryPieces = (plan: Pick<Plan, 'items'>): Item[] =>
+  plan.items.filter((i) => !i.placement);
 
 // --- Warnings ----------------------------------------------------------------------------------
 
@@ -309,51 +427,43 @@ export const samePlan = (a: Plan, b: Plan): boolean => planContent(a) === planCo
 // --- What this editor can show ---------------------------------------------------------------
 
 /**
- * `plan` in the form the editor works on, or what keeps it from showing the plan. A single
- * rectangular room listed from any corner, anywhere, is turned to start at its top-left corner
- * and moved to the origin (with everything in it), which changes no drawing. Several rooms,
- * another outline, L-shaped or round pieces, and pieces in the inventory are in the format
- * (section 3) but not yet in the editor (PRs 7a, 7b, 8, 9): such a plan is not opened, so that no
- * edit made here can damage it.
+ * `plan` in the form the editor works on, or what keeps it from showing the plan. Every room of
+ * any outline (the load has made each simple and clockwise) is listed from its top-left corner
+ * (`firstCorner`: a rectangle's walls are then top, right, bottom, left), and the whole floor is
+ * moved so its bounding box starts at the origin, with everything on it, which changes no drawing;
+ * pieces set aside (no `placement`) come along untouched. Pieces of every shape are editable, and
+ * so are floors of several rooms (section 3; PR 9).
  */
 export function editablePlan(plan: Plan): { ok: true; plan: Plan } | { ok: false; why: string[] } {
   const why: string[] = [];
-  if (plan.rooms.length !== 1) why.push('several rooms');
-  const shaped = plan.items.filter((i) => i.shape !== 'rect');
-  if (shaped.length) why.push('pieces that are not rectangles');
-  if (plan.items.some((i) => !i.placement)) why.push('pieces that are not placed in the room');
-  const room = plan.rooms[0];
-  if (!room) return { ok: false, why };
-  const outline = room.outline;
-  let start = -1;
-  if (outline.length === 4) {
-    const left = Math.min(...outline.map((p) => p.x));
-    const top = Math.min(...outline.map((p) => p.y));
-    start = outline.findIndex((p) => p.x === left && p.y === top);
-  }
-  const turned =
-    start < 0 ? null : { ...room, outline: [...outline.slice(start), ...outline.slice(0, start)] };
-  if (!turned || !isRectangle(turned)) why.push('a room that is not a rectangle');
-  if (why.length || !turned) return { ok: false, why };
-  if (start === 0 && outline[0]!.x === 0 && outline[0]!.y === 0) return { ok: true, plan };
+  if (plan.rooms.length === 0) return { ok: false, why: ['no rooms'] };
+  if (plan.rooms.some((r) => r.outline.length < 3)) why.push('a room with fewer than 3 corners');
+  if (why.length) return { ok: false, why };
 
-  const { x: dx, y: dy } = turned.outline[0]!;
+  const f = floorBounds(plan);
+  const starts = plan.rooms.map((r) => firstCorner(r.outline));
+  if (starts.every((s) => s === 0) && f.left === 0 && f.top === 0) return { ok: true, plan };
+
+  const { left: dx, top: dy } = f;
   const shift = <T extends { x: number; y: number }>(p: T): T => ({
     ...p,
-    x: p.x - dx,
-    y: p.y - dy,
+    x: p.x - dx + 0,
+    y: p.y - dy + 0,
   });
   return {
     ok: true,
     plan: {
       ...plan,
-      rooms: [
-        {
-          ...turned,
-          outline: turned.outline.map(shift),
-          openings: room.openings.map((o) => ({ ...o, wall: (o.wall - start + 4) % 4 })),
-        },
-      ],
+      rooms: plan.rooms.map((room, k) => {
+        const start = starts[k]!;
+        const n = room.outline.length;
+        const turned = [...room.outline.slice(start), ...room.outline.slice(0, start)];
+        return {
+          ...room,
+          outline: turned.map(shift),
+          openings: room.openings.map((o) => ({ ...o, wall: (o.wall - start + n) % n })),
+        };
+      }),
       items: plan.items.map((i) => (i.placement ? { ...i, placement: shift(i.placement) } : i)),
     },
   };

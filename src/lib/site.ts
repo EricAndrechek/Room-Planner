@@ -18,9 +18,11 @@ export const OG_IMAGE = {
  */
 export const FEATURES = [
   'Room dimensions in feet and inches, decimal feet, inches, meters or centimeters',
+  'Whole floor plans: several connected rooms, with doors between them',
   'Doors on any wall: swing in or out, double (French), sliding, pocket, bi-fold or an open doorway',
   'Windows on any wall',
-  'Drag, resize, rotate, lock and hide furniture, with exact sizes and positions',
+  'Drag, resize, rotate, duplicate and lock furniture, with exact sizes and positions',
+  'Set pieces aside and drop them back exactly where you want them',
   'Snapping to walls and other pieces, with clear-distance labels',
   'Warnings for overlapping pieces, pieces outside the room and furniture that blocks a door',
   'Several floor plans, saved automatically in your browser',
