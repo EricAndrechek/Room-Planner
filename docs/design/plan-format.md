@@ -162,7 +162,7 @@ export const Item = z.looseObject({
       }),
     ),
     'Centre of the piece in floor coordinates and its clockwise rotation in degrees. ' +
-      'Omit it to keep the piece in the inventory.',
+      'Omit it to set the piece aside: kept in the plan, not on the floor.',
   ),
   locked: z.optional(z.boolean()),
   hidden: z.optional(z.boolean()),
