@@ -65,3 +65,14 @@
 /.well-known/ai-catalog.json
   Content-Type: application/ai-catalog+json
   Access-Control-Allow-Origin: *
+
+# The REST API's description and the plan's JSON Schema (static, built from the Zod schema), for
+# agents and Custom GPT Actions that fetch them from anywhere.
+/openapi.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=3600
+
+/plan.schema.json
+  Content-Type: application/schema+json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=3600

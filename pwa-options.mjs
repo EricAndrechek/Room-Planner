@@ -77,7 +77,7 @@ export const pwaOptions = {
     // the denylist is belt and braces for /help/, the MCP server (served by the Worker) and the
     // discovery files.
     navigateFallbackAllowlist: [/^\/(\?.*)?$/],
-    navigateFallbackDenylist: [/^\/help\//, /^\/mcp/, /^\/\.well-known\//],
+    navigateFallbackDenylist: [/^\/help\//, /^\/mcp/, /^\/api\//, /^\/\.well-known\//],
     // `/?config=...` (legacy share links) and tracking params must hit the precached `/`.
     ignoreURLParametersMatching: [/.*/],
     cleanupOutdatedCaches: true,

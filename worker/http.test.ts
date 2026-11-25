@@ -125,9 +125,23 @@ describe.each(ERAS)('MCP over $name', ({ mode }) => {
     const plan = (create.inputSchema.properties as Record<string, Record<string, unknown>>).plan!;
     expect(plan.required).toEqual(['version', 'unit', 'rooms']);
     expect(create.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
-    expect(create._meta).toMatchObject({ ui: { resourceUri: VIEWER_URI } });
+    expect(create._meta).toMatchObject({
+      ui: { resourceUri: VIEWER_URI },
+      'openai/outputTemplate': VIEWER_URI,
+    });
     expect(create.description).toContain('clockwise');
     expect(tools.find((t) => t.name === 'check_layout')!._meta?.ui).toBeUndefined();
+    // What the Claude and ChatGPT directories require of every tool.
+    for (const t of tools) {
+      expect(t.title, t.name).toBeTruthy();
+      expect(t.annotations, t.name).toMatchObject({
+        title: t.title,
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: false,
+      });
+      expect(t.name.length).toBeLessThanOrEqual(64);
+    }
   });
 
   it('create_plan returns the plan in the agent unit, the issues, a summary and a link', async () => {

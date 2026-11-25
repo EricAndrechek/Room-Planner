@@ -1,5 +1,6 @@
 /**
- * Usage analytics for the MCP server (docs/design/plan-format.md, section 7, "Analytics"): one
+ * Usage analytics for the MCP server and the REST API (docs/design/plan-format.md, section 7,
+ * "Analytics"): one
  * batch of PostHog events per request, sent with `ctx.waitUntil` after the response, so a slow or
  * failing PostHog never delays or breaks a call.
  *
@@ -166,7 +167,8 @@ export type Activity =
   | { kind: 'tool'; tool: string; ok: boolean; stats?: ToolStats; durationMs: number }
   | { kind: 'tool_failed'; tool: string; durationMs: number }
   | { kind: 'resource'; uri: string }
-  | { kind: 'rate_limited' };
+  | { kind: 'api'; op: string; ok: boolean; stats?: ToolStats; durationMs: number }
+  | { kind: 'rate_limited'; transport?: 'mcp' | 'rest' };
 
 export interface RequestContext {
   hostname: string;
@@ -259,8 +261,20 @@ export async function buildEvents(
         });
       case 'resource':
         return event('mcp_resource_read', { uri: a.uri });
+      case 'api':
+        return event('api_called', {
+          op: a.op,
+          ok: a.ok,
+          transport: 'rest',
+          error_kind: a.stats?.errorKind ?? null,
+          rooms: a.stats?.rooms ?? null,
+          items: a.stats?.items ?? null,
+          unit: a.stats?.unit ?? null,
+          duration_ms: a.durationMs,
+          ...severityCounts(a.stats?.issues),
+        });
       case 'rate_limited':
-        return event('mcp_rate_limited', {});
+        return event('mcp_rate_limited', { transport: a.transport ?? 'mcp' });
     }
   });
 }

@@ -4,7 +4,8 @@
  * - `/mcp`: the MCP endpoint, stateless Streamable HTTP for both protocol eras (POST; GET and
  *   DELETE are 405, as a stateless server has no stream or session to offer);
  * - `/mcp/server-card`: the MCP Server Card (SEP-2127);
- * - anything else under `/mcp/`: 404.
+ * - anything else under `/mcp/`: 404;
+ * - `/api/*`: the REST API over the same tools (api.ts).
  *
  * Every response here carries CORS for browser-based MCP clients, `Cache-Control: no-store` and
  * `nosniff`; `_headers` does not apply to Worker responses. Requests are rate limited per client
@@ -12,6 +13,7 @@
  */
 import { SUPPORTED_PROTOCOL_VERSIONS, createMcpHandler } from '@modelcontextprotocol/server';
 import { environmentOf, headerProps, report, type Activity, type HostIds } from './analytics';
+import { API_PREFIX, handleApi } from './api';
 import registry from '../server.json';
 import {
   REGISTRY_NAME,
@@ -25,7 +27,7 @@ import {
 
 export interface Env {
   ASSETS: Fetcher;
-  /** Every request to /mcp and /mcp/*, per client IP (wrangler.jsonc `ratelimits`). */
+  /** Every request to /mcp, /mcp/* and /api/*, per client IP (wrangler.jsonc `ratelimits`). */
   MCP_LIMIT?: RateLimit;
 }
 
@@ -54,6 +56,23 @@ const json = (body: unknown, status: number, headers: Record<string, string> = {
     new Response(JSON.stringify(body), {
       status,
       headers: { 'Content-Type': 'application/json', ...headers },
+    }),
+  );
+
+/** A REST API problem (RFC 9457) or answer. */
+const apiJson = (
+  body: unknown,
+  status: number,
+  problem: boolean,
+  headers: Record<string, string> = {},
+) =>
+  withHeaders(
+    new Response(JSON.stringify(body), {
+      status,
+      headers: {
+        'Content-Type': problem ? 'application/problem+json' : 'application/json',
+        ...headers,
+      },
     }),
   );
 
@@ -247,21 +266,49 @@ async function route(request: Request, env: Env, trace: Trace): Promise<Response
   const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
   const origin = local ? url.origin : `https://${url.host}`;
   const path = url.pathname.replace(/\/+$/, '') || '/';
+  const isApi = path.startsWith(API_PREFIX) || path === API_PREFIX.slice(0, -1);
   const isEndpoint = path === '/mcp';
   const isCard = path === '/mcp/server-card';
-  if (!isEndpoint && !isCard) {
+  if (!isEndpoint && !isCard && !isApi) {
     return json({ error: 'Not found. The MCP endpoint is /mcp.' }, 404);
   }
 
-  const allow = isEndpoint ? 'POST, OPTIONS' : 'GET, HEAD, OPTIONS';
+  const allow = isApi
+    ? path === '/api/plan'
+      ? 'GET, HEAD, OPTIONS'
+      : 'POST, OPTIONS'
+    : isEndpoint
+      ? 'POST, OPTIONS'
+      : 'GET, HEAD, OPTIONS';
   if (request.method === 'OPTIONS') return preflight(allow);
 
   const key = clientKey(request);
   const limited =
     overMemoryLimit(key) || (env.MCP_LIMIT && !(await env.MCP_LIMIT.limit({ key })).success);
   if (limited) {
-    trace.activities.push({ kind: 'rate_limited' });
+    trace.activities.push({ kind: 'rate_limited', transport: isApi ? 'rest' : 'mcp' });
+    if (isApi) {
+      return apiJson(
+        {
+          type: 'https://room-planner.andrechek.com/openapi.json#rate_limited',
+          title: 'Too many requests',
+          status: 429,
+          detail: `Too many requests from this address. Wait ${RETRY_AFTER_SECONDS} seconds and try again.`,
+          error_kind: 'rate_limited',
+        },
+        429,
+        true,
+        { 'Retry-After': String(RETRY_AFTER_SECONDS) },
+      );
+    }
     return tooManyRequests();
+  }
+
+  if (isApi) {
+    const record = (a: Activity) => trace.activities.push(a);
+    const a = await handleApi(request, path, origin, record, MAX_BODY);
+    const head = request.method === 'HEAD';
+    return apiJson(head ? null : a.body, a.status, a.problem ?? false, a.headers);
   }
 
   if (isCard) {

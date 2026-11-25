@@ -5,6 +5,11 @@ import { viewerHtml } from '../scripts/build-viewer.mjs';
 import { createPlan, readPlan, type ToolOutcome } from '../worker/tools';
 import { storedDims, storedOpenings, storedPieces, workingPlan } from './storage';
 
+/** The three-room plan an assistant made with code (src/lib/agentExample.json). */
+const AGENT_EXAMPLE = JSON.parse(
+  readFileSync(new URL('../src/lib/agentExample.json', import.meta.url), 'utf8'),
+) as { plan: unknown };
+
 // The MCP server (docs/design/plan-format.md, section 7) as users meet it:
 // - a link the server makes opens in the real app as the same plan;
 // - the MCP Apps plan viewer, driven by a minimal host that speaks the postMessage protocol;
@@ -397,6 +402,28 @@ test.describe('plan viewer', () => {
     }
   });
 
+  test('carousel screenshots for the directories (PNG, 1000 px and wider)', async ({
+    page,
+    baseURL,
+    browserName,
+  }) => {
+    test.skip(!SHOTS || browserName !== 'chromium', 'Set MCP_SHOTS_DIR to save screenshots');
+    const origin = new URL(baseURL!).origin;
+    const plans: [string, unknown][] = [
+      ['1-bedroom', bedroom],
+      ['2-flat', floor],
+      ['3-three-rooms', AGENT_EXAMPLE.plan],
+    ];
+    for (const [name, plan] of plans) {
+      await page.setViewportSize({ width: 1100 + 32, height: 1400 });
+      const view = await host(page, toResult(await createPlan({ plan }, origin)), { width: 1100 });
+      await expect(view.locator('#sheet svg')).toBeVisible();
+      await view.locator('body').evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(200);
+      await page.locator('#view').screenshot({ path: `${SHOTS}/carousel-${name}.png` });
+    }
+  });
+
   test('screenshots for review', async ({ page, baseURL, browserName }) => {
     test.skip(!SHOTS || browserName !== 'chromium', 'Set MCP_SHOTS_DIR to save screenshots');
     const outcome = await createPlan({ plan: bedroom }, new URL(baseURL!).origin);
@@ -460,6 +487,28 @@ test.describe('the /mcp endpoint', () => {
     await page.goto(`/${new URL(url).hash}`);
     await ready(page);
     await expect(page.getByRole('heading', { level: 1, name: 'Guest bedroom' })).toBeVisible();
+  });
+
+  test('the REST API makes a link that opens the plan; its description is served', async ({
+    request,
+    page,
+  }) => {
+    const r = await request.post('/api/plan/link', { data: floor });
+    expect(r.status()).toBe(200);
+    expect(r.headers()['access-control-allow-origin']).toBe('*');
+    const { url } = (await r.json()) as { url: string };
+    await page.goto(`/${new URL(url).hash}`);
+    await ready(page);
+    await expect(page.getByRole('heading', { level: 1, name: 'Flat' })).toBeVisible();
+    expect((await workingPlan(page)).rooms.map((x) => x.name)).toEqual(['Living room', 'Bedroom']);
+
+    const bad = await request.post('/api/plan/check', { data: { ...floor, unit: 'yd' } });
+    expect(bad.status()).toBe(422);
+    expect(bad.headers()['content-type']).toBe('application/problem+json');
+    const spec = await request.get('/openapi.json');
+    expect(spec.status()).toBe(200);
+    expect(((await spec.json()) as { openapi: string }).openapi).toBe('3.1.0');
+    expect((await request.get('/plan.schema.json')).status()).toBe(200);
   });
 
   test('CORS, 405 and 404, and the pages still come from the assets', async ({ request }) => {

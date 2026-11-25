@@ -39,6 +39,8 @@ export interface ToolOutcome {
   /** `structuredContent`. */
   structured?: Record<string, unknown>;
   isError?: boolean;
+  /** For an invalid plan: one line per problem, `path: message` (the REST API's `errors`). */
+  details?: string[];
   /** Counts for usage analytics (analytics.ts): never names, labels or coordinates. */
   stats: ToolStats;
 }
@@ -52,7 +54,10 @@ export type ErrorKind =
   | 'missing_url'
   | 'bad_url'
   | 'no_plan_in_link'
-  | 'damaged_link';
+  | 'damaged_link'
+  // REST API only (api.ts).
+  | 'bad_json'
+  | 'too_large';
 
 export interface ToolStats {
   errorKind?: ErrorKind;
@@ -123,21 +128,28 @@ export type ReadInput =
   | { ok: true; plan: Plan; unit: Unit; unitSystem: UnitSystem; warnings: Issue[] }
   | { ok: false; outcome: ToolOutcome };
 
-const failure = (text: string, errorKind: ErrorKind): ToolOutcome => ({
+const failure = (text: string, errorKind: ErrorKind, details?: string[]): ToolOutcome => ({
   text,
   isError: true,
+  ...(details ? { details } : {}),
   stats: { errorKind },
 });
 
-const fail = (text: string, errorKind: ErrorKind): { ok: false; outcome: ToolOutcome } => ({
+const fail = (
+  text: string,
+  errorKind: ErrorKind,
+  details?: string[],
+): { ok: false; outcome: ToolOutcome } => ({
   ok: false,
-  outcome: failure(text, errorKind),
+  outcome: failure(text, errorKind, details),
 });
 
+/** An invalid plan's problems, one `plan.path: message` line each. */
+const invalidLines = (issues: LoadIssue[]): string[] =>
+  formatIssues(issues.map((i) => ({ ...i, path: i.path.length ? ['plan', ...i.path] : i.path })));
+
 const describeInvalid = (issues: LoadIssue[]): string => {
-  const lines = formatIssues(
-    issues.map((i) => ({ ...i, path: i.path.length ? ['plan', ...i.path] : i.path })),
-  );
+  const lines = invalidLines(issues);
   const shown = lines.slice(0, 20);
   const more = lines.length > shown.length ? [`... and ${lines.length - shown.length} more.`] : [];
   return [
@@ -163,7 +175,7 @@ export function readPlanInput(raw: unknown): ReadInput {
         'newer_version',
       );
     }
-    return fail(describeInvalid(result.issues), 'invalid_plan');
+    return fail(describeInvalid(result.issues), 'invalid_plan', invalidLines(result.issues));
   }
   const unit =
     isObject(raw) && UNITS.includes(raw.unit as Unit) ? (raw.unit as Unit) : result.plan.unit;
@@ -327,7 +339,7 @@ export async function readPlan(args: { url?: unknown }, origin: string): Promise
           : result.reason === 'newer'
             ? 'newer_version'
             : 'invalid_plan';
-    return failure(text, kind);
+    return failure(text, kind, 'issues' in result ? invalidLines(result.issues) : undefined);
   }
   const plan = result.plan;
   const unitSystem = displayUnitOf(plan);

@@ -78,8 +78,20 @@ const toResult = (o: ToolOutcome): CallToolResult => ({
   ...(o.isError ? { isError: true } : {}),
 });
 
-/** `_meta` linking a tool to the viewer (the flat key is the deprecated form older hosts read). */
-const withViewer = { ui: { resourceUri: VIEWER_URI }, 'ui/resourceUri': VIEWER_URI };
+/**
+ * `_meta` linking a tool to the viewer: the MCP Apps key, the deprecated flat key older hosts read,
+ * and ChatGPT's alias (`openai/outputTemplate`, still honoured there) with its status lines.
+ */
+const withViewer = (invoking: string, invoked: string) => ({
+  ui: { resourceUri: VIEWER_URI },
+  'ui/resourceUri': VIEWER_URI,
+  'openai/outputTemplate': VIEWER_URI,
+  'openai/toolInvocation/invoking': invoking,
+  'openai/toolInvocation/invoked': invoked,
+});
+
+/** The viewer's CSP allowlists: it fetches nothing and loads nothing from anywhere. */
+const NO_NETWORK = { connectDomains: [] as string[], resourceDomains: [] as string[] };
 
 const READ_ONLY = {
   readOnlyHint: true,
@@ -133,7 +145,7 @@ export function createServer(origin: string, record: (a: Activity) => void = () 
       description: CREATE_PLAN,
       inputSchema: inputSchema(planArgs),
       annotations: { title: 'Create a room plan', ...READ_ONLY },
-      _meta: withViewer,
+      _meta: withViewer('Drawing the plan…', 'Plan ready'),
     },
     tool('create_plan', (args: Record<string, unknown>) => createPlan(args, origin)),
   );
@@ -156,7 +168,7 @@ export function createServer(origin: string, record: (a: Activity) => void = () 
       description: READ_PLAN,
       inputSchema: inputSchema(urlArgs),
       annotations: { title: 'Read a Room Planner link', ...READ_ONLY },
-      _meta: withViewer,
+      _meta: withViewer('Reading the plan…', 'Plan read'),
     },
     tool('read_plan', (args: Record<string, unknown>) => readPlan(args, origin)),
   );
@@ -169,7 +181,7 @@ export function createServer(origin: string, record: (a: Activity) => void = () 
       description:
         'Shows a plan from create_plan or read_plan: the drawing, its issues, and a button that opens it in Room Planner.',
       mimeType: VIEWER_MIME_TYPE,
-      _meta: { ui: { prefersBorder: true } },
+      _meta: { ui: { prefersBorder: true, csp: NO_NETWORK } },
       cacheHint: { ttlMs: 3_600_000, cacheScope: 'public' },
     },
     async (uri) => {
@@ -180,8 +192,8 @@ export function createServer(origin: string, record: (a: Activity) => void = () 
             uri: uri.href,
             mimeType: VIEWER_MIME_TYPE,
             text: viewerHtml(),
-            // No csp: the view fetches nothing, so the host's default (no network) is right.
-            _meta: { ui: { prefersBorder: true } },
+            // The view fetches and loads nothing: an empty allowlist says so explicitly.
+            _meta: { ui: { prefersBorder: true, csp: NO_NETWORK } },
           },
         ],
       };

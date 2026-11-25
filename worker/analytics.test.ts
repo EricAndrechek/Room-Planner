@@ -34,11 +34,17 @@ async function run(
     host = 'room-planner.andrechek.com',
     fetchImpl,
     headers = {},
-  }: { host?: string; fetchImpl?: typeof fetch; headers?: Record<string, string> } = {},
+    path = '/mcp',
+  }: {
+    host?: string;
+    fetchImpl?: typeof fetch;
+    headers?: Record<string, string>;
+    path?: string;
+  } = {},
 ) {
   const pending: Promise<unknown>[] = [];
   const sent: { url: string; body: string }[] = [];
-  const request = new Request(`https://${host}/mcp`, {
+  const request = new Request(`https://${host}${path}`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -161,6 +167,27 @@ describe('MCP usage analytics', () => {
       error_kind: 'damaged_link',
     });
     expect(sent[0]!.body).not.toContain('example.com');
+  });
+
+  it('reports REST API calls as api_called, with the same rules', async () => {
+    const { sent } = await run(
+      { plan: bedroom },
+      { path: '/api/plan/link', headers: { 'user-agent': 'curl/8.7.1' } },
+    );
+    const e = JSON.parse(sent[0]!.body).batch[0];
+    expect(e.event).toBe('api_called');
+    expect(e.properties).toMatchObject({
+      op: 'link',
+      ok: true,
+      transport: 'rest',
+      error_kind: null,
+      rooms: 1,
+      items: 2,
+      ua_family: 'curl',
+      $ip: '198.51.100.23',
+    });
+    expect(sent[0]!.body).not.toContain('Grandmas');
+    expect(sent[0]!.body).not.toContain('#s=');
   });
 
   it('reports initialize with the client name and version, and resource reads', async () => {
