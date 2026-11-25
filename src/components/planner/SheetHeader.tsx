@@ -72,7 +72,9 @@ export function SheetHeader({
       <button
         ref={handleRef}
         type="button"
-        className="sheet-handle absolute inset-0 w-full rounded-t-2xl cursor-grab active:cursor-grabbing"
+        // With the piece actions under it, the handle covers the summary row only (its middle stays
+        // clear of the action buttons).
+        className={`sheet-handle absolute inset-x-0 top-0 w-full rounded-t-2xl cursor-grab active:cursor-grabbing ${actions ? 'h-[4.25rem]' : 'bottom-0'}`}
         aria-label="Resize editor"
         aria-expanded={!collapsed}
         aria-controls={contentId}

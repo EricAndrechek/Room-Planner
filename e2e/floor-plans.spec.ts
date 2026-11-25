@@ -135,10 +135,11 @@ test('move a room by dragging: it snaps flush, and goes back if it would overlap
   const den = handle(page, 'Den');
   const b = (await den.boundingBox())!;
   const from = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
-  // 2.15 ft to the left: its left wall lands 0.05 ft from the kitchen's right wall, well within
-  // the snap distance on any engine.
+  // About 2.35 ft to the left: its left wall lands a little past the kitchen's right wall and snaps
+  // back flush (WebKit delivers a little less pointer travel than asked for; it lands just short
+  // and snaps forward).
   const step = (await screenAt(page, 1, 0)).x - (await screenAt(page, 0, 0)).x;
-  await drag(page, from, { x: from.x - 2.15 * step, y: from.y + 0.05 * step });
+  await drag(page, from, { x: from.x - 2.35 * step, y: from.y + 0.05 * step });
   await expect.poll(async () => (await roomsOf(page))[1]!.outline[0]).toEqual({ x: 12, y: 0 });
   await expect.poll(() => announcements(page)).toContain('Den moved');
 
