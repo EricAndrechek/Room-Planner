@@ -871,6 +871,24 @@ L sofa, a round table, a piece set aside and seven issues):
 Every invocation ended `ok`. `read_plan` costs most: it decompresses the link, checks the plan and
 compresses a fresh link.
 
+A second run the same day, with the REST API deployed (10 to 12 calls of each, same floor; MCP
+over the 2025-era protocol):
+
+| Call                   |  Median | Range   |
+| ---------------------- | ------: | ------- |
+| MCP `tools/list`       |    4 ms | 3–12 ms |
+| MCP `check_layout`     |   10 ms | 5–29 ms |
+| MCP `create_plan`      |   12 ms | 3–21 ms |
+| MCP `read_plan`        |    9 ms | 5–19 ms |
+| `POST /api/plan/check` |  6.5 ms | 4–16 ms |
+| `POST /api/plan/link`  |    5 ms | 3–13 ms |
+| `GET /api/plan?s=`     | 11.5 ms | 5–22 ms |
+
+All 74 logged invocations ended `ok` (no `exceededCpu`). The MCP numbers vary from run to run by
+a few milliseconds (cold isolates); the REST routes skip the SDK's per-request work, which is
+most of the difference. Medians at or above 10 ms are within Workers Free's tolerance for
+occasional overruns; watch `exceededCpu` after launch.
+
 Most of it is the SDK's own per-request work (a fresh server, message validation), which a
 static `resources/read` shows; the spread is cold isolates. Two changes brought `create_plan` down
 from a median of 12 ms (7 to 42): the view draws the plan instead of the server, and `warm.ts`
