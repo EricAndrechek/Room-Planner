@@ -30,7 +30,7 @@ const tools = [
   },
   {
     name: 'check_layout',
-    text: 'lists overlapping pieces, pieces outside the room, furniture in a door’s swing or doorway, and gaps tighter than a walkway, so the assistant can fix them before it shows you anything.',
+    text: 'lists overlapping pieces, pieces outside every room, furniture in a door’s swing or doorway (on either side of a door between rooms), and gaps tighter than a walkway, so the assistant can fix them before it shows you anything.',
   },
   {
     name: 'read_plan',
@@ -41,6 +41,7 @@ const tools = [
 const prompts = [
   'My bedroom is 11 × 12 ft. The door is on the bottom wall near the left corner and there is a window in the middle of the top wall. Fit a queen bed, two nightstands, a dresser and a desk, and give me a Room Planner link.',
   'Lay out a 350 × 400 cm living room with a three-seat sofa facing a TV stand, a coffee table and two armchairs. Keep 90 cm walkways and nothing in front of the door.',
+  'Plan a small flat: a 12 × 14 ft living room with a 10 × 11 ft bedroom to its right and a door between them. Put a sofa, a round dining table for four and a bed in, and set a spare armchair aside.',
   'Here is my plan: (paste your Room Planner link). Move the desk under the window and check that nothing blocks the door.',
 ];
 
@@ -156,9 +157,9 @@ const code = 'block bg-slate-900 text-slate-100 rounded-lg p-3 text-sm overflow-
       </ul>
       <p>
         Lengths can be in feet, inches, meters or centimeters: the assistant uses the units you use.
-        Plans with several rooms, other room shapes, L-shaped or round pieces, or pieces not yet
-        placed are checked and drawn too, but the planner can't edit them yet, so for now they come
-        without a link; one rectangular room with rectangular furniture gets one.
+        It can plan one room or a whole floor: several rooms joined by doors, L-shaped and other
+        room shapes, L-shaped and round furniture, and pieces set aside for later. Every plan comes
+        with a link that opens it in the planner.
       </p>
     </section>
 

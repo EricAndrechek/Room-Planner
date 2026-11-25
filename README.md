@@ -54,7 +54,7 @@ A powerful, intuitive tool for planning room layouts with furniture, doors, and 
 
 ### 🤖 For AI Assistants
 
-- **MCP Server** - `https://room-planner.andrechek.com/mcp`: Claude, ChatGPT, VS Code, Cursor and other MCP apps can lay out a room, check it and hand you an edit link; apps with MCP Apps show the plan in the chat. Free, no account; listed in the [MCP Registry](https://registry.modelcontextprotocol.io) as `com.andrechek.room-planner/mcp`. See [/agents/](https://room-planner.andrechek.com/agents/)
+- **MCP Server** - `https://room-planner.andrechek.com/mcp`: Claude, ChatGPT, VS Code, Cursor and other MCP apps can lay out a room or a whole floor of connected rooms, check it and hand you an edit link; apps with MCP Apps show the plan in the chat. Free, no account; listed in the [MCP Registry](https://registry.modelcontextprotocol.io) as `com.andrechek.room-planner/mcp`. See [/agents/](https://room-planner.andrechek.com/agents/)
 
 ### 🎯 Smart Feedback
 

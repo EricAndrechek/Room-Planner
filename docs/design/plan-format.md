@@ -645,6 +645,14 @@ anyway. Every tool therefore takes or returns a whole `Plan`. To change a plan, 
 JSON and calls again. This also keeps the tool list short, which is what makes agents pick the
 right tool.
 
+Helper tools were considered again for floors of several rooms (Agents release) and left out.
+`suggest_placement` (a free spot for a piece) would reuse the app's `findFurnitureSpot`, but that
+picks the free spot nearest the middle of the room, while an agent places a bed against a wall
+for a reason; and its grid search took 5 ms (warm, in Node) on a full 24 x 20 ft room, on top of
+the 6 ms median the SDK spends on every request, against Workers Free's 10 ms. `add_room_beside` is two additions for a model (a hall right of a 12 ft room starts at
+x = 12), which the description states. `check_layout` already names each piece and room in a
+problem with distances, which is what an agent needs to fix it.
+
 ### Tools
 
 All three are read-only in the MCP sense (`readOnlyHint: true`): they compute and return.
@@ -665,23 +673,29 @@ Details that implementers need:
   for the agent.
 - `plan` in an output is normalised (ids and defaults filled, outline clockwise) and converted back
   to the unit the agent sent, so the agent can edit and resend it.
-- Every plan the format allows is accepted, checked and drawn: several rooms, any outline, L and
-  round pieces, pieces in the inventory. Only the edit link depends on the editor (see "Edit
-  links").
-- `url` is the edit link, or `null` when the editor cannot open the plan yet (`editable: false`,
-  `notEditable` lists why, and the text says so). The link is also the last line of the text
-  content, alone on its line, so a client that shows only text still shows it whole.
+- Every plan the format allows is accepted, checked, drawn and linked: several rooms, any outline,
+  L and round pieces, pieces set aside (see "Edit links").
+- `url` is the edit link and `editable` is always `true` (kept for clients written while some
+  plans had no link). The link is also the last line of the text content, alone on its line, so a
+  client that shows only text still shows it whole.
 - `Issue` is `{ code, severity: 'error' | 'warning' | 'info', message, ids: string[] }`. Codes:
   `item_overlap`, `item_outside_room`, `door_blocked`, `doorway_blocked`, `opening_overlap`,
-  `opening_off_wall`, `room_overlap`, `tight_clearance`, `unknown_field`. `message` is a full
+  `opening_off_wall`, `room_overlap`, `window_between_rooms`, `tight_clearance`, `unknown_field`.
+  Messages name rooms ("the door between Bedroom and Hall"); a door between rooms is checked on
+  both sides (its swing into the next room, a doorway in each). `message` is a full
   sentence with names and distances in the plan's unit ("Sofa overlaps Coffee Table by 4 in").
 - `tight_clearance` is `info`: a gap above zero and below `minClearance` (default 24 in) between
   two pieces or a piece and a wall. It reuses `measureClearances`. `ok` is true when no issue is an
   error or a warning.
-- `summary` is one paragraph: room sizes and areas, counts, and what is hidden or in the inventory.
-- Tool descriptions carry what an agent needs to write a plan cold: the coordinate system, the
-  rectangle recipe and its wall numbers, the direction of `offset` on each wall, that `placement`
-  is the centre, and a short list of common sizes and clearances. There is no catalogue. The
+- `summary` is one paragraph: each room (by the name the app shows, "Room 2" when it has none)
+  with its size, area and openings, the doors between rooms, counts, and what is hidden or set
+  aside.
+- Tool descriptions carry what an agent needs to write a plan cold: the coordinate system (one
+  floor coordinate space for every room), the rectangle recipe and its wall numbers (wall i runs
+  from `outline[i]` to `outline[i+1]`), how rooms join (they touch, with no wall thickness, and a
+  door on a shared wall, listed once, connects them), the direction of `offset` on each wall, that
+  `placement` is the centre, the furniture shapes (`ellipse`, `l` with its `cut`), that leaving out
+  `placement` sets a piece aside, and a short list of common sizes and clearances. There is no catalogue. The
   format is in both `create_plan` and `check_layout`, since an agent may read only the tool it
   calls first; the server's `instructions` give the workflow.
 - The loose schema accepts unknown keys. For agents that is usually a typo, so the MCP layer
@@ -694,22 +708,17 @@ Details that implementers need:
 
 ### Edit links
 
-PR 5 is merged, so the app holds v4 plans, and a server link is the compact v4 form (`#s=`), the
-one the app writes (`buildPlanUrl`, `worker/link.ts`). It carries the whole plan: room names, item
-notes and ids included.
+A server link is the compact v4 form (`#s=`), the one the app writes (`buildPlanUrl`,
+`worker/link.ts`). It carries the whole plan: room names, item notes and ids included.
 
-The editor does not open every v4 plan yet. Its own gate, `editablePlan` (`src/lib/plans.ts`),
-takes one rectangular room (listed from any corner, anywhere: turned and moved to the origin,
-which changes no drawing) whose pieces are all rectangles with a placement; anything else gets
-the "needs a newer Room Planner" dialog. The server asks the same function, so it never hands out
-a link the app would refuse. When it says no, the server still answers in full (the checked plan,
-the issues and the drawing) with `url: null`, `editable: false`, `notEditable` (its reasons), and
-one line of text: "No edit link yet: Room Planner's editor can't open plans with several rooms
-yet. The plan above is complete and checked, and the drawing shows it in full; editing support is
-coming." The viewer then hides Open in Room Planner and says the same. PRs 7a, 7b, 8 and 9 loosen
-`editablePlan`, and links appear for those plans with no change to the server. A property test
-round-trips random rectangular plans through a server link and `readPlanLink`; an e2e test opens
-a server link in the app and compares what the editor stored.
+The editor opens every valid plan since the Floor plans release (PRs 7a, 7b, 8 and 9). The server
+still passes each plan through the editor's own `editablePlan` (`src/lib/plans.ts`), which turns
+each room to start at its top-left corner and moves the floor to the origin (no drawing changes),
+so the link opens exactly as the editor stores it. Until then the server answered plans the editor
+could not open with `url: null` and a reason; that path is gone. A property test round-trips random
+rectangular plans through a server link and `readPlanLink`, a unit test does the same for an L
+room, two rooms and a rectangle away from the origin, and e2e tests open a one-room and a two-room
+server link in the app and compare what the editor stored.
 
 Link source attribution (`share_link_opened` with `source: 'mcp'`): TODO, now that PR 5 has
 merged: append `&src=mcp` in `planLink` and read it in `boot.ts`.
@@ -742,7 +751,10 @@ render it): the user's browser draws the plan.
   `tools/list`. Drawing in the browser takes that work off the server and keeps any markup out of
   the model's context.
 - **What it shows:** the drawing with its dimensions, area and scale bar, as a white sheet in
-  either theme; pieces with errors outlined red, pieces and doors with warnings amber; the errors
+  either theme; on a floor of several rooms, each room's name and area and the shared walls, as in
+  the export; pieces set aside listed under the drawing; pieces with errors outlined red, pieces
+  and doors with warnings amber, rooms an issue names (overlapping rooms, a window between rooms)
+  tinted; the errors
   and warnings as a list (choosing one points at its entities and dims the rest), tight gaps under
   a closed disclosure; and **Open in Room Planner**, which asks the host to open the link
   (`ui/open-link`; the sandbox blocks `window.open`). Light and dark follow `hostContext.theme` and
@@ -781,6 +793,21 @@ infrequent overruns (Cloudflare's limits page); consistent overruns end in error
 | `check_layout`          |   5 ms | 3–16 ms |
 | `read_plan`             |   9 ms | 4–27 ms |
 | `create_plan`           |  10 ms | 3–35 ms |
+
+Re-measured for the Agents release (2026-11-25, the same way, 9 to 11 calls of each over the
+2025-era protocol, on a two-room floor with an L-shaped living room, a door between the rooms, an
+L sofa, a round table, a piece set aside and seven issues):
+
+| Call                    | Median | Range   |
+| ----------------------- | -----: | ------- |
+| `tools/list`            | 3.5 ms | 2–7 ms  |
+| `resources/read` (view) | 3.5 ms | 2–6 ms  |
+| `check_layout`          |   6 ms | 5–23 ms |
+| `create_plan`           |   8 ms | 5–16 ms |
+| `read_plan`             |  10 ms | 6–15 ms |
+
+Every invocation ended `ok`. `read_plan` costs most: it decompresses the link, checks the plan and
+compresses a fresh link.
 
 Most of it is the SDK's own per-request work (a fresh server, message validation), which a
 static `resources/read` shows; the spread is cold isolates. Two changes brought `create_plan` down

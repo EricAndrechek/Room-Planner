@@ -45,8 +45,8 @@ ${FEATURES.map((f) => `- ${f}`).join('\n')}
 
 Room Planner has a free remote MCP server (Streamable HTTP, no authentication): ${url(MCP_PATH)}
 
-- \`create_plan\`: a plan (rooms, doors, windows, furniture, in ft, in, m or cm) checked for layout problems, and a link that opens it in the planner. Clients with MCP Apps show the drawing.
-- \`check_layout\`: overlapping pieces, pieces outside the room, blocked doors and tight clearances, without a link.
+- \`create_plan\`: a plan (one room or a floor of connected rooms, doors, windows, furniture of any shape, pieces set aside; in ft, in, m or cm) checked for layout problems, and a link that opens it in the planner. Clients with MCP Apps show the drawing.
+- \`check_layout\`: overlapping pieces, pieces outside every room, blocked doors and doorways (on both sides of a door between rooms), overlapping rooms and tight clearances, without a link.
 - \`read_plan\`: the plan in a Room Planner link, to edit and send back to create_plan.
 
 ${MCP_PRIVACY} Server card: ${url(`${MCP_PATH}/server-card`)}. MCP Registry: \`${registry.name}\`.
