@@ -57,7 +57,9 @@ export type AnalyticsEvent =
   | 'pwa_install_prompted'
   | 'pwa_installed'
   | 'app_update_applied'
-  | 'storage_persist_result';
+  | 'storage_persist_result'
+  | 'webmcp_available'
+  | 'webmcp_tool_called';
 
 export type AnalyticsProps = Record<string, string | number | boolean | null | undefined>;
 
