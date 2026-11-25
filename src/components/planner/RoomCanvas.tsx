@@ -1,4 +1,10 @@
-import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, RefObject } from 'react';
+import {
+  useMemo,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { Home, Move, Plus, Sofa, Trash2 } from 'lucide-react';
 import { migrateColor } from '../../core/colors';
 import { DESIGN_MODES, PIXELS_PER_UNIT } from '../../lib/constants';
@@ -6,7 +12,8 @@ import { feetToDisplay, nudgeStep } from '../../core/units';
 import type { ItemWarning, Point } from '../../core/geometry';
 import { floorBounds, roomName, sharedWalls, type RoomGuide } from '../../core/floor';
 import { itemParts, partsBounds } from '../../core/geometry/shapes';
-import { firstCorner, isRectangle, roomBounds, wallFrame } from '../../core/geometry/walls';
+import { labelSpot } from '../../core/geometry/labels';
+import { isRectangle, roomBounds, wallFrame } from '../../core/geometry/walls';
 import {
   areaText,
   doorsOf,
@@ -84,6 +91,8 @@ interface RoomCanvasProps {
   selectionBar?: ReactNode;
   /** Tap-to-place: the piece's outline under the pointer. */
   ghost?: PlacementGhost | null;
+  /** The pieces as they last settled (not mid-drag), for placing the room labels. */
+  labelItems?: readonly Item[];
 }
 
 const GRID_STYLE = {
@@ -94,12 +103,6 @@ const GRID_STYLE = {
 
 const pathOf = (room: Pick<Room, 'outline'>, P: number) =>
   `M ${room.outline.map((p) => `${p.x * P} ${p.y * P}`).join(' L ')} Z`;
-
-/** Where a room's name goes: just inside its top-left corner (its first corner as listed). */
-const labelAt = (room: Room): Point => {
-  const c = room.outline[firstCorner(room.outline)]!;
-  return { x: c.x + 0.35, y: c.y + 0.35 };
-};
 
 /** The zoomable/pannable floor plan: one room, or a floor of several. */
 export function RoomCanvas({
@@ -127,6 +130,7 @@ export function RoomCanvas({
   rooms: picking = null,
   selectionBar,
   ghost = null,
+  labelItems,
 }: RoomCanvasProps) {
   const room = roomById(plan, activeRoomId);
   const several = plan.rooms.length > 1;
@@ -162,6 +166,29 @@ export function RoomCanvas({
   });
   const floorSvg = (extra: CSSProperties = {}): CSSProperties => ({ ...box(bounds), ...extra });
   const viewBox = `${bounds.left * P} ${bounds.top * P} ${floorDims.width * P} ${floorDims.height * P}`;
+  // Room labels: placed as the export places them (core/geometry/labels.ts), clear of the
+  // furniture. Recomputed when the pieces settle (not on every drag frame) and when the zoom
+  // changes enough to change the label's size on the floor.
+  const zoomStep = Math.round(Math.log2(zoom) * 8) / 8;
+  const settled = labelItems ?? plan.items;
+  const labels = useMemo(() => {
+    if (!several) return [];
+    const z = 2 ** zoomStep;
+    const boxes = settled
+      .filter((i) => i.placement && !i.hidden)
+      .map((i) => partsBounds(itemParts(i)));
+    return plan.rooms.map((r) => {
+      const name = roomName(plan, r);
+      const area = areaText(roomArea(r), unitSystem);
+      const rb = roomBounds(r);
+      const roomy = (rb.right - rb.left) * P * z >= 170;
+      // About 6.5 px a character at 11 px, plus padding (and the move icon in room setup).
+      const textPx = (roomy ? `${name} ${area}` : name).length * 6.5 + (isRoomSetup ? 36 : 16);
+      const half = { w: textPx / 2 / (P * z), h: (isRoomSetup ? 14 : 11) / (P * z) };
+      const spot = labelSpot(r, boxes, half);
+      return { room: r, name, area, roomy, spot };
+    });
+  }, [several, plan, settled, zoomStep, unitSystem, isRoomSetup, P]);
 
   return (
     <div
@@ -368,32 +395,33 @@ export function RoomCanvas({
             <div className="absolute left-0 top-0 w-0 h-0" data-floor-origin aria-hidden="true" />
 
             {several &&
-              plan.rooms.map((r) => {
-                const at = labelAt(r);
-                const name = roomName(plan, r);
-                const area = areaText(roomArea(r), unitSystem);
+              labels.map(({ room: r, name, area, roomy, spot }) => {
                 const on = r.id === room.id;
-                // Kept inside the room on screen: the area goes first when it is narrow.
-                const rb = roomBounds(r);
-                const screenW = (rb.right - rb.left) * P * zoom;
-                const roomy = screenW >= 170;
+                // Inside the walls on screen: as wide as the room is there, shortened if need be.
+                const screenW = spot.width * P * zoom;
                 const style: CSSProperties = {
-                  maxWidth: Math.max(44, screenW - 14),
-                  left: at.x * P,
-                  top: at.y * P,
-                  transform: `scale(${k})`,
-                  transformOrigin: '0 0',
-                  zIndex: picking ? 60 : 5,
+                  maxWidth: Math.max(44, screenW - 12),
+                  left: spot.x * P,
+                  top: spot.y * P,
+                  transform: `translate(-50%, -50%) scale(${k})`,
+                  transformOrigin: 'center',
+                  // A clear spot sits under the furniture; with none, over it (and see-through).
+                  zIndex: picking ? 60 : spot.clear ? 5 : 12,
                 };
                 if (!picking) {
                   if (screenW < 60) return null;
                   return (
                     <div
                       key={`label-${r.id}`}
-                      className="absolute truncate whitespace-nowrap pointer-events-none rounded-md bg-white/80 px-1.5 py-0.5 text-[11px] leading-4 text-slate-600 shadow-xs ring-1 ring-slate-200/80"
+                      className={`absolute truncate whitespace-nowrap pointer-events-none rounded-md px-1.5 py-0.5 text-[11px] leading-4 text-slate-600 ring-1 ${
+                        spot.clear
+                          ? 'bg-white/80 shadow-xs ring-slate-200/80'
+                          : 'bg-white/75 shadow-sm ring-slate-300/80 backdrop-blur-[2px]'
+                      }`}
                       style={style}
                       aria-hidden="true"
                       data-testid="room-label"
+                      data-clear={spot.clear || undefined}
                     >
                       <span className="font-semibold text-slate-800">{name}</span>
                       {roomy && ` ${area}`}

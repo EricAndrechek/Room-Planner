@@ -901,6 +901,9 @@ export function Planner({ store, initial }: PlannerProps) {
   const roomNames = useMemo(() => plan.rooms.map((r) => roomName(plan, r)), [plan]);
   const dragItem = draggingId ? plan.items.find((i) => i.id === draggingId) : undefined;
   const ghostItem = placingItem ?? dragItem;
+  // The room labels on the plan follow the pieces once they settle, not on every drag frame.
+  const [labelItems, setLabelItems] = useState(plan.items);
+  if (!dragFrame && !rotateFrame && labelItems !== plan.items) setLabelItems(plan.items);
   const overlayPiece = overlayItemId ? plan.items.find((i) => i.id === overlayItemId) : undefined;
   const overlayRoom = (overlayPiece && pieceRoom(plan, overlayPiece)) || room;
 
@@ -1173,6 +1176,7 @@ export function Planner({ store, initial }: PlannerProps) {
               onWindowPointerDown={(e, win) => openings.startOpeningDrag(e, win.id, 'windows')}
               highlightDoorIds={highlightDoorIds}
               activeRoomId={activeRoomId}
+              labelItems={labelItems}
               rooms={
                 isRoomSetup && several
                   ? { onSelect: selectRoom, onPointerDown: rooms.startRoomDrag, drag: rooms.drag }
