@@ -31,6 +31,7 @@
     "@astrojs/sitemap": "^3.7.6",
     "@modelcontextprotocol/server": "2.4.0",
     "@tailwindcss/vite": "^4.3.5",
+    "@wave-rf/cloudflare-md-router": "0.4.1",
     "astro": "^7.4.13",
     "lean-qr": "2.7.4",
     "lucide-react": "^1.77.0",

@@ -11,6 +11,8 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "resolveJsonModule": true,
+    // @wave-rf/cloudflare-md-router ships TypeScript source with `.ts` imports.
+    "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "skipLibCheck": true,
     "noEmit": true

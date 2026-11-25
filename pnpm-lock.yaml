@@ -178,6 +178,9 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.3.5
         version: 4.3.5(vite@8.3.8(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
+      '@wave-rf/cloudflare-md-router':
+        specifier: 0.4.1
+        version: 0.4.1(@cloudflare/workers-types@5.20261107.1)
       astro:
         specifier: ^7.4.13
         version: 7.4.13(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)
@@ -1776,6 +1779,13 @@ packages:
 
   '@vscode/l10n@0.0.18':
     resolution: {integrity: sha512-KYSIHVmslkaCDyw013pphY+d7x1qV8IZupYfeIfzNA+nsaWHbn5uPuQRvdRFsa9zFzGeudPuoGoZ1Op4jrJXIQ==}
+
+  '@wave-rf/cloudflare-md-router@0.4.1':
+    resolution: {integrity: sha512-77L0V0JLmVovzhHDEgbgTH0bIH00Ng0nDABitEA1I8BIhZV+gIFkOBl+ZAZKzuSwWlB9akKnNt0wUxK/fyfAPg==}
+    engines: {node: '>=18.0.0'}
+    hasBin: true
+    peerDependencies:
+      '@cloudflare/workers-types': '>=4.0.0'
 
   abort-controller@3.0.0:
     resolution: {integrity: sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==}
@@ -4811,6 +4821,10 @@ snapshots:
       vscode-uri: 3.2.0
 
   '@vscode/l10n@0.0.18': {}
+
+  '@wave-rf/cloudflare-md-router@0.4.1(@cloudflare/workers-types@5.20261107.1)':
+    dependencies:
+      '@cloudflare/workers-types': 5.20261107.1
 
   abort-controller@3.0.0:
     dependencies:

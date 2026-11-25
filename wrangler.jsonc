@@ -15,7 +15,23 @@
     "directory": "./dist",
     "binding": "ASSETS",
     // Only these paths run the Worker first; every other request is an asset or the 404 page.
-    "run_worker_first": ["/mcp", "/mcp/*", "/api/*"],
+    // Only the pages (for the Markdown router), the MCP server and the API run the Worker; every
+    // asset is served without it (docs/DEPLOY.md, "Discovery for agents").
+    "run_worker_first": [
+      "/",
+      "/help/",
+      "/faq/",
+      "/agents/",
+      "/privacy/",
+      "/support/",
+      "/terms/",
+      "/guides/",
+      "/guides/*",
+      "!/guides/*.md",
+      "/mcp",
+      "/mcp/*",
+      "/api/*",
+    ],
     // Astro emits dist/404.html; serve it (with a 404 status) for unknown paths.
     "not_found_handling": "404-page",
   },

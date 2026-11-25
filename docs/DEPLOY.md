@@ -140,6 +140,63 @@ is a new registry entry, not a rename of the existing one.
 `/plan.schema.json` are static files built by Astro from the Zod schema, so they never invoke the
 Worker; `public/_headers` gives them CORS. The service worker never answers `/api/`.
 
+### Discovery for agents
+
+Every file below is built from one source, so URLs and versions can't drift. The origin comes from
+`SITE_URL` in `astro.config.mjs`; the server's name and version come from `server.json`; the paths,
+the Markdown twins, the API catalog and security.txt come from `scripts/discovery.mjs`.
+`e2e/discovery.spec.ts` fetches all of them, parses them and checks they agree with each other. It
+runs locally under `astro preview`, where the header checks are skipped, and fully against a
+preview: run `cross-browser.yml` with `base_url`.
+
+| URL                                                                                                                            | What it is                                                                                                                                                                                                        | Source of truth                                             |
+| ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `/robots.txt`                                                                                                                  | Allows every crawler, AI crawlers included, with `Content-Signal: search=yes, ai-input=yes, ai-train=yes` (Cloudflare's content signals) and the sitemap. Change the signals there if the owner's stance changes. | `src/pages/robots.txt.ts`                                   |
+| `/sitemap-index.xml`, `/sitemap-0.xml`                                                                                         | Every public page, with lastmod taken from git.                                                                                                                                                                   | `@astrojs/sitemap`, `scripts/lastmod.mjs`                   |
+| `/llms.txt`                                                                                                                    | Follows llmstxt.org: the summary, "Use Room Planner from an agent" (MCP, REST, schema, plan links, catalogs), the pages and the guides, each linked to its Markdown twin.                                         | `src/pages/llms.txt.ts`                                     |
+| `/llms-full.txt`                                                                                                               | The FAQ, help, AI assistants, privacy and guides pages, converted to Markdown, in one file.                                                                                                                       | `scripts/llms-full.mjs`                                     |
+| `/index.md`, `/faq.md`, `/help.md`, `/agents.md`, `/privacy.md`, `/support.md`, `/terms.md`, `/guides.md`, `/guides/<slug>.md` | The Markdown twin of each page, made by the same converter.                                                                                                                                                       | `scripts/llms-full.mjs`, `MARKDOWN_PAGES`                   |
+| `/openapi.json`                                                                                                                | The REST API, as OpenAPI 3.1.                                                                                                                                                                                     | `src/lib/openapi.ts`, from the Zod schema and `server.json` |
+| `/plan.schema.json`                                                                                                            | The plan format, as JSON Schema 2020-12.                                                                                                                                                                          | `src/lib/planSchema.ts`                                     |
+| `/.well-known/api-catalog`                                                                                                     | RFC 9727 linkset: the REST API and the MCP endpoint, each with a service-desc, service-doc, terms and privacy link.                                                                                               | `scripts/discovery.mjs`                                     |
+| `/.well-known/ai-catalog.json`                                                                                                 | AI Catalog: the MCP server card and the OpenAPI.                                                                                                                                                                  | `public/.well-known/ai-catalog.json`                        |
+| `/mcp/server-card`                                                                                                             | The MCP Server Card (SEP-2127, Final). `<endpoint>/server-card` is the recommended location; the AI Catalog points at it. No `/.well-known/mcp*` file exists, because the SEP doesn't define one.                 | `worker/http.ts`, `server.json`                             |
+| `/.well-known/security.txt`                                                                                                    | RFC 9116: contacts are GitHub private advisories and issues; it expires a year after each build.                                                                                                                  | `scripts/discovery.mjs`                                     |
+| `/.well-known/mcp-registry-auth`                                                                                               | The MCP Registry domain proof (see above).                                                                                                                                                                        | `public/.well-known/`                                       |
+
+There is deliberately no `ai-plugin.json`: OpenAI's plugin manifest is retired, and Custom GPT
+Actions import `/openapi.json` directly.
+
+**Pointers.**
+
+- `/` and `/agents/` carry `<link rel="service-desc">` (the OpenAPI), `api-catalog`,
+  `service-doc` and `describedby` (llms.txt) in their HTML, and send the same as `Link` headers.
+- Every page with a twin carries `<link rel="alternate" type="text/markdown">`, and the Markdown
+  router sends the same as a `Link` header.
+- `/agents/` describes the MCP server and the REST API as schema.org `WebAPI` nodes.
+
+**Headers.** `public/_headers` sets CORS `*` and content types on the discovery files, and
+`scripts/llms-full.mjs` appends rules for the files it writes (`text/markdown` for the twins,
+`application/linkset+json`, `text/plain`). All of these are static assets, so they never invoke
+the Worker. The PWA neither precaches them nor answers them: it precaches only html, js, css,
+images and fonts, and falls back to the shell for `/` alone.
+
+**The Markdown router.**
+
+- Pages go through `@wave-rf/cloudflare-md-router` (pinned) in `worker/index.ts`:
+  - `Accept: text/markdown` and known LLM crawlers (GPTBot, ClaudeBot, PerplexityBot and others)
+    get the twin;
+  - everyone else, Googlebot and Bingbot included, gets the HTML with a `Link` to the twin;
+  - every negotiated answer carries `Vary: Accept`.
+- `worker/index.ts` appends the API `Link`s on `/` and `/agents/` to the router's, rather than
+  replacing them.
+- `run_worker_first` lists only the page routes (`/`, `/help/`, `/faq/`, `/agents/`, `/privacy/`,
+  `/support/`, `/terms/`, `/guides/`, `/guides/*` but not `!/guides/*.md`), plus `/mcp`, `/mcp/*`
+  and `/api/*`. Assets (scripts, styles, images, `.md`, `.txt`, `.json`, `/.well-known/`) stay
+  off the Worker: a Worker invocation costs CPU and counts against Workers Free's 100,000 requests
+  a day, while assets are free.
+- When you add a page, add its route there and to `MARKDOWN_PAGES`.
+
 ### Assistant directories
 
 `/privacy/`, `/support/` and `/terms/` are the URLs the Claude and ChatGPT directories ask for;

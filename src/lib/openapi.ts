@@ -3,6 +3,7 @@
  * agents with HTTP but no MCP client, and for ChatGPT Custom GPT Actions. Built at build time from
  * the plan's Zod schema (src/lib/planSchema.ts), so it never drifts from what the API accepts.
  */
+import registry from '../../server.json';
 import { publishedPlanSchema } from './planSchema';
 import { SITE_NAME } from './site';
 
@@ -139,7 +140,8 @@ export function openApiSpec(site: string): Record<string, unknown> {
     openapi: '3.1.0',
     info: {
       title: `${SITE_NAME} API`,
-      version: '1.0.0',
+      // The MCP server's version (server.json): one version for every description of the service.
+      version: registry.version,
       summary: 'Lay out rooms and furniture, check the layout, and get a link that opens the plan.',
       description:
         `Free, no account and no key. The same operations as ${SITE_NAME}'s MCP server (${origin}/mcp). ` +

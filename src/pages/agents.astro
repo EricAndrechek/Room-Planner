@@ -73,6 +73,35 @@ const jsonLd = [
     inLanguage: 'en',
     isPartOf: { '@id': `${abs('')}#website` },
     about: { '@id': `${abs('')}#app` },
+    mainEntity: [{ '@id': `${abs('')}#mcp` }, { '@id': `${abs('')}#api` }],
+  },
+  // The two ways in for agents (scripts/discovery.mjs has the same URLs for the API catalog).
+  {
+    '@type': 'WebAPI',
+    '@id': `${abs('')}#mcp`,
+    name: `${SITE_NAME} MCP server`,
+    alternateName: registry.name,
+    description: registry.description,
+    url: endpoint,
+    documentation: abs('agents/'),
+    termsOfService: abs('terms/'),
+    softwareVersion: registry.version,
+    isAccessibleForFree: true,
+    provider: { '@type': 'Organization', name: SITE_NAME, url: abs('') },
+    sameAs: `${endpoint}/server-card`,
+  },
+  {
+    '@type': 'WebAPI',
+    '@id': `${abs('')}#api`,
+    name: `${SITE_NAME} API`,
+    description:
+      'The MCP tools over plain HTTP: check a plan, make the link that opens it, read a plan from a link.',
+    url: abs('api/'),
+    documentation: [abs('openapi.json'), abs('agents/')],
+    termsOfService: abs('terms/'),
+    softwareVersion: registry.version,
+    isAccessibleForFree: true,
+    provider: { '@type': 'Organization', name: SITE_NAME, url: abs('') },
   },
 ];
 
@@ -233,12 +262,11 @@ const code = 'block bg-slate-900 text-slate-100 rounded-lg p-3 text-sm overflow-
         Agentic tools, custom agents and ChatGPT Custom GPTs can call the same operations over plain
         HTTP, with no key: <code>POST /api/plan/check</code>, <code>POST /api/plan/link</code> (the
         plan, its problems and the link) and <code>GET /api/plan?url=…</code> (read a link). The
-        description is{' '}
+        description, in OpenAPI 3.1, is{' '}
         <a href={abs('openapi.json')} class="text-indigo-700 underline">
           /openapi.json
         </a>
-        (OpenAPI 3.1). Code sandboxes in ChatGPT and Claude.ai usually have no internet; they use
-        the next way.
+        . Code sandboxes in ChatGPT and Claude.ai usually have no internet; they use the next way.
       </p>
       <pre class={code} tabindex="0">{API_CURL}</pre>
       <p class="mt-3">

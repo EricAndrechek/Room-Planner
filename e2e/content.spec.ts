@@ -171,10 +171,10 @@ test('llms.txt, llms-full.txt and the sitemap list the new pages', async ({ requ
   expect(llms).toMatch(/^# Room Planner\n\n> /);
   for (const path of [...GUIDES, '/faq/', '/help/', '/agents/', '/privacy/'])
     expect(llms).toContain(`${path})`);
-  expect(llms).toContain('## For AI agents');
+  expect(llms).toContain('## Use Room Planner from an agent');
   expect(llms).toContain('## Give the user a ready-made plan');
   expect(llms).toContain('/openapi.json');
-  expect(llms).toMatch(/server \(Streamable HTTP, no authentication\): https?:\/\/[^\s]+\/mcp\n/);
+  expect(llms).toMatch(/server \(Streamable HTTP, no authentication\): https?:\/\/[^\s]+\/mcp /);
 
   const full = await (await request.get('/llms-full.txt')).text();
   expect(full).toContain('# Frequently asked questions');

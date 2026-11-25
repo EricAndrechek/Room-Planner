@@ -16,6 +16,7 @@ import {
   readableMarkdown,
 } from '../lib/site';
 import { PLAN_SCHEMA_PATH } from '../lib/planSchema';
+import { PATHS, markdownPath } from '../../scripts/discovery.mjs';
 
 /**
  * llms.txt (https://llmstxt.org): what the site is and where its content lives, for AI assistants
@@ -24,7 +25,13 @@ import { PLAN_SCHEMA_PATH } from '../lib/planSchema';
  */
 export const GET: APIRoute = ({ site }) => {
   const base = import.meta.env.BASE_URL.replace(/\/+$/, '');
-  const url = (path: string) => new URL(`${base}/${path}`, site ?? 'http://localhost').toString();
+  const url = (path: string) =>
+    new URL(`${base}/${path.replace(/^\/+/, '')}`, site ?? 'http://localhost').toString();
+  /** ` ([Markdown](…))` for a page with a Markdown twin. */
+  const md = (path: string) => {
+    const m = markdownPath(path);
+    return m ? ` ([Markdown](${url(m)}))` : '';
+  };
 
   const body = `# ${SITE_NAME}
 
@@ -47,14 +54,24 @@ Features:
 
 ${FEATURES.map((f) => `- ${f}`).join('\n')}
 
+## Use Room Planner from an agent
+
+- [MCP server](${url(MCP_PATH)}): free remote MCP server (Streamable HTTP, no authentication): ${url(MCP_PATH)} with \`create_plan\`, \`check_layout\` and \`read_plan\`, and an MCP Apps viewer. [Server card](${url(PATHS.serverCard)}); MCP Registry name \`${registry.name}\`.
+- [REST API](${url(PATHS.openapi)}): the same operations over plain HTTP (OpenAPI 3.1): \`POST /api/plan/check\`, \`POST /api/plan/link\`, \`GET /api/plan?url=\`. No key.
+- [Plan JSON Schema](${url(PLAN_SCHEMA_PATH)}): the plan format the tools, the API and \`#s=\` links take.
+- [Plan links](${url('agents/')}#plan-links): give the user a ready-made plan as a link, with tools, HTTP, code or none (below).
+- [API catalog](${url(PATHS.apiCatalog)}) (RFC 9727) and [AI catalog](${url(PATHS.aiCatalog)}): the same, for discovery.
+- WebMCP: in Chrome with WebMCP, the planner page registers editing tools for the browser's own agent (below).
+
 ## Pages
 
-- [Planner](${url('')}): the app itself (needs JavaScript).
-- [Help](${url('help/')}): how to use every feature, step by step, and keyboard shortcuts.
-- [FAQ](${url('faq/')}): short answers: price, accounts, data storage, phones, sharing, export, units, offline use, door types.
-- [Room layout guides](${url('guides/')}): furniture sizes, clearances and example floor plans.
-- [For AI assistants](${url('agents/')}): how to connect Claude, ChatGPT, VS Code, Cursor or Claude Code to the MCP server.
-- [Privacy](${url('privacy/')}), [Support](${url('support/')}) and [Terms](${url('terms/')}).
+- [Planner](${url('')}): the app itself (needs JavaScript).${md('')}
+- [Help](${url('help/')}): how to use every feature, step by step, and keyboard shortcuts.${md('help/')}
+- [FAQ](${url('faq/')}): short answers: price, accounts, data storage, phones, sharing, export, units, offline use, door types.${md('faq/')}
+- [Room layout guides](${url('guides/')}): furniture sizes, clearances and example floor plans.${md('guides/')}
+- [For AI assistants](${url('agents/')}): connecting Claude, ChatGPT, VS Code, Cursor or Claude Code to the MCP server; the REST API; plan links.${md('agents/')}
+- [Privacy](${url('privacy/')}): what the planner, the MCP server and the API collect.${md('privacy/')}
+- [Support](${url('support/')}) and [Terms](${url('terms/')}).
 
 ## Give the user a ready-made plan
 
@@ -89,9 +106,7 @@ ${READABLE_SYNTAX.map((l) => `   - ${l}`).join('\n')}
    - ${readableMarkdown(url(''), READABLE_EXAMPLES.bedroom, 'the bedroom')}
    - ${readableMarkdown(url(''), READABLE_EXAMPLES.flat, 'the flat')}
 
-## For AI agents
-
-Room Planner has a free remote MCP server (Streamable HTTP, no authentication): ${url(MCP_PATH)}
+## MCP tools
 
 - \`create_plan\`: a plan (one room or a floor of connected rooms, doors, windows, furniture of any shape, pieces set aside; in ft, in, m or cm) checked for layout problems, and a link that opens it in the planner. Clients with MCP Apps show the drawing.
 - \`check_layout\`: overlapping pieces, pieces outside every room, blocked doors and doorways (on both sides of a door between rooms), overlapping rooms and tight clearances, without a link.
@@ -101,15 +116,15 @@ The same operations over plain HTTP: ${url('openapi.json')} (OpenAPI 3.1).
 
 In Chrome with WebMCP (\`chrome://flags/#enable-webmcp-testing\`, or the origin trial), the planner page itself registers tools on \`document.modelContext\` for the browser's agent: \`get_plan\`, \`check_layout\`, \`add_item\`, \`update_item\`, \`set_aside_item\`, \`place_item\`, \`remove_item\`, \`add_opening\`, \`update_opening\`, \`remove_opening\`, \`add_room\`, \`update_room\`, \`remove_room\` and \`replace_plan\` (which asks the user first). Each edit is one undo step on the user's open plan, in its display unit; nothing is sent anywhere.
 
-${MCP_PRIVACY} Server card: ${url(`${MCP_PATH}/server-card`)}. MCP Registry: \`${registry.name}\`.
+${MCP_PRIVACY}
 
 ## Guides
 
-${GUIDES.map((g) => `- [${g.heading}](${url(guidePath(g.slug))}): ${g.description}`).join('\n')}
+${GUIDES.map((g) => `- [${g.heading}](${url(guidePath(g.slug))}): ${g.description}${md(guidePath(g.slug))}`).join('\n')}
 
 ## Optional
 
-- [Full text of the help, FAQ and guides](${url('llms-full.txt')}): the pages above as Markdown, in one file.
+- [Full text of the help, FAQ, AI assistants page, privacy policy and guides](${url('llms-full.txt')}): the pages above as Markdown, in one file.
 `;
   return new Response(body, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
 };
