@@ -1,6 +1,8 @@
 # Plan format v4 and agent interfaces
 
-Status: design, not yet implemented. Measurements were taken on 2026-11-24 against `main` at
+Status: implemented. PRs 1 to 3, 5, 7a, 7b, 8 and 9 have shipped (the last four as the Floor plans
+release); PRs 4 and 10 are the Agents release (PR #40), and 6 was folded into 4 (section 10).
+The design measurements were taken on 2026-11-24 against `main` at
 `6aed18d` (Node 22.23.5, Apple silicon). The spike scripts are not committed; section 12 lists them.
 
 This document fixes the next plan format and the architecture around it, so that the phased PRs in
@@ -27,7 +29,7 @@ reason for it.
 | Core package              | `src/core/`, a folder with an import boundary enforced by ESLint. Not a workspace package.                                             |
 | MCP server                | `/mcp` on the existing Worker, official SDK `createMcpHandler`, stateless. Three tools that take or return a whole plan.               |
 | MCP image                 | No server-side image. An MCP Apps view (`ui://`) draws the plan's SVG in the chat client. PNG would need Workers Paid (declined).      |
-| WebMCP                    | Ten tools registered from a lazy chunk when `document.modelContext` (or `navigator.modelContext`) exists. Each is one undo step.       |
+| WebMCP                    | Fourteen tools registered from a lazy chunk when `document.modelContext` (or `navigator.modelContext`) exists. Each is one undo step.  |
 
 The one owner decision, Workers Paid for PNG images, was taken: the account stays on Workers Free,
 and the MCP server shows plans through an MCP Apps view instead (section 7, "The plan viewer").
@@ -982,51 +984,82 @@ own Worker metrics.
 
 ## 8. WebMCP
 
+Built in the Agents release (PR 10, with the MCP server in one PR).
+
 ### Status of the API
 
-Chrome exposes `document.modelContext`. `navigator.modelContext` was the earlier name and is
-deprecated. Tools are registered with `registerTool(tool, { signal })` and removed by aborting the
-signal. It is in origin trial through Chrome 156 and planned to ship in 157. No other browser has
-signalled support.
+Checked 2026-11-25 against the spec draft of 24 November 2026
+(<https://webmachinelearning.github.io/webmcp/>), Chrome's WebMCP docs
+(<https://developer.chrome.com/docs/ai/webmcp>) and chromestatus (feature 5117755740913664):
+
+- `document.modelContext` (secure contexts) is the API. `navigator.modelContext` was the earlier
+  name and is deprecated.
+- `registerTool(tool, { signal, exposedTo })` returns a promise; aborting the signal is the only
+  way to unregister (no `unregisterTool`, `provideContext` or `clearContext` any more).
+- A tool is `{ name, title, description, inputSchema, outputSchema, execute(input, { signal }),
+annotations }`, with the annotations `readOnlyHint`, `untrustedContentHint`, `consequentialHint`
+  and `debugging`. `execute`'s value is serialised to JSON for the agent.
+- A rejected `execute` reaches the agent as a bare `OperationError`: "tool execution errors are not
+  exposed to the web". Chrome's guidance is to return actionable error text instead.
+- Chrome: a dev trial behind `chrome://flags/#enable-webmcp-testing` since 146, an origin trial
+  from 149 through 156, and no shipping milestone yet. No other browser has signalled support.
 
 ### Design
 
-`src/webmcp/register.ts` is loaded by a dynamic import from `Planner.tsx` only when
-`document.modelContext ?? navigator.modelContext` exists, so other browsers download nothing. It
-registers the tools once the planner has mounted and aborts them on unmount. A rejected
-registration (permission disabled) is ignored.
+- **Loading.** `src/webmcp/useWebMcp.ts` is the only WebMCP code in the planner chunk (about
+  0.6 KB gzip): `Planner.tsx` calls it, and when `document.modelContext ?? navigator.modelContext`
+  exists it imports `register.ts`, a lazy chunk (9.8 KB gzip, the schemas included), registers the
+  tools once the planner has mounted and aborts them on unmount. A refused registration is ignored.
+  The service worker precaches every script, so browsers without the API fetch the chunk once
+  per deploy in the background, which keeps it available offline where the API exists.
+- **Older builds.** For `navigator.modelContext`, `registerTool` may return nothing or a handle,
+  `unregisterTool(name)` or `provideContext({ tools })` may exist, and input may arrive as a JSON
+  string; all are handled, from the older drafts (not checked against an old Chrome).
+- **Edits.** `src/webmcp/tools.ts` maps each tool to the app's own edits (`src/lib/edits.ts`,
+  `src/core/ops.ts`) against a small host (the planner, or a fake in tests): the working plan, one
+  `history.apply` per call (one undo step), an announcement through the live region ("Assistant:
+  Sofa added", spoken in place of the automatic description of that change), and a visible
+  selection of what changed (the piece, door, window or room; the Set aside list for a piece set
+  aside). An edit is applied only when the plan it makes passes the schema and the integrity
+  checks; a call that changes nothing returns `changed: false` and adds no undo step.
+- **Arguments** are in the plan's display unit (`ft` for feet and inches), as on the MCP server,
+  and are checked with the plan's own schema (`src/webmcp/args.ts`). Errors come back as
+  `{ error }` naming the field, never as a rejection, so the agent can fix the call.
+- **Schemas.** `src/webmcp/schemas.json` holds each tool's input JSON Schema, generated from the
+  Zod schemas with `z.toJSONSchema(..., { io: 'input' })`; the chunk imports the JSON, so the
+  generator never reaches the browser. A unit test fails when it is stale; regenerate it with
+  `UPDATE_WEBMCP_SCHEMAS=1 pnpm test src/webmcp`.
 
-Each tool validates its arguments with the shared schema, calls a `core/ops` function through
-`history.apply` (one undo step), announces the result through the existing live region, and returns
-the affected entity plus the current issues. An agent's edits are therefore undoable with Ctrl+Z
-and audible to screen-reader users exactly like the user's own.
+| Tool             | App action                                                             | Hints                                    |
+| ---------------- | ---------------------------------------------------------------------- | ---------------------------------------- |
+| `get_plan`       | the working plan in the display unit, a summary and the issues         | read-only, untrusted content (user text) |
+| `check_layout`   | `checkLayout`, the same issues the plan shows                          | read-only                                |
+| `add_item`       | add furniture at a point, in a free spot (`place: true`), or set aside |                                          |
+| `update_item`    | label, size, colour, shape and cut, notes, lock, hide, move, turn      |                                          |
+| `set_aside_item` | take a piece off the plan                                              |                                          |
+| `place_item`     | put a piece set aside back, at a point or in a free spot               |                                          |
+| `remove_item`    | delete a piece                                                         |                                          |
+| `add_opening`    | a door or window on a room's wall (a free spot when none is given)     |                                          |
+| `update_opening` | wall, offset, width; for doors type, hinge and swing                   |                                          |
+| `remove_opening` | delete a door or window                                                |                                          |
+| `add_room`       | a rectangular room against a free side of another room                 |                                          |
+| `update_room`    | rename, or move with its contents (refused if it would overlap a room) |                                          |
+| `remove_room`    | delete a room; its furniture is set aside                              |                                          |
+| `replace_plan`   | replace the whole plan, after the app's confirm dialog                 | consequential                            |
 
-| Tool                | App action                                               | Hints         |
-| ------------------- | -------------------------------------------------------- | ------------- |
-| `get_plan`          | read the working plan (in the display unit)              | read-only     |
-| `check_layout`      | `checkLayout`, the same issues the canvas shows          | read-only     |
-| `add_item`          | add furniture; no `placement` means a free spot is found |               |
-| `update_item`       | resize, rename, recolour, move, rotate, lock, hide       |               |
-| `move_to_inventory` | take a piece out of its room                             |               |
-| `remove_item`       | delete a piece                                           |               |
-| `add_opening`       | add a door or window to a wall                           |               |
-| `update_opening`    | change or move a door or window                          |               |
-| `remove_opening`    | delete a door or window                                  |               |
-| `replace_plan`      | replace the whole working plan                           | consequential |
-
-- **Confirmation.** `replace_plan` sets `consequentialHint` and also opens the app's own confirm
-  dialog ("Replace this plan with the assistant's version?"). The tool's promise resolves when the
-  user answers. The browser API has no confirmed way to ask the user, so the app does it. Every
-  other tool is one undo step and needs no prompt. Declining returns a tool error.
-- **Rooms.** Editing room outlines through WebMCP is left out of the first version. `replace_plan`
-  covers it.
-- **Schemas.** A build step writes `src/webmcp/schemas.json` from the shared schema with
-  `z.toJSONSchema` (`Item` and `Opening` with every field optional for the update tools, `Plan` for
-  `replace_plan`). The lazy chunk imports the JSON, so the generator never reaches the browser, and
-  a unit test fails if the file is stale.
-- **Trust.** `get_plan` sets `untrustedContentHint`: labels and notes are user text.
-- **Testing.** Unit tests call each tool's `execute` against a fake `modelContext`. One Playwright
-  test injects a fake `document.modelContext`, runs `add_item` and checks that undo removes it.
+- **Confirmation.** `replace_plan` sets `consequentialHint` and opens the app's own dialog
+  ("Replace this plan with the assistant's version?", "Keep my plan" focused). The call resolves
+  when the user answers; declining returns `{ error }`. It keeps the plan's name and display unit,
+  and Undo brings the old plan back.
+- **Rooms.** Outlines are edited only through `replace_plan`: rooms are added as rectangles beside
+  another room, renamed, moved or removed.
+- **Analytics.** `webmcp_tool_called` with `{ tool, ok, error_kind }` (`bad_argument`,
+  `not_found`, `not_allowed`, `invalid_plan`, `declined`, `cancelled`, `failed`), and
+  `webmcp_available` once per page load with `{ api, tools }` (a count). Never plan content.
+- **Testing.** Unit tests call each tool against a fake host and register them with a fake
+  `modelContext` (both names, abort, refusals, undo). `e2e/webmcp.spec.ts` injects a fake
+  `document.modelContext`, adds a piece (selected, announced, removed by Undo) and replaces the
+  plan (confirmed, undone; declined).
 
 ## 9. UX implications
 
@@ -1088,6 +1121,12 @@ inventory list.
 Each PR is shippable on its own and leaves nothing half-visible. Effort is for one agent with
 review: S is under a day, M is one to two days, L is three to five.
 
+Status (2026-11-25): PRs 1, 2, 3, 5, 7a, 7b, 8 and 9 are merged. PR 4 (the MCP server, with 6
+folded in) and PR 10 (WebMCP) ship together as the Agents release, PR #40, with the MCP server
+brought up to the whole format (every valid plan gets an edit link) and a fix for installed apps
+that stayed on old builds (a waiting service worker takes over at the next start, before the
+planner mounts).
+
 | PR  | Scope                                                                                                                                                                                             | Visible to users                        | Depends on | Effort | Risk   |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | ---------- | ------ | ------ |
 | 1   | Core extraction: move the pure modules into `src/core/`, split React style helpers out of `openings.ts`, split `scene.ts` into rooms and items files, ESLint boundary. No behaviour change.       | nothing                                 | none       | M      | low    |
@@ -1100,7 +1139,7 @@ review: S is under a day, M is one to two days, L is three to five.
 | 7b  | Room shapes: Shape control, L-shape fields, custom outline editing, wall list, openings on any wall.                                                                                              | yes                                     | 5          | L      | high   |
 | 8   | Inventory: tray, take out, place, export list.                                                                                                                                                    | yes                                     | 5          | M      | low    |
 | 9   | Several rooms: add, move, snap together, shared walls and doors, grouped lists, whole-floor export and fit.                                                                                       | yes                                     | 7b, 8      | L      | high   |
-| 10  | WebMCP: lazy chunk, ten tools, confirm dialog, generated schemas.                                                                                                                                 | only in Chrome with the feature         | 9          | M      | low    |
+| 10  | WebMCP: lazy chunk, fourteen tools, confirm dialog, generated schemas.                                                                                                                            | only in Chrome with the feature         | 9          | M      | low    |
 
 ### Test strategy per PR
 

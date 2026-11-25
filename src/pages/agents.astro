@@ -1,7 +1,8 @@
 ---
 /**
  * /agents/: the MCP server for AI assistants (docs/design/plan-format.md, section 7): what it
- * does, how to add it to each client, example prompts, privacy and limits.
+ * does, how to add it to each client, example prompts, privacy and limits; and WebMCP in Chrome
+ * (section 8).
  */
 import registry from '../../server.json';
 import Content from '../layouts/Content.astro';
@@ -10,7 +11,7 @@ import { MCP_PATH, MCP_PRIVACY, SITE_NAME } from '../lib/site';
 
 const title = 'Room Planner for AI Assistants: Free MCP Server for Claude, ChatGPT & More';
 const description =
-  'Connect Claude, ChatGPT, VS Code, Cursor or Claude Code to Room Planner: your AI assistant lays out a room, checks it for clashes and blocked doors, and gives you a link to edit it.';
+  'Connect Claude, ChatGPT, VS Code, Cursor or Claude Code to Room Planner: your AI assistant lays out a room or a whole floor, checks it for clashes and blocked doors, and gives you a link to edit it.';
 
 const site = Astro.site ?? new URL(Astro.url.origin);
 const abs = (path: string) => new URL(withBase(path), site).toString();
@@ -160,6 +161,32 @@ const code = 'block bg-slate-900 text-slate-100 rounded-lg p-3 text-sm overflow-
         It can plan one room or a whole floor: several rooms joined by doors, L-shaped and other
         room shapes, L-shaped and round furniture, and pieces set aside for later. Every plan comes
         with a link that opens it in the planner.
+      </p>
+    </section>
+
+    <section id="webmcp">
+      <h2>In Chrome: let the browser's assistant edit your open plan</h2>
+      <p>
+        Chrome is testing WebMCP, a way for a web page to offer tools to the AI assistant built into
+        the browser. Where it is turned on, {SITE_NAME} offers its own edits: the assistant can read
+        the plan you have open, check it, add, move, resize, set aside or remove furniture, add
+        doors and windows, and add, rename, move or remove rooms.
+      </p>
+      <ul>
+        <li>
+          Every change is one step you can undo with Ctrl+Z (⌘Z) or the Undo button, is selected on
+          the plan so you see what changed, and is announced to screen readers.
+        </li>
+        <li>Replacing the whole plan always asks you first.</li>
+        <li>
+          Nothing leaves your device: the tools act on the plan in your browser, in the units you
+          chose.
+        </li>
+      </ul>
+      <p>
+        To try it, use Chrome 146 or later, turn on{' '}
+        <code>chrome://flags/#enable-webmcp-testing</code>, relaunch, and open {SITE_NAME}. Other
+        browsers don't load any of this.
       </p>
     </section>
 

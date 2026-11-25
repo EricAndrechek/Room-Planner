@@ -55,6 +55,7 @@ A powerful, intuitive tool for planning room layouts with furniture, doors, and 
 ### 🤖 For AI Assistants
 
 - **MCP Server** - `https://room-planner.andrechek.com/mcp`: Claude, ChatGPT, VS Code, Cursor and other MCP apps can lay out a room or a whole floor of connected rooms, check it and hand you an edit link; apps with MCP Apps show the plan in the chat. Free, no account; listed in the [MCP Registry](https://registry.modelcontextprotocol.io) as `com.andrechek.room-planner/mcp`. See [/agents/](https://room-planner.andrechek.com/agents/)
+- **WebMCP** - In Chrome with WebMCP turned on, the browser's own assistant can edit the plan you have open: furniture, doors, windows and rooms, each change one undo step, and replacing the plan asks first
 
 ### 🎯 Smart Feedback
 
@@ -198,6 +199,9 @@ The public site URL used for canonical links, Open Graph tags, the sitemap and
   (`com.andrechek.room-planner/mcp`, proven by `/.well-known/mcp-registry-auth`).
   Merging a `version` bump in `server.json` publishes it to the registry
   (`.github/workflows/mcp-registry.yml`; [docs/DEPLOY.md](docs/DEPLOY.md)).
+- WebMCP (`src/webmcp/`): where the browser has `document.modelContext`, the planner loads a lazy
+  chunk that registers 14 tools over the app's own undoable edits
+  ([design, section 8](docs/design/plan-format.md#8-webmcp)).
 - Sitemap `<lastmod>` comes from git (`scripts/lastmod.mjs`). After a production deploy,
   `scripts/indexnow.mjs` submits recently changed URLs to IndexNow (Bing, Yandex, ...).
 

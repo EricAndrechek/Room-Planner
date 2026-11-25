@@ -49,6 +49,8 @@ Room Planner has a free remote MCP server (Streamable HTTP, no authentication): 
 - \`check_layout\`: overlapping pieces, pieces outside every room, blocked doors and doorways (on both sides of a door between rooms), overlapping rooms and tight clearances, without a link.
 - \`read_plan\`: the plan in a Room Planner link, to edit and send back to create_plan.
 
+In Chrome with WebMCP (\`chrome://flags/#enable-webmcp-testing\`, or the origin trial), the planner page itself registers tools on \`document.modelContext\` for the browser's agent: \`get_plan\`, \`check_layout\`, \`add_item\`, \`update_item\`, \`set_aside_item\`, \`place_item\`, \`remove_item\`, \`add_opening\`, \`update_opening\`, \`remove_opening\`, \`add_room\`, \`update_room\`, \`remove_room\` and \`replace_plan\` (which asks the user first). Each edit is one undo step on the user's open plan, in its display unit; nothing is sent anywhere.
+
 ${MCP_PRIVACY} Server card: ${url(`${MCP_PATH}/server-card`)}. MCP Registry: \`${registry.name}\`.
 
 ## Guides

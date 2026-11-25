@@ -145,6 +145,22 @@ needs no setup.
 `src/components/PostHog.astro` initialises PostHog with `api_host: "https://us.i.posthog.com"`; the CSP must allow `https://*.posthog.com`.
 The CSP lives in `public/_headers` (rationale in the comment there).
 
+### Service worker updates
+
+A new build installs in the background and waits. At the next start, before the planner mounts,
+`src/lib/swStart.ts` tells a waiting worker to take over and reloads once (with a one-minute guard
+against loops), so installed apps don't stay on old builds. A build found during a session still
+shows "Update available"; the user decides when to reload. Everything autosaves either way.
+
+### WebMCP
+
+Nothing to deploy: the tools (`src/webmcp/`) load only in a browser with `document.modelContext`
+(Chrome with `chrome://flags/#enable-webmcp-testing`). To offer them to every Chrome user during
+the origin trial (Chrome 149 to 156), the owner registers `room-planner.andrechek.com` at
+<https://developer.chrome.com/origintrials/#/register_trial/4163014905550602241> and adds the
+token as an `Origin-Trial` header for `/*` in `public/_headers`. Without a token only people who
+turned the flag on see the tools.
+
 ## 5. The old hostname (`roomplanner.andrechek.com`)
 
 `roomplanner.andrechek.com` is a Cloudflare **Single Redirect rule** on the `andrechek.com` zone,
