@@ -118,6 +118,9 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': graph };
 
     <link rel="icon" href={asset('favicon.ico')} sizes="32x32" />
     <link rel="icon" href={asset('favicon.svg')} type="image/svg+xml" />
+    <!-- Google's favicon service wants a square icon whose size is a multiple of 48 px; it feeds
+         the icon other apps show for this site (e.g. MCP connector lists). -->
+    <link rel="icon" href={asset('pwa-192x192.png')} type="image/png" sizes="192x192" />
     <link rel="apple-touch-icon" href={asset('apple-touch-icon.png')} />
 
     <meta property="og:type" content={ogType} />
