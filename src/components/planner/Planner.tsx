@@ -82,6 +82,7 @@ import { RoomCanvas } from './RoomCanvas';
 import { RoomSetupPanel } from './RoomSetupPanel';
 import { ShareModal } from './ShareModal';
 import { ShortcutsDialog } from './ShortcutsDialog';
+import { useWebMcp } from '../../webmcp/useWebMcp';
 import { Sidebar } from './Sidebar';
 import { SnapOverlay } from './SnapOverlay';
 import { SnapToggle } from './SnapToggle';
@@ -508,6 +509,21 @@ export function Planner({ store, initial }: PlannerProps) {
     setUnitSystem,
     setSelection,
     closeFiles: () => setFilesOpen(false),
+  });
+
+  // --- WebMCP: a browser agent edits through the same history, live region and selection ------
+  useWebMcp({
+    history,
+    projectName,
+    unitSystem,
+    announceEdit: live.announceEdit,
+    keepView,
+    setSelection,
+    setActiveRoom: setActiveRoomState,
+    showSetAside: (id) => {
+      setFurnitureView('aside');
+      setAsideHighlight({ type: 'item', id, seq: nextCardSeq() });
+    },
   });
 
   // --- Room size: offer to bring pieces back inside a room that shrank -----------------------
