@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { readPlanLink } from '../src/core/share/plan';
 import { API_EXAMPLE_PLAN } from '../src/lib/openapi';
-import { READABLE_EXAMPLES } from '../src/lib/site';
+import { API_CURL, READABLE_EXAMPLES } from '../src/lib/site';
 import worker from './index';
 import { MAX_BODY, type Env } from './http';
 import { checkPlan, createPlan } from './tools';
@@ -80,6 +80,13 @@ describe('POST /api/plan/link', () => {
     expect(body).toEqual(tool.structured);
     const opened = await readPlanLink(body.url);
     expect(opened.ok && opened.plan.items.map((i) => i.label)).toEqual(['Queen bed', 'Dresser']);
+  });
+
+  it('accepts the documented curl example', async () => {
+    const body = /-d '(.*)'$/.exec(API_CURL)![1]!;
+    expect(API_CURL).toContain(`${ORIGIN}/api/plan/link`);
+    const r = await postJson('/api/plan/link', body);
+    expect(r.status).toBe(200);
   });
 
   it('answers 422 for an empty or null plan, naming what is missing', async () => {

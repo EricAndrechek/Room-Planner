@@ -91,4 +91,4 @@ export const readableMarkdown = (origin: string, text: string, what: string): st
   `[Open ${what} in Room Planner](${new URL('/', origin).toString()}#p=${text})`;
 
 /** The REST API in one line, for llms.txt and /agents/ (worker/api.ts, /openapi.json). */
-export const API_CURL = `curl -s https://room-planner.andrechek.com/api/plan/link -H 'content-type: application/json' -d '{"version":4,"unit":"ft","rooms":[{"name":"Bedroom","outline":[{"x":0,"y":0},{"x":12,"y":0},{"x":12,"y":11},{"x":0,"y":11}]}],"items":[{"label":"Queen bed","width":5,"depth":6.7,"placement":{"x":6,"y":3.35}}]}'`;
+export const API_CURL = `curl -s https://room-planner.andrechek.com/api/plan/link -H 'content-type: application/json' -d '{"version":4,"unit":"ft","rooms":[{"id":"bedroom","name":"Bedroom","outline":[{"x":0,"y":0},{"x":12,"y":0},{"x":12,"y":11},{"x":0,"y":11}]}],"items":[{"id":"bed","label":"Queen bed","width":5,"depth":6.7,"placement":{"x":6,"y":3.35}}]}'`;
