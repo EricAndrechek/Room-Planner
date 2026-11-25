@@ -540,6 +540,7 @@ describe('opening share links at boot', () => {
     const result = await boot(originalLinks.ftIn.url, createPlanStore(s), NOW);
     expect(result.shared).toEqual({
       legacy: true,
+      source: 'legacy',
       createdProject: true,
       cleanUrl: 'http://localhost:5199/',
     });
@@ -573,6 +574,7 @@ describe('opening share links at boot', () => {
     const result = await boot(url, createPlanStore(s));
     expect(result.shared).toMatchObject({
       legacy: false,
+      source: 'share',
       createdProject: true,
       cleanUrl: 'https://example.com/',
     });

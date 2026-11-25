@@ -56,7 +56,7 @@ function PlannerBoot() {
         if (r.linkProblem) setLinkProblem(r.linkProblem);
         if (r.shared) {
           window.history.replaceState(window.history.state, '', r.shared.cleanUrl);
-          track('share_link_opened', { legacy: r.shared.legacy });
+          track('share_link_opened', { legacy: r.shared.legacy, source: r.shared.source });
           if (r.shared.createdProject) track('project_created', { source: 'share_link' });
         }
         setResult(r);
