@@ -9,10 +9,23 @@ import {
 } from '../lib/boot';
 import { hasShareLink } from '../core/share/link';
 import { createPlanStore, getBrowserStorage } from '../lib/storage';
+import { activateWaitingWorker } from '../lib/swStart';
 import { ErrorBoundary } from './ErrorBoundary';
 import { Planner } from './planner/Planner';
 
 const store = typeof window === 'undefined' ? null : createPlanStore(getBrowserStorage());
+
+/**
+ * Started as the module loads: a build that installed last time takes over before the planner
+ * mounts, with one reload (lib/swStart.ts). Resolves true when that reload is under way.
+ */
+const startUpdate: Promise<boolean> =
+  typeof window === 'undefined'
+    ? Promise.resolve(false)
+    : activateWaitingWorker().then((reloading) => {
+        if (reloading) track('app_update_applied', { at: 'start' });
+        return reloading;
+      });
 
 // Only fetched when a link could not be opened.
 const LinkProblemDialog = lazy(() => import('./LinkProblemDialog'));
@@ -75,6 +88,18 @@ function PlannerBoot() {
 }
 
 export default function PlannerApp() {
+  // Nothing reads the link or touches storage until the newest build is known to be running.
+  const [started, setStarted] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void startUpdate.then((reloading) => {
+      if (!cancelled && !reloading) setStarted(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  if (!started) return null;
   return (
     <ErrorBoundary>
       <PlannerBoot />

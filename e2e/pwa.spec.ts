@@ -171,6 +171,37 @@ test('the service worker never answers /mcp or the discovery files', async ({ pa
   );
 });
 
+test('a build that installed while the app was open takes over at the next start', async ({
+  page,
+}) => {
+  test.slow();
+  await page.goto('/');
+  await ready(page);
+  await controlled(page);
+  // A "new build": the same worker under another URL is an update, and it waits, because this
+  // page is controlled by the old one (as an installed app on a phone keeps it).
+  await page.evaluate(async () => {
+    const reg = await navigator.serviceWorker.register('/sw.js?build=next', { scope: '/' });
+    await new Promise<void>((resolve) => {
+      const done = () => (reg.waiting ? resolve() : setTimeout(done, 100));
+      done();
+    });
+  });
+  const workerUrl = () =>
+    page.evaluate(() => new URL(navigator.serviceWorker.controller!.scriptURL).search);
+  expect(await workerUrl()).toBe('');
+
+  // The next start: the waiting build takes over before the planner mounts, with one reload.
+  let loads = 0;
+  page.on('load', () => loads++);
+  await page.reload();
+  await ready(page);
+  await expect.poll(workerUrl).toBe('?build=next');
+  expect(loads).toBe(2);
+  // The planner is up, on the new build.
+  await expect(page.getByTestId('room').first()).toBeVisible();
+});
+
 test('install button appears on beforeinstallprompt and hides once installed', async ({ page }) => {
   await page.goto('/');
   await ready(page);
