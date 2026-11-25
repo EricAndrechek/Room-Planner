@@ -449,7 +449,12 @@ test.describe('the /mcp endpoint', () => {
   test.describe.configure({ mode: 'serial' });
 
   test.beforeEach(async ({ request }) => {
-    test.skip(test.info().project.name !== 'chromium', 'HTTP only: one project is enough');
+    // HTTP only: one project per run is enough. Chromium locally and in CI; Firefox in the
+    // cross-browser run, which has no Chromium and is the one that targets a preview.
+    test.skip(
+      !['chromium', 'firefox'].includes(test.info().project.name),
+      'HTTP only: one project is enough',
+    );
     const card = await request.get('/mcp/server-card');
     test.skip(card.status() !== 200, 'This server has no Worker (astro preview)');
   });

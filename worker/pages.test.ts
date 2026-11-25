@@ -73,7 +73,8 @@ describe('pages through the Markdown router', () => {
     expect(r.headers.get('content-type')).toMatch(/^text\/html/);
     expect(r.headers.get('content-security-policy')).toBe("default-src 'self'");
     expect(r.headers.get('link')).toBe('</faq.md>; rel="alternate"; type="text/markdown"');
-    expect(r.headers.get('vary')).toContain('Accept');
+    // No Vary: Accept on HTML: the service worker's precache would never match a navigation.
+    expect(r.headers.get('vary')).toBeNull();
   });
 
   it('adds the API pointers on / and /agents/ to the twin link, not instead of it', async () => {
@@ -98,6 +99,7 @@ describe('pages through the Markdown router', () => {
     const r = await get('/no-twin/', { accept: 'text/markdown' });
     expect(r.status).toBe(200);
     expect(r.headers.get('content-type')).toMatch(/^text\/html/);
+    expect(r.headers.get('vary')).toBeNull();
   });
 
   it('leaves /mcp and /api to their handlers, whatever the Accept', async () => {

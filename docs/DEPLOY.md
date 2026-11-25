@@ -187,7 +187,9 @@ images and fonts, and falls back to the shell for `/` alone.
   - `Accept: text/markdown` and known LLM crawlers (GPTBot, ClaudeBot, PerplexityBot and others)
     get the twin;
   - everyone else, Googlebot and Bingbot included, gets the HTML with a `Link` to the twin;
-  - every negotiated answer carries `Vary: Accept`.
+  - the Markdown answers carry `Vary: Accept`. `worker/index.ts` removes it from the HTML, because
+    the Cache API honours Vary: a page the service worker precached with `Accept: */*` would never
+    match a navigation, and the installed app would fail offline.
 - `worker/index.ts` appends the API `Link`s on `/` and `/agents/` to the router's, rather than
   replacing them.
 - `run_worker_first` lists only the page routes (`/`, `/help/`, `/faq/`, `/agents/`, `/privacy/`,

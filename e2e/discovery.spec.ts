@@ -29,7 +29,12 @@ test.beforeAll(async ({ request }) => {
 });
 
 test.beforeEach(() => {
-  test.skip(test.info().project.name !== 'chromium', 'HTTP only: one project is enough');
+  // HTTP only: one project per run is enough. Chromium locally and in CI; Firefox in the
+  // cross-browser run, which has no Chromium and is the one that targets a preview.
+  test.skip(
+    !['chromium', 'firefox'].includes(test.info().project.name),
+    'HTTP only: one project is enough',
+  );
 });
 
 const expectHeaders = (
@@ -280,6 +285,8 @@ test('pages negotiate Markdown: Accept: text/markdown and LLM crawlers get the t
   expect(html.headers()['content-security-policy']).toContain("default-src 'self'");
   expect(html.headers()['x-content-type-options']).toBe('nosniff');
   expect(html.headers()['link']).toContain('</faq.md>; rel="alternate"; type="text/markdown"');
+  // Vary: Accept only on the Markdown: on HTML the service worker's precache would never match.
+  expect(html.headers()['vary'] ?? '').not.toMatch(/accept/i);
 });
 
 test('the service worker caches HTML for every page URL, never Markdown', async ({ page }) => {
