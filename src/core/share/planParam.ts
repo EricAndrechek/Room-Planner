@@ -19,9 +19,7 @@ export const PLAN_PARAM_KEY = 'plan';
 export const PLAN_PARAM_MAX_CHARS = 16 * 1024;
 
 export type PlanParam =
-  | { status: 'none' }
-  | { status: 'damaged' }
-  | { status: 'ok'; data: Record<string, unknown> };
+  { status: 'none' } | { status: 'damaged' } | { status: 'ok'; data: Record<string, unknown> };
 
 const PREFIX = `${PLAN_PARAM_KEY}=`;
 
@@ -90,17 +88,7 @@ function roomFromSize(room: unknown): unknown {
   if (!finite(width) || !finite(depth)) return room;
   const x = finite(r.x) ? r.x : 0;
   const y = finite(r.y) ? r.y : 0;
-  const {
-    width: _w,
-    depth: _d,
-    length: _l,
-    height: _h,
-    w: _w2,
-    d: _d2,
-    x: _x,
-    y: _y,
-    ...rest
-  } = r;
+  const { width: _w, depth: _d, length: _l, height: _h, w: _w2, d: _d2, x: _x, y: _y, ...rest } = r;
   return {
     ...rest,
     outline: [
