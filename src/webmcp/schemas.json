@@ -41,7 +41,11 @@
       },
       "shape": {
         "type": "string",
-        "enum": ["rect", "l", "ellipse"]
+        "enum": [
+          "rect",
+          "l",
+          "ellipse"
+        ]
       },
       "cut": {
         "description": "Shape \"l\" only: the rectangle removed from one corner of the bounding box.",
@@ -49,7 +53,12 @@
         "properties": {
           "corner": {
             "type": "string",
-            "enum": ["tl", "tr", "br", "bl"]
+            "enum": [
+              "tl",
+              "tr",
+              "br",
+              "bl"
+            ]
           },
           "width": {
             "type": "number",
@@ -62,7 +71,11 @@
             "maximum": 10000
           }
         },
-        "required": ["corner", "width", "depth"]
+        "required": [
+          "corner",
+          "width",
+          "depth"
+        ]
       },
       "locked": {
         "type": "boolean"
@@ -94,7 +107,10 @@
             "description": "Clockwise degrees (kept between 0 and 360)."
           }
         },
-        "required": ["x", "y"],
+        "required": [
+          "x",
+          "y"
+        ],
         "additionalProperties": false,
         "description": "Centre of the piece in floor coordinates (x right, y down) and its clockwise rotation."
       },
@@ -109,7 +125,11 @@
         "description": "A room id from get_plan. Default: the first room."
       }
     },
-    "required": ["label", "width", "depth"],
+    "required": [
+      "label",
+      "width",
+      "depth"
+    ],
     "additionalProperties": false
   },
   "update_item": {
@@ -143,7 +163,11 @@
       },
       "shape": {
         "type": "string",
-        "enum": ["rect", "l", "ellipse"]
+        "enum": [
+          "rect",
+          "l",
+          "ellipse"
+        ]
       },
       "cut": {
         "description": "Shape \"l\" only: the rectangle removed from one corner of the bounding box.",
@@ -151,7 +175,12 @@
         "properties": {
           "corner": {
             "type": "string",
-            "enum": ["tl", "tr", "br", "bl"]
+            "enum": [
+              "tl",
+              "tr",
+              "br",
+              "bl"
+            ]
           },
           "width": {
             "type": "number",
@@ -164,7 +193,11 @@
             "maximum": 10000
           }
         },
-        "required": ["corner", "width", "depth"]
+        "required": [
+          "corner",
+          "width",
+          "depth"
+        ]
       },
       "locked": {
         "type": "boolean"
@@ -200,7 +233,9 @@
         "description": "Move or turn the piece: its centre (x right, y down) and clockwise rotation. Each part optional."
       }
     },
-    "required": ["id"],
+    "required": [
+      "id"
+    ],
     "additionalProperties": false
   },
   "set_aside_item": {
@@ -213,7 +248,9 @@
         "description": "An id from get_plan."
       }
     },
-    "required": ["id"],
+    "required": [
+      "id"
+    ],
     "additionalProperties": false
   },
   "place_item": {
@@ -239,7 +276,10 @@
             "maximum": 100000
           }
         },
-        "required": ["x", "y"],
+        "required": [
+          "x",
+          "y"
+        ],
         "additionalProperties": false,
         "description": "Where its centre goes (floor coordinates); it is moved the least amount that keeps it inside the room there. Left out: a free spot in roomId."
       },
@@ -250,7 +290,9 @@
         "description": "A room id from get_plan. Default: the first room."
       }
     },
-    "required": ["id"],
+    "required": [
+      "id"
+    ],
     "additionalProperties": false
   },
   "remove_item": {
@@ -263,7 +305,9 @@
         "description": "An id from get_plan."
       }
     },
-    "required": ["id"],
+    "required": [
+      "id"
+    ],
     "additionalProperties": false
   },
   "add_opening": {
@@ -271,7 +315,10 @@
     "properties": {
       "kind": {
         "type": "string",
-        "enum": ["door", "window"]
+        "enum": [
+          "door",
+          "window"
+        ]
       },
       "roomId": {
         "type": "string",
@@ -313,7 +360,10 @@
       "hinge": {
         "description": "Doors only. Seen from inside the room facing the wall, \"start\" is on the left.",
         "type": "string",
-        "enum": ["start", "end"]
+        "enum": [
+          "start",
+          "end"
+        ]
       },
       "swingAngle": {
         "anyOf": [
@@ -329,7 +379,9 @@
         "description": "Doors only: how far it opens. Default 90."
       }
     },
-    "required": ["kind"],
+    "required": [
+      "kind"
+    ],
     "additionalProperties": false
   },
   "update_opening": {
@@ -375,7 +427,10 @@
       "hinge": {
         "description": "Doors only. Seen from inside the room facing the wall, \"start\" is on the left.",
         "type": "string",
-        "enum": ["start", "end"]
+        "enum": [
+          "start",
+          "end"
+        ]
       },
       "swingAngle": {
         "anyOf": [
@@ -391,7 +446,9 @@
         "description": "Doors only: how far it opens. Default 90."
       }
     },
-    "required": ["id"],
+    "required": [
+      "id"
+    ],
     "additionalProperties": false
   },
   "remove_opening": {
@@ -404,7 +461,9 @@
         "description": "An id from get_plan."
       }
     },
-    "required": ["id"],
+    "required": [
+      "id"
+    ],
     "additionalProperties": false
   },
   "add_room": {
@@ -462,7 +521,9 @@
         "description": "Moves the room (with its furniture): its bounding box's top edge, floor y."
       }
     },
-    "required": ["id"],
+    "required": [
+      "id"
+    ],
     "additionalProperties": false
   },
   "remove_room": {
@@ -475,7 +536,9 @@
         "description": "An id from get_plan."
       }
     },
-    "required": ["id"],
+    "required": [
+      "id"
+    ],
     "additionalProperties": false
   },
   "replace_plan": {
@@ -495,7 +558,12 @@
           },
           "unit": {
             "type": "string",
-            "enum": ["ft", "in", "m", "cm"],
+            "enum": [
+              "ft",
+              "in",
+              "m",
+              "cm"
+            ],
             "description": "Unit of every length in this document."
           },
           "rooms": {
@@ -532,7 +600,10 @@
                         "maximum": 100000
                       }
                     },
-                    "required": ["x", "y"]
+                    "required": [
+                      "x",
+                      "y"
+                    ]
                   },
                   "description": "Interior corners in floor coordinates, clockwise as drawn (y grows downward). A rectangle is 4 points starting at its top-left corner; its walls are then 0 = top, 1 = right, 2 = bottom, 3 = left."
                 },
@@ -550,7 +621,10 @@
                       },
                       "kind": {
                         "type": "string",
-                        "enum": ["door", "window"]
+                        "enum": [
+                          "door",
+                          "window"
+                        ]
                       },
                       "wall": {
                         "type": "integer",
@@ -588,7 +662,10 @@
                         "default": "start",
                         "description": "Doors only. Seen from inside the room facing the wall, \"start\" is on the left.",
                         "type": "string",
-                        "enum": ["start", "end"]
+                        "enum": [
+                          "start",
+                          "end"
+                        ]
                       },
                       "swingAngle": {
                         "anyOf": [
@@ -603,12 +680,21 @@
                         ]
                       }
                     },
-                    "required": ["id", "kind", "wall", "offset", "width"],
+                    "required": [
+                      "id",
+                      "kind",
+                      "wall",
+                      "offset",
+                      "width"
+                    ],
                     "additionalProperties": {}
                   }
                 }
               },
-              "required": ["id", "outline"],
+              "required": [
+                "id",
+                "outline"
+              ],
               "additionalProperties": {}
             }
           },
@@ -636,7 +722,11 @@
                 "shape": {
                   "default": "rect",
                   "type": "string",
-                  "enum": ["rect", "l", "ellipse"]
+                  "enum": [
+                    "rect",
+                    "l",
+                    "ellipse"
+                  ]
                 },
                 "width": {
                   "type": "number",
@@ -656,7 +746,12 @@
                   "properties": {
                     "corner": {
                       "type": "string",
-                      "enum": ["tl", "tr", "br", "bl"]
+                      "enum": [
+                        "tl",
+                        "tr",
+                        "br",
+                        "bl"
+                      ]
                     },
                     "width": {
                       "type": "number",
@@ -669,10 +764,14 @@
                       "maximum": 10000
                     }
                   },
-                  "required": ["corner", "width", "depth"]
+                  "required": [
+                    "corner",
+                    "width",
+                    "depth"
+                  ]
                 },
                 "placement": {
-                  "description": "Centre of the piece in floor coordinates and its clockwise rotation in degrees. Omit it to keep the piece in the inventory.",
+                  "description": "Centre of the piece in floor coordinates and its clockwise rotation in degrees. Omit it to set the piece aside: kept in the plan, not on the floor.",
                   "type": "object",
                   "properties": {
                     "x": {
@@ -692,7 +791,10 @@
                       "exclusiveMaximum": 360
                     }
                   },
-                  "required": ["x", "y"]
+                  "required": [
+                    "x",
+                    "y"
+                  ]
                 },
                 "locked": {
                   "type": "boolean"
@@ -705,7 +807,12 @@
                   "maxLength": 500
                 }
               },
-              "required": ["id", "label", "width", "depth"],
+              "required": [
+                "id",
+                "label",
+                "width",
+                "depth"
+              ],
               "additionalProperties": {}
             }
           },
@@ -714,17 +821,29 @@
             "properties": {
               "unitSystem": {
                 "type": "string",
-                "enum": ["ft-in", "ft", "in", "m", "cm"]
+                "enum": [
+                  "ft-in",
+                  "ft",
+                  "in",
+                  "m",
+                  "cm"
+                ]
               }
             },
             "additionalProperties": {}
           }
         },
-        "required": ["version", "unit", "rooms"],
+        "required": [
+          "version",
+          "unit",
+          "rooms"
+        ],
         "additionalProperties": {}
       }
     },
-    "required": ["plan"],
+    "required": [
+      "plan"
+    ],
     "additionalProperties": false
   }
 }
