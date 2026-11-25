@@ -1,0 +1,35 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.andrechek.room-planner/mcp",
+  "title": "Room Planner",
+  "description": "Lay out a room to scale, check furniture, doors and clearances, and get a link to edit the plan.",
+  "version": "1.0.0",
+  "websiteUrl": "https://room-planner.andrechek.com/agents/",
+  "repository": {
+    "url": "https://github.com/EricAndrechek/Room-Planner",
+    "source": "github"
+  },
+  "icons": [
+    {
+      "src": "https://room-planner.andrechek.com/favicon.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": ["any"]
+    },
+    {
+      "src": "https://room-planner.andrechek.com/pwa-192x192.png",
+      "mimeType": "image/png",
+      "sizes": ["192x192"]
+    },
+    {
+      "src": "https://room-planner.andrechek.com/pwa-512x512.png",
+      "mimeType": "image/png",
+      "sizes": ["512x512"]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://room-planner.andrechek.com/mcp"
+    }
+  ]
+}

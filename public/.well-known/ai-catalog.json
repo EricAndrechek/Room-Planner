@@ -1,0 +1,15 @@
+{
+  "specVersion": "1.0",
+  "entries": [
+    {
+      "identifier": "urn:air:room-planner.andrechek.com:mcp:mcp",
+      "type": "application/mcp-server-card+json",
+      "url": "https://room-planner.andrechek.com/mcp/server-card"
+    },
+    {
+      "identifier": "urn:air:room-planner.andrechek.com:openapi:api",
+      "type": "application/openapi+json",
+      "url": "https://room-planner.andrechek.com/openapi.json"
+    }
+  ]
+}

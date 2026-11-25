@@ -52,6 +52,13 @@ A powerful, intuitive tool for planning room layouts with furniture, doors, and 
 - **Your Plans Stay Local** - Floor plans live in your browser; share links keep the layout in the URL fragment, which never reaches a server
 - **Anonymous Analytics** - Optional, cookieless usage and error stats with no plan content; opt out any time on the Help page
 
+### 🤖 For AI Assistants
+
+- **MCP Server** - `https://room-planner.andrechek.com/mcp`: Claude, ChatGPT, VS Code, Cursor and other MCP apps can lay out a room or a whole floor of connected rooms, check it and hand you an edit link; apps with MCP Apps show the plan in the chat. Free, no account; listed in the [MCP Registry](https://registry.modelcontextprotocol.io) as `com.andrechek.room-planner/mcp`. See [/agents/](https://room-planner.andrechek.com/agents/)
+- **WebMCP** - In Chrome with WebMCP turned on, the browser's own assistant can edit the plan you have open: furniture, doors, windows and rooms, each change one undo step, and replacing the plan asks first
+- **REST API** - The same operations over plain HTTP for agents without MCP (curl, agent frameworks, ChatGPT Custom GPT Actions): [`/openapi.json`](https://room-planner.andrechek.com/openapi.json)
+- **Plan links without tools** - Assistants with no connector can still hand you a plan: a compressed `#s=` link built with code, or the readable `#p=` form (see [/agents/#plan-links](https://room-planner.andrechek.com/agents/#plan-links))
+
 ### 🎯 Smart Feedback
 
 - **Collision Detection** - Visual warnings when furniture overlaps
@@ -189,6 +196,21 @@ The public site URL used for canonical links, Open Graph tags, the sitemap and
   `BreadcrumbList` on guides, `FAQPage` on the FAQ (same strings as the visible answers).
 - `/llms.txt` (`src/pages/llms.txt.ts`) and `/llms-full.txt` (built from the rendered HTML by
   `scripts/llms-full.mjs`) for AI assistants.
+- The MCP server (`worker/`, on `/mcp`; how to connect: `/agents/`), its server card
+  (`/mcp/server-card`), `/.well-known/ai-catalog.json`, and `server.json`, the MCP Registry entry
+  (`com.andrechek.room-planner/mcp`, proven by `/.well-known/mcp-registry-auth`).
+  Merging a `version` bump in `server.json` publishes it to the registry
+  (`.github/workflows/mcp-registry.yml`; [docs/DEPLOY.md](docs/DEPLOY.md)).
+- The REST API (`worker/api.ts`, `/api/*`, the same functions as the MCP tools) and its
+  description `/openapi.json`, with `/plan.schema.json`, both built from the Zod schema
+  (`src/lib/openapi.ts`, `src/lib/planSchema.ts`).
+- Plan links assistants write: `#p=` (readable, `src/core/share/readable.ts`) and the raw-JSON
+  fallback `#plan=` (`src/core/share/planParam.ts`).
+- `/privacy/`, `/support/` and `/terms/`, for people and the assistant directories
+  ([docs/DIRECTORY-LISTINGS.md](docs/DIRECTORY-LISTINGS.md)).
+- WebMCP (`src/webmcp/`): where the browser has `document.modelContext`, the planner loads a lazy
+  chunk that registers 14 tools over the app's own undoable edits
+  ([design, section 8](docs/design/plan-format.md#8-webmcp)).
 - Sitemap `<lastmod>` comes from git (`scripts/lastmod.mjs`). After a production deploy,
   `scripts/indexnow.mjs` submits recently changed URLs to IndexNow (Bing, Yandex, ...).
 
@@ -210,6 +232,11 @@ client token, and the `environment` property (`production` / `preview` / `develo
 derived from the hostname at runtime. Analytics is off under automation (`navigator.webdriver`)
 and on `localhost`. To debug it, run `localStorage['rp:analytics-debug']='1'` in the browser
 console and reload (works on localhost too; enables `debug` logging).
+
+The MCP server reports its own usage from the Worker (`worker/analytics.ts`): which tool, whether it
+worked, counts (rooms, pieces, issues), the unit, the client app's name, and the request's IP (for
+approximate location, as on the website); never plan content or names, and no person profiles.
+Events go out after the response (`waitUntil`), so PostHog can never slow or break a call.
 
 Deployment and the domain cutover are documented in [docs/DEPLOY.md](docs/DEPLOY.md).
 

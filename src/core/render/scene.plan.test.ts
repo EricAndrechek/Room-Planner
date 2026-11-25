@@ -129,4 +129,15 @@ describe('buildPlanScene on a plan', () => {
     expect(without.height).toBeLessThan(scene.height);
     expect(without.width).toBe(scene.width);
   });
+
+  it('tags rooms, openings and pieces with their ids only when asked', () => {
+    expect(sceneToSvg(scene)).not.toContain('data-id');
+    const tagged = flat(buildPlanScene({ plan: plan(), date: new Date(0), ids: true }).nodes);
+    const ids = (role: string) =>
+      tagged.flatMap((n) => (n.kind === 'group' && n.role === role ? [n.attrs?.id] : []));
+    expect(ids('room')).toEqual(['living', 'hall']);
+    expect(ids('door')).toEqual(['door-1']);
+    expect(ids('window')).toEqual(['window-1']);
+    expect(ids('item')).toEqual(['sofa', 'table']);
+  });
 });

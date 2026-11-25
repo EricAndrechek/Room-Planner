@@ -3,7 +3,7 @@
  * link (if the URL carries one). Kept free of React so it can be unit tested.
  */
 import { loadPlan } from '../core/load';
-import { readSharePayload, stripShareLink } from '../core/share/link';
+import { readSharePayload, stripShareLink, type LinkSource } from '../core/share/link';
 import { detectVersion } from '../core/version';
 import type { Plan, Project, SaveStatus } from '../types';
 import { newerPlanVersion } from './planVersion';
@@ -18,6 +18,8 @@ export interface BootState extends PersistedState {
 
 export interface SharedBootInfo {
   legacy: boolean;
+  /** What kind of link it was: a share link, `?config=`, or a hand-written `#plan=`. */
+  source: LinkSource;
   /** A new project was created for the link (false: an identical one already existed). */
   createdProject: boolean;
   /** The current URL with the share payload removed. */
@@ -178,6 +180,7 @@ export const boot = async (
     state: applied.state,
     shared: {
       legacy: payload.legacy,
+      source: payload.source ?? (payload.legacy ? 'legacy' : 'share'),
       createdProject: applied.createdProject,
       cleanUrl: stripShareLink(href),
     },

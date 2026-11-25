@@ -1,0 +1,169 @@
+{
+  "plan": {
+    "version": 4,
+    "name": "Three-room flat",
+    "unit": "ft",
+    "rooms": [
+      {
+        "id": "living",
+        "name": "Living room",
+        "outline": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 16,
+            "y": 0
+          },
+          {
+            "x": 16,
+            "y": 8
+          },
+          {
+            "x": 10,
+            "y": 8
+          },
+          {
+            "x": 10,
+            "y": 14
+          },
+          {
+            "x": 0,
+            "y": 14
+          }
+        ],
+        "openings": [
+          {
+            "id": "door-bed",
+            "kind": "door",
+            "wall": 3,
+            "offset": 1,
+            "width": 3
+          },
+          {
+            "id": "door-bath",
+            "kind": "door",
+            "wall": 1,
+            "offset": 4.5,
+            "width": 2.5
+          },
+          {
+            "id": "door-in",
+            "kind": "door",
+            "wall": 4,
+            "offset": 2,
+            "width": 3
+          },
+          {
+            "id": "window-1",
+            "kind": "window",
+            "wall": 0,
+            "offset": 5,
+            "width": 4
+          }
+        ]
+      },
+      {
+        "id": "bedroom",
+        "name": "Bedroom",
+        "outline": [
+          {
+            "x": 10,
+            "y": 8
+          },
+          {
+            "x": 16,
+            "y": 8
+          },
+          {
+            "x": 16,
+            "y": 14
+          },
+          {
+            "x": 10,
+            "y": 14
+          }
+        ]
+      },
+      {
+        "id": "bath",
+        "name": "Bathroom",
+        "outline": [
+          {
+            "x": 16,
+            "y": 0
+          },
+          {
+            "x": 22,
+            "y": 0
+          },
+          {
+            "x": 22,
+            "y": 8
+          },
+          {
+            "x": 16,
+            "y": 8
+          }
+        ]
+      }
+    ],
+    "items": [
+      {
+        "id": "sectional",
+        "label": "L sectional",
+        "shape": "l",
+        "width": 9,
+        "depth": 7,
+        "cut": {
+          "corner": "tr",
+          "width": 6,
+          "depth": 4
+        },
+        "placement": {
+          "x": 4.5,
+          "y": 3.5
+        }
+      },
+      {
+        "id": "table",
+        "label": "Round table",
+        "shape": "ellipse",
+        "width": 3.5,
+        "depth": 3.5,
+        "placement": {
+          "x": 4,
+          "y": 10.5
+        }
+      },
+      {
+        "id": "bed",
+        "label": "Full bed",
+        "width": 4.5,
+        "depth": 6,
+        "placement": {
+          "x": 13.75,
+          "y": 11
+        }
+      },
+      {
+        "id": "vanity",
+        "label": "Vanity",
+        "width": 3,
+        "depth": 1.8,
+        "placement": {
+          "x": 20.5,
+          "y": 0.9
+        }
+      },
+      {
+        "id": "chair",
+        "label": "Spare chair",
+        "width": 2,
+        "depth": 2
+      }
+    ]
+  },
+  "link": "https://room-planner.andrechek.com/#s=dVO7jtswEPwVYWpa0Mu-O5YpUqVKgjSBC9qiT0RoUpAo-wxD_x5QEh93ljvOYHdmtbO648K7XmgFWhEoduag-N10nG86rc_JSTIDgkEJA4qTfVu-B_17h6hBIcVFqHf45h8TTmwVCPRgpFB8Kv8AzQhuoNlIJpTv1uCrg9kazKsFe7gn0C1XQr1HU9Vad5sDr0HwTyjHgODKpAQtCfTp1HMDmhNcRW0a0NIqR93MNE_a89BepVsvUKTbzxJCPRGogkCx4n8VqtbXTR66Z8b3Z6E_2Ffj3isceL0ksMTyzRNfIvm65t0a9FsPKURe86KcETPNE6fPcRfFGnyYY28DFobHN9fzoxFaMQkCyQ5c2rtLYrZvWGunse9lPW8ENW_t64XgOBjQO466U7wDhelC4c4XViNBK9mRn7ma6j-WwG-gZbod_QoMO0geDfNTD6pOHOuG4VKKtufBqbRai9f0fjCbt53FXvNVO6fvg5TJTLkziER3j5J5mb7MX5DnQfTClDC3SPePI9yoXjNPXx9Vi2xZS5a-BdVjw0QXif5qWccTx7q_xisX4378Dw"
+}

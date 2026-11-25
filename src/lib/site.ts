@@ -29,5 +29,66 @@ export const FEATURES = [
   'Share links that carry the whole layout',
   'Export as a PNG image or PDF (A4 or Letter), or print',
   'Works offline and installs as an app (PWA)',
+  'An MCP server, so AI assistants can lay out a room and hand you a link to edit it',
   'Undo and redo, keyboard shortcuts, and a touch-friendly phone layout',
 ] as const;
+
+/** The MCP server's endpoint, relative to the site (worker/http.ts). */
+export const MCP_PATH = 'mcp';
+
+/**
+ * What the MCP server does with a plan (docs/design/plan-format.md, section 7): one wording for
+ * /agents/, the help page and the FAQ.
+ */
+export const MCP_PRIVACY =
+  "The MCP server processes each plan in memory to answer the request and then discards it. It stores no plans, has no accounts, and does not log plans. For usage analytics it sends PostHog the tool name, the plan's size and issue counts, the client app's name, the request's headers (such as the user agent and language, never credentials), its IP address and Cloudflare's location and network data for it, like the website's own analytics; never plan content, names or links. A plan link it returns holds the whole plan in the part of the URL after #, which browsers do not send to any server.";
+
+/**
+ * Readable plan links (`#p=`, src/core/share/readable.ts; docs/design/plan-format.md, section 5):
+ * the syntax in a few lines for assistants with no tools and no code, and two examples, checked by
+ * src/lib/readable.test.ts and e2e/plan-links.spec.ts.
+ */
+export const READABLE_EXAMPLES = {
+  bedroom:
+    'ft;room:Bedroom:12x11;door:bottom:8:3;window:top:4:4;item:Queen_bed:5x6.7@6,3.35;item:Nightstand:1.7x1.3@2.65,0.65;item:Dresser:5x1.5@4.5,10.25',
+  flat: 'ft;name:Flat;room:Living_room:14x12;door:right:8:2.7;door:bottom:1:3;window:top:4:5;room:Bedroom:10x12;window:top:3:4;item:Sofa:7x3@5,1.5;item:Coffee_table:4x2@5,5.4;item:Dining_table:3.5x3.5@11.5,4:round;item:Queen_bed:5x6.7@19,3.35;item:Wardrobe:3.3x2@21.5,11;item:Armchair:2.7x2.8',
+} as const;
+
+export const READABLE_SYNTAX = [
+  'Statements are separated by `;`, fields by `:`. Use `_` for spaces in names. Only letters, digits and `- . _ ~ , ; : @` (no spaces, quotes or brackets).',
+  'Start with the unit: `ft` (default), `in`, `m` or `cm`. Every length is in it. Optional: `name:My_flat`.',
+  'x grows to the right and y grows DOWN; the floor starts at 0,0.',
+  '`room:<name>:<W>x<L>` is a W wide, L long rectangle. The first room is at 0,0; each next one goes to the right of the one before, sharing its wall. `@x,y` puts its top-left corner elsewhere. An odd shape: `room:<name>:x1,y1,x2,y2,...` (its corners, clockwise).',
+  '`door:<wall>:<offset>:<width>` and `window:<wall>:<offset>:<width>` belong to the room before them. wall is `top`, `right`, `bottom` or `left`; offset is the distance from the left end of a top or bottom wall, or from the top end of a left or right wall. (Odd shapes: wall is a number, wall i runs from corner i to corner i+1, offset from corner i.) A door on a wall two rooms share connects them.',
+  'Door options, after the width: `out` (swings out), `sliding`, `pocket`, `double`, `bifold`, `opening`; `right` hinges it on the right, seen from inside.',
+  '`item:<label>:<W>x<D>@x,y` is a piece W wide (along x) and D deep, its CENTRE at x,y. `@x,y,90` turns it 90° clockwise. Leave out `@...` to set it aside.',
+  'Item options: `round` (a round or oval piece), `L-tr-6x4` (an L: a 6 × 4 cut from its top-right corner; tl, tr, br, bl).',
+] as const;
+
+/** The plan as JSON, in a few lines (the full format: /plan.schema.json and the MCP tools). */
+export const PLAN_JSON_SUMMARY = [
+  '`{"version": 4, "name": "...", "unit": "ft", "rooms": [...], "items": [...]}`; unit is "ft", "in", "m" or "cm", and every length is in it. x grows right, y grows DOWN.',
+  'Room: `{"id", "name", "outline": [{"x","y"}, ...], "openings": [...]}`, corners clockwise; a W × L rectangle at the origin is `[{"x":0,"y":0},{"x":W,"y":0},{"x":W,"y":L},{"x":0,"y":L}]` and its walls are 0 top, 1 right, 2 bottom, 3 left (wall i runs from corner i to corner i+1). Rooms share a wall by touching.',
+  'Opening: `{"id", "kind": "door"|"window", "wall", "offset", "width"}`, offset along the wall clockwise from its start corner (right to left on a bottom wall); doors may have "type" ("swing-in", "swing-out", "sliding", "pocket", "double-in", "bifold", "opening") and "hinge" ("start"|"end"). A door on a wall two rooms share connects them.',
+  'Item: `{"id", "label", "width", "depth", "placement": {"x", "y", "rotation"}}`, placement the CENTRE, rotation clockwise degrees; "shape": "ellipse", or "l" with "cut": {"corner": "tl"|"tr"|"br"|"bl", "width", "depth"}; "color": "#rrggbb". No placement: set aside.',
+] as const;
+
+export const COMPRESS_PYTHON = `import base64, json, zlib
+plan = {"version": 4, "name": "Bedroom", "unit": "ft", "rooms": [...], "items": [...]}
+c = zlib.compressobj(9, zlib.DEFLATED, -15)  # raw deflate
+data = c.compress(json.dumps(plan, separators=(",", ":")).encode()) + c.flush()
+link = "https://room-planner.andrechek.com/#s=" + base64.urlsafe_b64encode(data).decode().rstrip("=")
+print(link)`;
+
+export const COMPRESS_JS = `const plan = { version: 4, name: 'Bedroom', unit: 'ft', rooms: [/* ... */], items: [/* ... */] };
+const raw = new Blob([JSON.stringify(plan)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+const bytes = new Uint8Array(await new Response(raw).arrayBuffer());
+const b64 = btoa(String.fromCharCode(...bytes)).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
+console.log('https://room-planner.andrechek.com/#s=' + b64);`;
+
+/** A readable example as an assistant should present it: markdown link text. */
+export const readableMarkdown = (origin: string, text: string, what: string): string =>
+  `[Open ${what} in Room Planner](${new URL('/', origin).toString()}#p=${text})`;
+
+/** The REST API in one line, for llms.txt and /agents/ (worker/api.ts, /openapi.json). */
+export const API_CURL = `curl -s https://room-planner.andrechek.com/api/plan/link -H 'content-type: application/json' -d '{"version":4,"unit":"ft","rooms":[{"id":"bedroom","name":"Bedroom","outline":[{"x":0,"y":0},{"x":12,"y":0},{"x":12,"y":11},{"x":0,"y":11}]}],"items":[{"id":"bed","label":"Queen bed","width":5,"depth":6.7,"placement":{"x":6,"y":3.35}}]}'`;

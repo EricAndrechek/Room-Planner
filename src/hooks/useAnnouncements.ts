@@ -137,6 +137,7 @@ export function useAnnouncements(
   const prevSave = useRef(saveStatus);
   const action = useRef<string | null>(null);
   const flushedOnce = useRef(false);
+  const editsSaid = useRef<string[]>([]);
 
   const queue = useCallback((text: string) => {
     if (!text) return;
@@ -160,11 +161,21 @@ export function useAnnouncements(
     [queue],
   );
 
+  /**
+   * Call right before applying an edit made by an assistant (WebMCP): `text`, which says what it
+   * did, is spoken in place of the description of the change. New warnings are still spoken.
+   */
+  const announceEdit = useCallback((text: string) => {
+    editsSaid.current.push(text);
+  }, []);
+
   useEffect(() => {
     const prev = prevLayout.current;
     prevLayout.current = layout;
     if (prev === layout) return;
-    const change = describeLayoutChange(prev, layout, unitSystem);
+    const said = editsSaid.current.join('. ');
+    editsSaid.current = [];
+    const change = said || describeLayoutChange(prev, layout, unitSystem);
     const prevW = prevWarnings.current;
     // Warnings are derived from the same layout, so they are already current here.
     const newWarnings = describeNewWarnings(prevW, warnings, layout.items);
@@ -187,5 +198,5 @@ export function useAnnouncements(
 
   useEffect(() => () => clearTimeout(timer.current), []);
 
-  return { message, noteAction, announce: queue };
+  return { message, noteAction, announce: queue, announceEdit };
 }

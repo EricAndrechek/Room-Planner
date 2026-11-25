@@ -10,7 +10,16 @@ const GUIDES = [
   '/guides/studio-and-dorm-layout/',
   '/guides/home-office-layout/',
 ];
-const CONTENT_PAGES = ['/guides/', ...GUIDES, '/faq/', '/help/'];
+const CONTENT_PAGES = [
+  '/guides/',
+  ...GUIDES,
+  '/faq/',
+  '/help/',
+  '/agents/',
+  '/privacy/',
+  '/support/',
+  '/terms/',
+];
 
 type Node = Record<string, unknown> & { '@type': string };
 
@@ -160,13 +169,25 @@ test('guide example: the drawing is inline, and "Open this layout" opens it as a
 test('llms.txt, llms-full.txt and the sitemap list the new pages', async ({ request }) => {
   const llms = await (await request.get('/llms.txt')).text();
   expect(llms).toMatch(/^# Room Planner\n\n> /);
-  for (const path of [...GUIDES, '/faq/', '/help/']) expect(llms).toContain(`${path})`);
+  for (const path of [...GUIDES, '/faq/', '/help/', '/agents/', '/privacy/'])
+    expect(llms).toContain(`${path})`);
+  expect(llms).toContain('## Use Room Planner from an agent');
+  expect(llms).toContain('## Give the user a ready-made plan');
+  expect(llms).toContain('/openapi.json');
+  expect(llms).toMatch(/server \(Streamable HTTP, no authentication\): https?:\/\/[^\s]+\/mcp /);
 
   const full = await (await request.get('/llms-full.txt')).text();
   expect(full).toContain('# Frequently asked questions');
+  expect(full).toContain('claude mcp add --transport http room-planner');
   expect(full).toContain('| Queen | 60 × 80 in (152 × 203 cm) |');
-  expect(full).not.toMatch(/<[a-z]/i); // no HTML left (the page markers are <!-- comments -->)
-  expect(full).not.toContain('#s=');
+  // No HTML left (the page markers are <!-- comments -->; `<name>` placeholders in the syntax are
+  // text).
+  expect(full).not.toMatch(
+    /<\/?(a|div|span|p|code|pre|ul|ol|li|h[1-6]|section|article|strong|em|br|img|svg)\b[^>]*>/i,
+  );
+  // No share link's data (guide examples link to the app); /agents/ shows how to make one.
+  expect(full).not.toMatch(/#s=[A-Za-z0-9_-]{20,}/);
+  expect(full).toContain('#p=ft;room:Bedroom:12x11');
 
   const sitemap = await (await request.get('/sitemap-0.xml')).text();
   for (const path of ['/', ...CONTENT_PAGES]) {

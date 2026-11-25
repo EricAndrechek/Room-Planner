@@ -66,6 +66,12 @@ export interface SceneInput {
   locale?: string;
   /** Footer attribution. */
   site?: string;
+  /**
+   * Tag each room, door, window and piece with `data-id` (its id in the plan), so a viewer can
+   * point at the entities an issue names (the MCP plan viewer). Off by default: the export and
+   * the golden drawings carry no ids.
+   */
+  ids?: boolean;
 }
 
 export const DEFAULT_SITE = 'room-planner.andrechek.com';
@@ -334,15 +340,17 @@ export const buildPlanScene = (input: SceneInput): Scene => {
 
   // Floor + grid (1 ft, or 0.5 m in metric).
   const grid = isMetric(unitSystem) ? 0.5 * FEET_PER_METER * s : s;
+  const tag = (node: GroupNode, id: string): GroupNode =>
+    input.ids ? { ...node, attrs: { ...node.attrs, id } } : node;
   if (several) {
     for (const room of rooms) planNodes.push(roomNode(room, s, T, grid, 'band'));
-    for (const room of rooms) planNodes.push(roomNode(room, s, T, grid, 'floor'));
+    for (const room of rooms) planNodes.push(tag(roomNode(room, s, T, grid, 'floor'), room.id));
     for (const sw of sharedWalls({ rooms })) planNodes.push(sharedWallNode(sw, s, T));
   } else {
-    for (const room of rooms) planNodes.push(roomNode(room, s, T, grid));
+    for (const room of rooms) planNodes.push(tag(roomNode(room, s, T, grid), room.id));
   }
   for (const { room, win, connects } of windows) {
-    planNodes.push(windowNode(room, win, s, T, connects));
+    planNodes.push(tag(windowNode(room, win, s, T, connects), win.id));
   }
   for (const { room, door, connects } of doors) {
     planNodes.push(doorCutNode(room, door, s, T, connects));
@@ -355,11 +363,11 @@ export const buildPlanScene = (input: SceneInput): Scene => {
       planNodes.push(roomLabelNode(room, name, areaText(outlineArea(room), unitSystem), s, boxes));
     }
   }
-  for (const item of items) planNodes.push(itemNode(item, unitSystem, s));
+  for (const item of items) planNodes.push(tag(itemNode(item, unitSystem, s), item.id));
   // Door leaves and swings go over the furniture, so a rug or bed never hides
   // the clearance a door needs.
   for (const { room, door, connects } of doors) {
-    planNodes.push(doorNode(room, door, s, T, connects));
+    planNodes.push(tag(doorNode(room, door, s, T, connects), door.id));
   }
   planNodes.push(
     dimension(

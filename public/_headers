@@ -55,3 +55,49 @@
   Cache-Control: no-cache
 /*.html
   Cache-Control: no-cache
+
+# MCP Registry domain proof (docs/DEPLOY.md): the public key the registry checks over HTTP.
+/.well-known/mcp-registry-auth
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: no-cache
+
+# Discovery (docs/design/plan-format.md, section 7): the AI Catalog points at the MCP server card.
+/.well-known/ai-catalog.json
+  Content-Type: application/ai-catalog+json
+  Access-Control-Allow-Origin: *
+
+# The REST API's description and the plan's JSON Schema (static, built from the Zod schema), for
+# agents and Custom GPT Actions that fetch them from anywhere.
+/openapi.json
+  Content-Type: application/openapi+json; charset=utf-8
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=3600
+
+/plan.schema.json
+  Content-Type: application/schema+json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=3600
+
+# Text for crawlers and agents (llms.txt: https://llmstxt.org), readable from anywhere.
+/llms.txt
+  Content-Type: text/plain; charset=utf-8
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=3600
+
+/llms-full.txt
+  Content-Type: text/plain; charset=utf-8
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=3600
+
+/robots.txt
+  Content-Type: text/plain; charset=utf-8
+  Access-Control-Allow-Origin: *
+
+/sitemap-index.xml
+  Access-Control-Allow-Origin: *
+
+/sitemap-0.xml
+  Access-Control-Allow-Origin: *
+
+# The Markdown twins, /.well-known/api-catalog and security.txt are appended to dist/_headers by
+# scripts/llms-full.mjs; the pages' Link headers come from the Worker (worker/index.ts).

@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Room Planner plan</title>
+    <!--
+      The Room Planner plan viewer: an MCP Apps view (SEP-1865, protocol 2026-01-26), served by the
+      MCP server as ui://room-planner/plan-viewer.html. The host draws it in a sandboxed iframe and
+      sends it the result of create_plan or read_plan. This is the template: scripts/
+      build-viewer.mjs puts the bundled app.ts in place of VIEWER_SCRIPT and writes
+      worker/viewer/dist/viewer.html. Self-contained: no fetches, no external files.
+    -->
+    <style>
+      :root {
+        --bg: var(--color-background-primary, #ffffff);
+        --panel: var(--color-background-secondary, #f8fafc);
+        --text: var(--color-text-primary, #0f172a);
+        --muted: var(--color-text-secondary, #475569);
+        --line: var(--color-border-secondary, #e2e8f0);
+        --accent: #4f46e5;
+        --accent-text: #ffffff;
+        --error: #dc2626;
+        --warning: #b45309;
+        --info: #2563eb;
+        --radius: var(--border-radius-lg, 12px);
+        --font: var(
+          --font-sans,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Roboto,
+          'Helvetica Neue',
+          Arial,
+          sans-serif
+        );
+        color-scheme: light;
+      }
+      :root[data-theme='dark'] {
+        --bg: var(--color-background-primary, #0f172a);
+        --panel: var(--color-background-secondary, #1e293b);
+        --text: var(--color-text-primary, #f1f5f9);
+        --muted: var(--color-text-secondary, #cbd5e1);
+        --line: var(--color-border-secondary, #334155);
+        --accent: #818cf8;
+        --accent-text: #0f172a;
+        --error: #f87171;
+        --warning: #fbbf24;
+        --info: #93c5fd;
+        color-scheme: dark;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme]) {
+          --bg: #0f172a;
+          --panel: #1e293b;
+          --text: #f1f5f9;
+          --muted: #cbd5e1;
+          --line: #334155;
+          --accent: #818cf8;
+          --accent-text: #0f172a;
+          --error: #f87171;
+          --warning: #fbbf24;
+          --info: #93c5fd;
+          color-scheme: dark;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.45 var(--font);
+      }
+      main {
+        padding: 12px;
+        display: grid;
+        gap: 10px;
+      }
+      h1 {
+        font-size: 16px;
+        margin: 0;
+        line-height: 1.3;
+        overflow-wrap: anywhere;
+      }
+      p {
+        margin: 0;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .sheet {
+        /* The drawing is a white sheet of paper in either theme: its colours are the app's export. */
+        background: #ffffff;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+      .sheet svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        /* Not vh: the host sizes the frame to the content, so vh would grow with it. */
+        max-height: 640px;
+      }
+      /* Issues on the drawing: the pieces, doors, windows and rooms an issue names. */
+      g[data-role='item'].hl-warning > :first-child {
+        stroke: #d97706;
+        stroke-width: 3.5px;
+      }
+      /* After the warning rule: a piece with both is marked as an error. */
+      g[data-role='item'].hl-error > :first-child {
+        stroke: #dc2626;
+        stroke-width: 3.5px;
+      }
+      g[data-role='door'].hl-warning path,
+      g[data-role='door'].hl-error path {
+        stroke: #d97706;
+        stroke-width: 2.5px;
+      }
+      g[data-role='window'].hl-warning rect,
+      g[data-role='window'].hl-error rect,
+      g[data-role='window'].hl-warning path,
+      g[data-role='window'].hl-error path {
+        stroke: #dc2626;
+      }
+      /* A room an issue names (rooms that overlap, a window between rooms): its floor is tinted. */
+      g[data-role='room'].hl-warning > [fill='#ffffff'] {
+        fill: #fffbeb;
+      }
+      g[data-role='room'].hl-error > [fill='#ffffff'] {
+        fill: #fef2f2;
+      }
+      g[data-role='room'].focus > [fill='#ffffff'] {
+        fill: #e0e7ff;
+      }
+      svg.focusing g[data-role='item']:not(.focus) {
+        opacity: 0.35;
+      }
+      g.focus > :first-child,
+      g[data-role='door'].focus path {
+        stroke: #4f46e5 !important;
+        stroke-width: 4px !important;
+      }
+      ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 6px;
+      }
+      .issue {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+        width: 100%;
+        text-align: left;
+        font: inherit;
+        color: inherit;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 10px;
+        cursor: pointer;
+      }
+      .issue[aria-pressed='true'] {
+        border-color: var(--accent);
+        box-shadow: inset 0 0 0 1px var(--accent);
+      }
+      .issue:focus-visible,
+      .open:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .badge {
+        flex: none;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        border-radius: 999px;
+        padding: 1px 7px;
+        margin-top: 1px;
+        border: 1px solid currentColor;
+      }
+      .badge.error {
+        color: var(--error);
+      }
+      .badge.warning {
+        color: var(--warning);
+      }
+      .badge.info {
+        color: var(--info);
+      }
+      .ok {
+        color: var(--muted);
+      }
+      details {
+        margin-top: 8px;
+      }
+      details > summary {
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 13px;
+        padding: 4px 0;
+      }
+      details > summary:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      details > ul {
+        margin-top: 6px;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      .open {
+        font: inherit;
+        font-weight: 600;
+        border: 0;
+        border-radius: 8px;
+        padding: 9px 14px;
+        min-height: 40px;
+        background: var(--accent);
+        color: var(--accent-text);
+        cursor: pointer;
+      }
+      .note {
+        font-size: 13px;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .issue,
+        g[data-role='item'] {
+          transition:
+            opacity 0.15s,
+            border-color 0.15s;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1 id="title">Room Planner</h1>
+        <p id="summary" class="muted">Loading the plan…</p>
+      </header>
+      <div id="sheet" class="sheet" hidden></div>
+      <section id="issues-section" aria-labelledby="issues-title" hidden>
+        <h2 id="issues-title" class="muted" style="font-size: 13px; margin: 0 0 6px">Issues</h2>
+        <ul id="issues"></ul>
+      </section>
+      <div class="actions">
+        <button id="open" class="open" type="button" hidden>Open in Room Planner</button>
+        <p id="note" class="note muted" role="status"></p>
+      </div>
+    </main>
+    <script>
+      /* VIEWER_SCRIPT */
+    </script>
+  </body>
+</html>

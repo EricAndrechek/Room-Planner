@@ -146,6 +146,62 @@ test('the whole app works offline', async ({ page, context }) => {
   await context.setOffline(false);
 });
 
+test('the service worker never answers /mcp or the discovery files', async ({ page }) => {
+  await page.goto('/');
+  await ready(page);
+  await controlled(page);
+  const fromWorker: string[] = [];
+  page.on('response', (r) => {
+    if (r.fromServiceWorker()) fromWorker.push(new URL(r.url()).pathname);
+  });
+  // A navigation (the app shell must not stand in for it) and a fetch, as an installed app would.
+  const nav = await page.goto('/mcp');
+  expect(nav!.fromServiceWorker()).toBe(false);
+  await expect(page.getByTestId('room')).toHaveCount(0);
+  await page.goto('/');
+  await ready(page);
+  await page.evaluate(() =>
+    Promise.all([
+      fetch('/mcp', { method: 'POST', body: '{}' }),
+      fetch('/.well-known/ai-catalog.json'),
+    ]),
+  );
+  expect(fromWorker.filter((p) => p.startsWith('/mcp') || p.startsWith('/.well-known'))).toEqual(
+    [],
+  );
+});
+
+test('a build that installed while the app was open takes over at the next start', async ({
+  page,
+}) => {
+  test.slow();
+  await page.goto('/');
+  await ready(page);
+  await controlled(page);
+  // A "new build": the same worker under another URL is an update, and it waits, because this
+  // page is controlled by the old one (as an installed app on a phone keeps it).
+  await page.evaluate(async () => {
+    const reg = await navigator.serviceWorker.register('/sw.js?build=next', { scope: '/' });
+    await new Promise<void>((resolve) => {
+      const done = () => (reg.waiting ? resolve() : setTimeout(done, 100));
+      done();
+    });
+  });
+  const workerUrl = () =>
+    page.evaluate(() => new URL(navigator.serviceWorker.controller!.scriptURL).search);
+  expect(await workerUrl()).toBe('');
+
+  // The next start: the waiting build takes over before the planner mounts, with one reload.
+  let loads = 0;
+  page.on('load', () => loads++);
+  await page.reload();
+  await ready(page);
+  await expect.poll(workerUrl).toBe('?build=next');
+  expect(loads).toBe(2);
+  // The planner is up, on the new build.
+  await expect(page.getByTestId('room').first()).toBeVisible();
+});
+
 test('install button appears on beforeinstallprompt and hides once installed', async ({ page }) => {
   await page.goto('/');
   await ready(page);

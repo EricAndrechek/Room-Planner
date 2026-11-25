@@ -1,6 +1,7 @@
 ---
 import '../styles/global.css';
 import PostHog from '../components/PostHog.astro';
+import { API_POINTER_PAGES, PATHS, markdownPath } from '../../scripts/discovery.mjs';
 import {
   DEFAULT_DESCRIPTION,
   DEFAULT_TITLE,
@@ -44,6 +45,10 @@ const abs = (path: string) => new URL(`${base}/${path.replace(/^\/+/, '')}`, sit
 const asset = (path: string) => `${base}/${path.replace(/^\/+/, '')}`;
 const canonical = new URL(Astro.url.pathname, site).toString();
 const homeUrl = abs('');
+// Discovery (scripts/discovery.mjs): the page's Markdown twin, and on / and /agents/ the API.
+const pagePath = Astro.url.pathname.slice(base.length).replace(/^\/+/, '');
+const markdown = noindex ? null : markdownPath(pagePath);
+const apiPointers = !noindex && API_POINTER_PAGES.includes(pagePath);
 const ogImage = abs(og.path);
 
 const website = {
@@ -133,6 +138,15 @@ const jsonLd = { '@context': 'https://schema.org', '@graph': graph };
     <meta name="twitter:image:alt" content={og.alt} />
 
     <link rel="sitemap" href={asset('sitemap-index.xml')} />
+    {markdown && <link rel="alternate" type="text/markdown" href={asset(markdown)} />}
+    {apiPointers && (
+      <>
+        <link rel="service-desc" type="application/openapi+json" href={asset(PATHS.openapi)} />
+        <link rel="api-catalog" href={asset(PATHS.apiCatalog)} />
+        <link rel="service-doc" href={asset(PATHS.agents)} />
+        <link rel="describedby" type="text/plain" href={asset(PATHS.llms)} />
+      </>
+    )}
     {graph.length > 0 && (
       <script
         type="application/ld+json"

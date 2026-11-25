@@ -32,7 +32,8 @@ const pipeThrough = async (
   bytes: Uint8Array,
   stream: CompressionStream | DecompressionStream,
 ): Promise<Uint8Array> => {
-  const out = new Blob([bytes as BlobPart]).stream().pipeThrough(stream);
+  // A Response rather than a Blob: `BlobPart` is a DOM type, and core compiles without the DOM.
+  const out = new Response(bytes as Uint8Array<ArrayBuffer>).body!.pipeThrough(stream);
   return new Uint8Array(await new Response(out).arrayBuffer());
 };
 

@@ -264,7 +264,7 @@ describe('JSON Schema', () => {
       'Bounding-box size along y before rotation.',
       'Shape \\"l\\" only',
       'Centre of the piece in floor coordinates',
-      'Omit it to keep the piece in the inventory.',
+      'Omit it to set the piece aside: kept in the plan, not on the floor.',
       'Unit of every length in this document.',
     ]) {
       expect(text).toContain(phrase);

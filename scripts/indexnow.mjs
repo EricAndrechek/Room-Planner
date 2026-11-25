@@ -8,12 +8,13 @@
 //
 // It submits the sitemap URLs whose <lastmod> (the page source's last git commit, see
 // scripts/lastmod.mjs) is within the last RECENT_DAYS days, i.e. the pages this deploy probably
-// changed. The key is public by design: engines verify it at https://<host>/<KEY>.txt.
+// changed, with their Markdown twins and the files for agents (scripts/discovery.mjs). The key is public by design: engines verify it at https://<host>/<KEY>.txt.
 //
 //   node scripts/indexnow.mjs              (no-op outside Workers Builds' main branch)
 //   INDEXNOW_DRY_RUN=1 WORKERS_CI_BRANCH=main node scripts/indexnow.mjs   (print, don't send)
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { PATHS, markdownPath } from './discovery.mjs';
 
 const KEY = '0991684ba4d4d453cf5bff3155ee9f9a';
 const ENDPOINT = 'https://api.indexnow.org/indexnow';
@@ -35,9 +36,22 @@ async function main() {
     lastmod: /<lastmod>([^<]+)<\/lastmod>/.exec(u)?.[1],
   }));
   const since = Date.now() - RECENT_DAYS * 24 * 60 * 60 * 1000;
-  const urls = entries
+  const pages = entries
     .filter((e) => e.loc && (!e.lastmod || Date.parse(e.lastmod) >= since))
     .map((e) => /** @type {string} */ (e.loc));
+  // Each changed page's Markdown twin, and the files for agents, which change with the pages.
+  const extra = pages.length
+    ? [
+        ...pages.flatMap((loc) => {
+          const md = markdownPath(new URL(loc).pathname);
+          return md ? [new URL(md, loc).toString()] : [];
+        }),
+        ...[PATHS.llms, PATHS.llmsFull, PATHS.openapi, PATHS.planSchema].map((p) =>
+          new URL(p, pages[0]).toString(),
+        ),
+      ]
+    : [];
+  const urls = [...pages, ...extra];
   if (urls.length === 0) {
     console.log(`indexnow: no page changed in the last ${RECENT_DAYS} days, nothing to submit`);
     return;
