@@ -122,8 +122,12 @@ function setMode(mode: DisplayMode) {
   const button = $('fullscreen');
   button.hidden = !connected || !context.availableDisplayModes?.includes('fullscreen');
   button.querySelector('span')!.textContent = full ? 'Exit full screen' : 'Full screen';
-  button.setAttribute('aria-pressed', String(full));
   capDrawing();
+  if (!full) {
+    // Back inline: the host needs the content's height again, even if it has not changed.
+    lastHeight = 0;
+    queueSize();
+  }
 }
 
 $('fullscreen').addEventListener('click', async () => {
@@ -152,7 +156,8 @@ let sizeQueued = false;
  */
 function reportSize() {
   sizeQueued = false;
-  if (!connected) return;
+  // Full screen is the host's size, not the content's: nothing to report.
+  if (!connected || context.displayMode === 'fullscreen') return;
   const height = Math.ceil(main.getBoundingClientRect().height);
   const width = Math.ceil(window.innerWidth);
   if (height === lastHeight && width === lastWidth) return;

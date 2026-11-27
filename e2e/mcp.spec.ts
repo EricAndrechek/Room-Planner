@@ -292,7 +292,8 @@ async function host(
             '*',
           );
         } else if (msg.method === 'ui/notifications/size-changed') {
-          frame.style.height = `${msg.params.height}px`;
+          // Full screen is the window's size, whatever the view says.
+          if (frame.style.position !== 'fixed') frame.style.height = `${msg.params.height}px`;
         } else if (msg.method === 'ui/open-link') {
           reply({ result: {} });
         } else if (msg.method === 'ui/request-display-mode') {
@@ -539,6 +540,10 @@ test.describe('plan viewer', () => {
           .evaluate((el) => parseFloat(el.style.getPropertyValue('--sheet-max'))),
       )
       .toBeGreaterThan(560);
+    if (SHOTS && test.info().project.name === 'chromium') {
+      await page.waitForTimeout(200);
+      await page.screenshot({ path: `${SHOTS}/dining-fullscreen-light.png` });
+    }
   });
 
   test('dining plan screenshots: phone and desktop, dark and light', async ({
