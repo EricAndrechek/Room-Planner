@@ -140,4 +140,26 @@ describe('buildPlanScene on a plan', () => {
     expect(ids('window')).toEqual(['window-1']);
     expect(ids('item')).toEqual(['sofa', 'table']);
   });
+
+  it("draws the plan alone with chrome: 'none': no title or footer, a narrow margin", () => {
+    const bare = buildPlanScene({ plan: plan(), date: new Date(0), chrome: 'none' });
+    const all = flat(bare.nodes);
+    const roles = all.flatMap((n) => (n.kind === 'group' ? [n.role] : []));
+    expect(roles).not.toContain('title');
+    expect(roles).not.toContain('footer');
+    expect(roles).toContain('inventory');
+    const texts = all.flatMap((n) => (n.kind === 'text' ? [n.text] : []));
+    expect(texts).not.toContain('Flat');
+    expect(texts.some((t) => t.includes('room-planner'))).toBe(false);
+    // The same plan, in a smaller frame: everything stays inside it.
+    expect(bare.width).toBeLessThan(scene.width);
+    expect(bare.height).toBeLessThan(scene.height);
+    const xs = all.flatMap((n) => (n.kind === 'rect' ? [n.x, n.x + n.w] : []));
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...xs)).toBeLessThanOrEqual(bare.width);
+    // The default is the page, as before.
+    expect(sceneToSvg(buildPlanScene({ plan: plan(), date: new Date(0), chrome: 'page' }))).toBe(
+      sceneToSvg(buildPlanScene({ plan: plan(), date: new Date(0) })),
+    );
+  });
 });
