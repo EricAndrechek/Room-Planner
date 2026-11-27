@@ -68,6 +68,21 @@ test('the documented readable flat opens with both rooms, and a sloppy copy of i
   expect(await roomsAndItems(page)).toEqual(expected);
 });
 
+test('a readable door measured from the far end of its wall opens where it was meant', async ({
+  page,
+}) => {
+  // 2 ft from the bottom of the right wall of a 20 x 12 room: the format measures clockwise, from
+  // the top, so 12 - 2 - 3 = 7 ft.
+  await open(page, '/#p=ft;room:Dining:20x12;door:right:end-2:3;window:bottom:right-1:4');
+  await opensClean(page);
+  const room = (await workingPlan(page)).rooms[0]!;
+  expect(room.openings.map((o) => [o.kind, o.wall, o.offset, o.width])).toEqual([
+    ['door', 1, 7, 3],
+    // The bottom wall runs right to left: 1 ft from the right is offset 1.
+    ['window', 2, 1, 4],
+  ]);
+});
+
 test('a readable link with no room says it is damaged', async ({ page }) => {
   await open(page, '/#p=ft;item:Bed:5x6.7@3,3');
   await expect(page.getByRole('dialog', { name: 'This link is damaged' })).toBeVisible();
