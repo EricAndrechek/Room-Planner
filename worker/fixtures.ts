@@ -75,3 +75,24 @@ export const DINING = {
     },
   ],
 };
+
+/**
+ * The readable link ChatGPT wrote for the same dinner without Room Planner's tools (it found the
+ * site and read /agents/): a 20' × 12' dining room, a door on the right wall, two tables end to
+ * end and 18 chairs placed by hand. It could not check it: two chairs overlap and the door on the
+ * right wall, the one the user asked to keep clear, is blocked by the small table and a chair.
+ */
+export const CHATGPT_READABLE = [
+  'ft;name:Thanksgiving;room:Dining_room:20x12;door:right:7:3',
+  'item:Large_table:8x4@6.25,6;item:Small_table:6x3@15.5,6',
+  ...[3, 4.75, 6.5, 8.25, 10].flatMap((x) => [
+    `item:Chair:1.5x1.5@${x},3.25`,
+    `item:Chair:1.5x1.5@${x},8.75`,
+  ]),
+  'item:Chair:1.5x1.5@11,6',
+  'item:Chair:1.5x1.5@11.75,6',
+  ...[13.5, 15.5, 17.5].flatMap((x) => [
+    `item:Chair:1.5x1.5@${x},3.75`,
+    `item:Chair:1.5x1.5@${x},8.25`,
+  ]),
+].join(';');

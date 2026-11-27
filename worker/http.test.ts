@@ -159,8 +159,9 @@ describe.each(ERAS)('MCP over $name', ({ mode }) => {
     expect(s.issues.map((i) => i.code)).toContain('door_blocked');
     expect(s.summary).toContain('144 in × 132 in');
     expect(s.url.startsWith(`${ORIGIN}/#s=`)).toBe(true);
-    // The link is alone on the last line of the text.
-    expect(textOf(r).split('\n').at(-1)).toBe(s.url);
+    // The link is alone on the last line of the text, as Markdown link text.
+    expect(textOf(r).split('\n').at(-1)).toMatch(/^\[Open .+ in Room Planner\]\(/);
+    expect(textOf(r).split('\n').at(-1)).toContain(`](${s.url})`);
     // No drawing is made on the server: the viewer draws the plan.
     expect(JSON.stringify(r)).not.toContain('<svg');
     const opened = await readPlanLink(s.url);

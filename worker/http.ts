@@ -282,7 +282,18 @@ async function route(request: Request, env: Env, trace: Trace): Promise<Response
     const record = (a: Activity) => trace.activities.push(a);
     const a = await handleApi(request, path, origin, record, MAX_BODY);
     const head = request.method === 'HEAD';
-    return apiJson(head ? null : a.body, a.status, a.problem ?? false, a.headers);
+    // `GET /api/plan` answers JSON or Markdown by Accept and User-Agent; neither is indexed.
+    const read: Record<string, string> =
+      path === '/api/plan' ? { Vary: 'Accept, User-Agent', 'X-Robots-Tag': 'noindex' } : {};
+    if (a.markdown !== undefined) {
+      return withHeaders(
+        new Response(head ? null : a.markdown, {
+          status: a.status,
+          headers: { 'Content-Type': 'text/markdown; charset=utf-8', ...read, ...a.headers },
+        }),
+      );
+    }
+    return apiJson(head ? null : a.body, a.status, a.problem ?? false, { ...read, ...a.headers });
   }
 
   if (isCard) {

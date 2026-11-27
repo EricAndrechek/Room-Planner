@@ -6,15 +6,26 @@
  *
  * - `POST /api/plan/check`: a plan (or `{plan, minClearance}`) -> `{ok, issues, summary}`.
  * - `POST /api/plan/link`: a plan (or `{plan}`) -> `{plan, issues, summary, url, editable}`.
- * - `GET /api/plan?url=<link>` (or `?s=`, `?p=`): the plan in a link -> as `/link`.
+ * - `GET /api/plan?url=<link>` (or `?s=`, `?p=`): the plan in a link -> as `/link`. As Markdown
+ *   (the summary, the issues grouped, the link as Markdown link text) for `Accept: text/markdown`
+ *   and for the fetchers of assistants that browse (ChatGPT-User, Claude-User, Perplexity-User…)
+ *   unless they ask for JSON: that is how an assistant with no tools checks a link it wrote.
  *
  * Errors are `application/problem+json` (RFC 9457): 400 when the request cannot be read (not
  * JSON, no plan, a bad argument or URL), 422 when it was read but the plan is not valid (with one
  * `errors` line per field path) or the link is damaged or too new. Rate limit, CORS and analytics
  * are http.ts's, shared with /mcp.
  */
+import { LLM_BOT_UA } from '@wave-rf/cloudflare-md-router';
 import type { Activity } from './analytics';
-import { checkPlan, createPlan, readPlan, type ErrorKind, type ToolOutcome } from './tools';
+import {
+  checkPlan,
+  createPlan,
+  planMarkdown,
+  readPlan,
+  type ErrorKind,
+  type ToolOutcome,
+} from './tools';
 
 export const API_PREFIX = '/api/';
 
@@ -53,6 +64,8 @@ const isObject = (v: unknown): v is Json =>
 export interface ApiAnswer {
   status: number;
   body: unknown;
+  /** The answer as Markdown instead of JSON (`GET /api/plan` for assistants that browse). */
+  markdown?: string;
   /** Extra headers (Allow on a 405). */
   headers?: Record<string, string>;
   problem?: boolean;
@@ -81,6 +94,22 @@ const answer = (o: ToolOutcome): ApiAnswer => {
   if (!o.isError) return { status: 200, body: o.structured };
   const kind = o.stats.errorKind ?? 'bad_argument';
   return problem(UNREADABLE.includes(kind) ? 400 : 422, kind, o.text, o.details);
+};
+
+/** The fetchers of assistants that open pages for a user, beyond the crawlers LLM_BOT_UA names. */
+const BROWSING_UA = /perplexity-user|mistralai-user|meta-externalfetcher|youbot|cohere-ai|phind/i;
+
+/**
+ * Whether a request wants Markdown: it asks for `text/markdown`, or it comes from an assistant's
+ * fetcher and does not ask for JSON.
+ */
+export const wantsMarkdown = (request: Request): boolean => {
+  const accept = (request.headers.get('accept') ?? '').toLowerCase();
+  if (accept.includes('text/markdown')) return true;
+  if (accept.includes('application/json') || accept.includes('application/problem+json'))
+    return false;
+  const ua = request.headers.get('user-agent') ?? '';
+  return LLM_BOT_UA.test(ua) || BROWSING_UA.test(ua);
 };
 
 /** Whether `path` is an API route this file knows (else 404). */
@@ -132,7 +161,9 @@ export async function handleApi(
       q.get('url') ??
       (q.get('s') ? `${origin}/#s=${q.get('s')}` : null) ??
       (q.get('p') ? `${origin}/#p=${q.get('p')}` : null);
-    return done(await readPlan({ url: url ?? undefined }, origin));
+    const outcome = await readPlan({ url: url ?? undefined }, origin);
+    const a = done(outcome);
+    return wantsMarkdown(request) ? { ...a, markdown: planMarkdown(outcome, origin) } : a;
   }
 
   const refuse = (status: number, kind: ErrorKind, detail: string): ApiAnswer => {
