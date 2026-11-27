@@ -3,13 +3,9 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { viewerHtml } from '../scripts/build-viewer.mjs';
 import { DINING } from '../worker/fixtures';
+import { SHOWCASE_PLANS } from '../worker/showcase';
 import { createPlan, readPlan, type ToolOutcome } from '../worker/tools';
 import { storedDims, storedOpenings, storedPieces, workingPlan } from './storage';
-
-/** The three-room plan an assistant made with code (src/lib/agentExample.json). */
-const AGENT_EXAMPLE = JSON.parse(
-  readFileSync(new URL('../src/lib/agentExample.json', import.meta.url), 'utf8'),
-) as { plan: unknown };
 
 // The MCP server (docs/design/plan-format.md, section 7) as users meet it:
 // - a link the server makes opens in the real app as the same plan;
@@ -435,12 +431,7 @@ test.describe('plan viewer', () => {
   }) => {
     test.skip(!SHOTS || browserName !== 'chromium', 'Set MCP_SHOTS_DIR to save screenshots');
     const origin = new URL(baseURL!).origin;
-    const plans: [string, unknown][] = [
-      ['1-bedroom', bedroom],
-      ['2-flat', floor],
-      ['3-three-rooms', AGENT_EXAMPLE.plan],
-    ];
-    for (const [name, plan] of plans) {
+    for (const [name, plan] of SHOWCASE_PLANS) {
       await page.setViewportSize({ width: 1100 + 32, height: 1400 });
       const view = await host(page, toResult(await createPlan({ plan }, origin)), { width: 1100 });
       await expect(view.locator('#sheet svg')).toBeVisible();
