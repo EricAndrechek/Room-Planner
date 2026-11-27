@@ -61,19 +61,135 @@ const SYSTEM_FEET_PER: Record<UnitSystem, number> = {
   cm: FEET_PER_CM,
 };
 
-// Word units must not be followed by another letter ("12 minutes" is not "12 m").
-const TOKEN_RE =
-  /(\d*\.?\d+)\s*(''|'|"|(?:feet|foot|ft|inches|inch|in|millimet(?:er|re)s?|mm|centimet(?:er|re)s?|cm|met(?:er|re)s?|m)(?![a-z]))?/g;
+/** Why a typed length could not be read: nothing typed, two sizes in one field, or not a length. */
+export type LengthProblem = 'empty' | 'pair' | 'invalid';
+
+export type LengthParse = { ok: true; feet: number } | { ok: false; problem: LengthProblem };
+
+const VULGAR_FRACTIONS: Record<string, string> = {
+  '½': ' 1/2',
+  '¼': ' 1/4',
+  '¾': ' 3/4',
+  '⅛': ' 1/8',
+  '⅜': ' 3/8',
+  '⅝': ' 5/8',
+  '⅞': ' 7/8',
+  '⅓': ' 1/3',
+  '⅔': ' 2/3',
+};
 
 /**
- * Parse a user-entered length into feet.
+ * What people type, in one spelling: lower case; full-width and other compatibility forms folded
+ * (NFKC); prime, curly and backtick marks as `'` and `"` (two `'` are `"`); dashes as `-`; `½` and
+ * friends as ` 1/2`; a comma between digits as a decimal point (`2,5 m`), or a thousands separator
+ * when three digits follow (`1,200 mm`).
+ */
+export const normalizeLength = (input: string): string =>
+  input
+    .replace(/[½¼¾⅛⅜⅝⅞⅓⅔]/g, (c) => VULGAR_FRACTIONS[c] ?? c)
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[′’‘`´ʹʼ]/g, "'")
+    .replace(/[″“”„〃ʺ]/g, '"')
+    .replace(/''/g, '"')
+    .replace(/⁄/g, '/')
+    .replace(/[−–—‐]/g, '-')
+    .replace(/×/g, 'x')
+    .replace(/(\d),(\d{3})(?!\d)/g, '$1$2')
+    .replace(/(\d),(\d+)/g, '$1.$2')
+    .trim();
+
+// A number: `12`, `12.5`, `.5`, `12.` or a fraction (`1/2`), or a whole number and a fraction
+// (`11 1/2`, `11-1/2`).
+const NUMBER_RE = /(\d+(?:\.\d*)?|\.\d+)(?:(?:\s+|-)(\d+)\/(\d+)|\/(\d+))?/y;
+// Its unit, if any. Word units must not be followed by another letter ("12 minutes" is not 12 m);
+// a full stop after one is fine ("12 ft.").
+const UNIT_RE =
+  /\s*('|"|(?:feet|foot|ft|inches|inch|in|millimet(?:er|re)s?|mm|centimet(?:er|re)s?|cm|met(?:er|re)s?|m)(?![a-z])\.?)/y;
+// Between two values: spaces, a comma, a plus, or a dash (`11-7`, `11'-7"`).
+const GAP_RE = /\s*[,;+-]?\s*/y;
+// Two sizes typed in one field: `12x10`, `12' x 10'`, `3 m by 4 m`, `12*10`.
+const PAIR_RE = /\d\s*(?:'|"|[a-z]+\.?)?\s*(?:x|\*|by)\s*\.?\d/;
+
+/**
+ * Read a typed length (in feet). Every form the old parser read still works (`12'6"`, `150in`,
+ * `3.5m`, `1m 20cm`, `11 7`, bare numbers in the active unit), plus the ones people actually type:
+ * `11'7`, `11' 7"`, `11'7''`, `11ft7`, `11 ft 7 in`, `11-7`, `11.5'`, `11 1/2'`, `7"` or `7in`
+ * alone, Unicode primes and curly quotes, `2,5 m`, and `cm` / `m` / `mm` in any unit system.
  *
- * Accepts anything the original parser accepted (`12'6"`, `12'`, `6"`, `150in`,
- * `3.5m`, `350cm`, plain numbers in the active unit system) plus compound and
- * spelled-out forms (`12 ft 6 in`, `1m 20cm`, `5 feet`, `12.5 ft` in any unit
- * system). A bare number after a feet value is inches (`12'6`), after a meter
- * value is centimeters (`1m 20`); in feet & inches, a second bare number is inches too
- * (`11 7` = 11'7"). Unparseable input yields 0, like before.
+ * A bare number is in the active unit system; one after a feet value is inches (`12'6`), and after
+ * a meter value centimeters (`1m 20`). In feet & inches and decimal feet, a second bare number is
+ * inches (`11 7` = 11'7"), as it is after a second `'` (`11'7'`). Anything else (letters that are
+ * not a unit, three numbers with no units, a size pair) is not a length.
+ */
+export function parseLength(input: string, unitSystem: UnitSystem = 'ft-in'): LengthParse {
+  const str = normalizeLength(input);
+  if (!str) return { ok: false, problem: 'empty' };
+  if (!/\d/.test(str)) return { ok: false, problem: 'invalid' };
+  if (PAIR_RE.test(str)) return { ok: false, problem: 'pair' };
+  let pos = 0;
+  let negative = false;
+  if (str[0] === '-' || str[0] === '+') {
+    negative = str[0] === '-';
+    pos = 1;
+  }
+  const tokens: { value: number; unit: LengthUnit | null; mark: string | null }[] = [];
+  while (pos < str.length) {
+    if (tokens.length) {
+      GAP_RE.lastIndex = pos;
+      pos += GAP_RE.exec(str)![0].length;
+    } else {
+      while (str[pos] === ' ') pos++;
+    }
+    if (pos >= str.length) break;
+    NUMBER_RE.lastIndex = pos;
+    const n = NUMBER_RE.exec(str);
+    if (!n) return { ok: false, problem: 'invalid' };
+    pos += n[0].length;
+    let value = parseFloat(n[1]!);
+    if (n[2] !== undefined) value += Number(n[2]) / Number(n[3]);
+    if (n[4] !== undefined) value /= Number(n[4]);
+    if (!Number.isFinite(value)) return { ok: false, problem: 'invalid' };
+    UNIT_RE.lastIndex = pos;
+    const u = UNIT_RE.exec(str);
+    let mark: string | null = null;
+    if (u) {
+      pos += u[0].length;
+      mark = u[1]!.replace(/\.$/, '');
+    }
+    tokens.push({ value, unit: mark ? (UNIT_ALIASES[mark] ?? null) : null, mark });
+    if (tokens.length > 3) return { ok: false, problem: 'invalid' };
+  }
+  if (!tokens.length) return { ok: false, problem: 'invalid' };
+
+  const feetLike = unitSystem === 'ft-in' || unitSystem === 'ft';
+  /** The unit a bare number is read in, as a length unit (feet & inches: feet). */
+  const systemUnit: LengthUnit = feetLike ? 'ft' : unitSystem;
+  let total = 0;
+  // The unit of the value before (a bare first number counts as the active unit's).
+  let prev: LengthUnit | null = null;
+  for (const t of tokens) {
+    let unit = t.unit;
+    if (prev === null) {
+      unit ??= systemUnit;
+    } else if (unit === null) {
+      // The bare number after a value is the next unit down: inches after feet, cm after meters.
+      if (prev === 'ft') unit = 'in';
+      else if (prev === 'm') unit = 'cm';
+      else return { ok: false, problem: 'invalid' }; // "7in 5", "20cm 3": nothing smaller
+    } else if (prev === 'ft' && unit === 'ft' && t.mark === "'") {
+      unit = 'in'; // 11'7' : the second mark meant inches
+    } else if (FEET_PER[unit] >= FEET_PER[prev]) {
+      return { ok: false, problem: 'invalid' }; // "6in 2ft", "20cm 1m": larger after smaller
+    }
+    total += t.value * FEET_PER[unit];
+    prev = unit;
+  }
+  return { ok: true, feet: negative ? -total : total };
+}
+
+/**
+ * Parse a user-entered length into feet (see `parseLength`); 0 for anything that is not a length.
  */
 export const parseToFeet = (
   input: string | number | null | undefined,
@@ -82,37 +198,20 @@ export const parseToFeet = (
   if (input === null || input === undefined || input === '') return 0;
   if (typeof input === 'number')
     return Number.isFinite(input) ? input * SYSTEM_FEET_PER[unitSystem] : 0;
-
-  const str = input
-    .trim()
-    .toLowerCase()
-    .replace(/[′’‘`]/g, "'") // prime / curly apostrophes
-    .replace(/[″“”]/g, '"'); // double prime / curly quotes
-  const negative = /^-/.test(str);
-
-  let total = 0;
-  let matched = false;
-  let prevUnit: LengthUnit | null = null;
-  // In feet & inches, a bare number counts as feet, so a bare number right after it is inches:
-  // "11 7" is 11'7" (easier to type on a phone keyboard than ' and ").
-  let prevBareFeet = false;
-  for (const match of str.matchAll(TOKEN_RE)) {
-    const value = parseFloat(match[1]!);
-    const rawUnit = match[2];
-    let unit: LengthUnit | null = rawUnit ? (UNIT_ALIASES[rawUnit] ?? null) : null;
-    const bare = !unit;
-    if (!unit) {
-      if (prevUnit === 'ft' || prevBareFeet) unit = 'in';
-      else if (prevUnit === 'm') unit = 'cm';
-    }
-    total += unit ? value * FEET_PER[unit] : value * SYSTEM_FEET_PER[unitSystem];
-    prevBareFeet = bare && !unit && unitSystem === 'ft-in';
-    prevUnit = unit;
-    matched = true;
-  }
-  if (!matched) return 0;
-  return negative ? -total : total;
+  const r = parseLength(input, unitSystem);
+  return r.ok ? r.feet : 0;
 };
+
+/**
+ * What a typed size looks like, with nothing of what it says: every digit becomes 9, letters and
+ * marks stay, at most 12 characters (`11'7"` -> `99'9"`, `2,5 m` -> `9,9 m`). For analytics: which
+ * forms people type that are not read.
+ */
+export const inputShape = (input: string): string =>
+  input
+    .trim()
+    .replace(/\p{Nd}/gu, '9')
+    .slice(0, 12);
 
 /** Format the ft-in display (`12'6"`), handling negatives and inch rounding to 12. */
 const formatFeetInches = (feet: number): string => {
@@ -238,33 +337,92 @@ export const roomMaxFeet = (unitSystem: UnitSystem): number =>
 export const roomConfirmAboveFeet = (unitSystem: UnitSystem): number =>
   isMetric(unitSystem) ? 15 * FEET_PER_METER : 50;
 
+/** Where a typed size goes: a room side, or anything else (a piece, a door, a position). */
+export type SizeKind = 'room' | 'piece';
+
+/** Another reading of a typed number: its length, and how to type it to mean that. */
+export interface Reading {
+  feet: number;
+  /** The input that reads that way, e.g. `60"`, `450 cm`, `0.8 m`. */
+  typed: string;
+}
+
 /**
- * A plausible other reading (in feet) of an unusually large entry, or null when there is none.
- * Only unit-less input is reinterpreted, as the usual slip for each unit system:
- * - feet & inches: a bare 3-4 digit number is feet then inches (`117` = 11'7", `1210` = 12'10";
- *   the inches must be 0-11);
- * - meters: a bare number is centimeters (`450` = 4.5 m); centimeters: millimeters.
+ * A plausible other reading of a size that is out of range or unusually large, or null when there
+ * is none. Only a unit-less number is reinterpreted, as the usual slip for each unit system:
+ * - feet & inches: for a room, a bare 3-4 digit number is feet then inches (`117` = 11'7",
+ *   `1210` = 12'10"; the inches must be 0-11); for anything else (`kind: 'piece'`) a bare number
+ *   is first read as inches (`60` = 60" = 5'), people measure furniture in inches;
+ * - decimal feet: for a piece, inches too;
+ * - meters: a bare number is centimeters (`450` = 4.5 m); centimeters: millimeters (too large)
+ *   or meters (too small: `0,8` = 0.8 m).
  * The result must itself be a sensible size: within [`min`, `max`] feet.
  */
-export const suggestReading = (
+export function otherReading(
   input: string,
   unitSystem: UnitSystem,
   { min, max }: { min: number; max: number },
-): number | null => {
-  const s = input.trim();
-  const ok = (feet: number) => (feet >= min && feet <= max ? feet : null);
-  if (unitSystem === 'ft-in') {
+  kind: SizeKind = 'room',
+): Reading | null {
+  const s = normalizeLength(input);
+  if (!/^\d*\.?\d+$/.test(s)) return null;
+  const n = Number(s);
+  const ok = (feet: number, typed: string): Reading | null =>
+    feet >= min - 1e-9 && feet <= max + 1e-9 ? { feet, typed } : null;
+  const asInches = () => ok(n / 12, `${s}"`);
+  const asFeetInches = (): Reading | null => {
     if (!/^\d{3,4}$/.test(s)) return null;
     const twoDigitInches = s.length === 4 ? Number(s.slice(2)) : NaN;
-    if (twoDigitInches <= 11) return ok(Number(s.slice(0, 2)) + twoDigitInches / 12);
-    if (s.length === 3) return ok(Number(s.slice(0, 2)) + Number(s.slice(2)) / 12);
-    return null;
+    const feet =
+      twoDigitInches <= 11
+        ? Number(s.slice(0, 2)) + twoDigitInches / 12
+        : s.length === 3
+          ? Number(s.slice(0, 2)) + Number(s.slice(2)) / 12
+          : null;
+    return feet === null ? null : ok(feet, feetToDisplay(feet, 'ft-in'));
+  };
+  if (unitSystem === 'ft-in') {
+    return kind === 'piece' ? (asInches() ?? asFeetInches()) : asFeetInches();
   }
-  if (!/^\d*\.?\d+$/.test(s)) return null;
-  if (unitSystem === 'm') return ok(Number(s) * FEET_PER_CM);
-  if (unitSystem === 'cm') return ok(Number(s) * FEET_PER_MM);
+  if (unitSystem === 'ft') return kind === 'piece' ? asInches() : null;
+  if (unitSystem === 'm') return ok(n * FEET_PER_CM, `${s} cm`);
+  if (unitSystem === 'cm') {
+    return n * FEET_PER_CM > max
+      ? ok(n * FEET_PER_MM, `${s} mm`)
+      : ok(n * FEET_PER_METER, `${s} m`);
+  }
   return null;
-};
+}
+
+/** `otherReading`'s length only (the room-size check's original form). */
+export const suggestReading = (
+  input: string,
+  unitSystem: UnitSystem,
+  range: { min: number; max: number },
+  kind: SizeKind = 'room',
+): number | null => otherReading(input, unitSystem, range, kind)?.feet ?? null;
+
+/**
+ * How to type a length in this unit system, with the user's own numbers where there are any
+ * (`11 7` -> `11'7" or 11 7`), for the "couldn't read that" message.
+ */
+export function formatHint(input: string, unitSystem: UnitSystem): string {
+  const nums = normalizeLength(input).match(/\d+(?:\.\d+)?/g) ?? [];
+  const a = nums[0] ?? (unitSystem === 'cm' ? '250' : unitSystem === 'in' ? '75' : '11');
+  const b = nums[1] ?? '6';
+  switch (unitSystem) {
+    case 'ft-in':
+      return `${a}'${b}" or ${a} ${b}`;
+    case 'ft':
+      return `${a} ft or ${a}'${b}"`;
+    case 'in':
+      return `${a} in`;
+    case 'm':
+      return `${a} m`;
+    case 'cm':
+      return `${a} cm`;
+  }
+}
 
 // --- Plan documents in other units ----------------------------------------------------------
 

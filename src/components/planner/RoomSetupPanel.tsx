@@ -126,6 +126,11 @@ function WallPicker({
     </select>
   );
 }
+/** A door or window typed past the end of its wall goes to the end (it never leaves the wall). */
+const OPENING_POSITION_CLAMP = {
+  max: 'as far along the wall as it fits',
+  min: 'the start of the wall',
+};
 const plural = (n: number, word: string) => `${n} ${word}${n !== 1 ? 's' : ''}`;
 
 /** Step 1 group in the sidebar: room size, doors and windows. */
@@ -336,6 +341,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                           className={smallInput('focus:ring-indigo-500')}
                           min={1}
                           max={wallLen}
+                          clamp={{ max: 'the whole wall', min: 'the narrowest door' }}
                           label="Door width"
                           unitSystem={unitSystem}
                         />
@@ -354,6 +360,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                           className={smallInput('focus:ring-indigo-500')}
                           min={0}
                           max={Math.max(0, wallLen - place.width)}
+                          clamp={OPENING_POSITION_CLAMP}
                           label="Door position"
                           unitSystem={unitSystem}
                         />
@@ -526,6 +533,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                           className={smallInput('focus:ring-blue-500')}
                           min={0.5}
                           max={wallLen}
+                          clamp={{ max: 'the whole wall', min: 'the narrowest window' }}
                           label="Window width"
                           unitSystem={unitSystem}
                         />
@@ -544,6 +552,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                           className={smallInput('focus:ring-blue-500')}
                           min={0}
                           max={Math.max(0, wallLen - place.width)}
+                          clamp={OPENING_POSITION_CLAMP}
                           label="Window position"
                           unitSystem={unitSystem}
                         />

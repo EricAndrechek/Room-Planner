@@ -44,6 +44,7 @@ export type AnalyticsEvent =
   | 'opening_moved'
   | 'dimension_rejected'
   | 'dimension_confirm'
+  | 'dimension_adjusted'
   | 'room_resized'
   | 'room_shape_changed'
   | 'room_corner_added'

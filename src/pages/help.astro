@@ -172,8 +172,18 @@ const sections = [
       <p>
         <strong>Tip:</strong> you can type a value in any unit and it is converted automatically —
         for example <code>12'6"</code>, <code>12 ft 6 in</code>, <code>150in</code>,{' '}
-        <code>3.5m</code>, <code>1m 20cm</code> or <code>350cm</code>. A plain number uses the
-        current display unit. Press Enter or click away to apply.
+        <code>3.5m</code>, <code>1m 20cm</code> or <code>350cm</code>. Feet and inches can be typed
+        however you write them: <code>11'7</code>, <code>11' 7"</code>, <code>11ft 7in</code>,{' '}
+        <code>11-7</code> or just <code>11 7</code>, and halves as <code>11 1/2'</code> or{' '}
+        <code>11.5'</code>; a comma works as the decimal point (<code>2,5 m</code>). A plain number
+        uses the current display unit. Press Enter or click away to apply.
+      </p>
+      <p>
+        If a number doesn't fit, the field says why and keeps the old value. When it looks like a
+        different unit was meant (<code>60</code> for a sofa is more likely 60 inches than 60 feet),
+        it asks “did you mean 60" (5')?” first. A door or window wider than its wall is made as wide
+        as the wall, and a piece of furniture may be bigger than the room (it is marked as outside
+        the room).
       </p>
     </section>
 

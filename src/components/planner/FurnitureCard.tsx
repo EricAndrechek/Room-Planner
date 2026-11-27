@@ -38,6 +38,16 @@ interface FurnitureCardProps {
  * A furniture entry in the sidebar: label, color, lock/visibility, shape, size, position and
  * rotation.
  */
+/**
+ * A piece may be bigger than its room (it is drawn, and flagged as outside the room), up to a
+ * sanity limit; positions past the far wall go to the far wall.
+ */
+const BIGGER_THAN_ROOM = {
+  upTo: 100,
+  note: 'Bigger than the room: it shows as outside the room',
+};
+const POSITION_CLAMP = { max: 'as far as it fits in the room', min: 'against the wall' };
+
 export const FurnitureCard = memo(function FurnitureCard({
   item,
   warning,
@@ -211,6 +221,7 @@ export const FurnitureCard = memo(function FurnitureCard({
                 className="w-full p-1.5 text-xs border border-slate-200 rounded-sm"
                 min={0.1}
                 max={frame.width}
+                allowAbove={BIGGER_THAN_ROOM}
                 label={`Width of ${item.label}`}
                 id={fieldId('width')}
                 unitSystem={unitSystem}
@@ -226,6 +237,7 @@ export const FurnitureCard = memo(function FurnitureCard({
                 className="w-full p-1.5 text-xs border border-slate-200 rounded-sm"
                 min={0.1}
                 max={frame.height}
+                allowAbove={BIGGER_THAN_ROOM}
                 label={`Depth of ${item.label}`}
                 id={fieldId('depth')}
                 unitSystem={unitSystem}
@@ -248,6 +260,7 @@ export const FurnitureCard = memo(function FurnitureCard({
                 className="w-full p-1.5 text-xs border border-slate-200 rounded-sm"
                 min={0}
                 max={frame.width - item.width}
+                clamp={POSITION_CLAMP}
                 label={`X position of ${item.label}`}
                 id={fieldId('x')}
                 unitSystem={unitSystem}
@@ -267,6 +280,7 @@ export const FurnitureCard = memo(function FurnitureCard({
                 className="w-full p-1.5 text-xs border border-slate-200 rounded-sm"
                 min={0}
                 max={frame.height - item.depth}
+                clamp={POSITION_CLAMP}
                 label={`Y position of ${item.label}`}
                 id={fieldId('y')}
                 unitSystem={unitSystem}

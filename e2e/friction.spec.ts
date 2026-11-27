@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { storedDims, storedOpenings, storedPieces, storedUi } from './storage';
-import { isNarrow, openStep, viewPlan } from './ui';
+import { isNarrow, openStep, showEditor, viewPlan } from './ui';
 
 // Fixes for friction seen in real sessions (see the PR): each test names the behaviour it guards.
 
@@ -341,7 +341,7 @@ test.describe('room size input', () => {
     const describedBy = (await width.getAttribute('aria-describedby'))!;
     // Shown in the full-width row under Width and Length, named after the field.
     const error = page.locator(`[id="${describedBy}"]`);
-    await expect(error).toHaveText(`Width: Max 500'. For 11'7", type 11 7`);
+    await expect(error).toHaveText(`Width: Max 500' (that's 600 ft)`);
     await expect(page.getByTestId('room-dims-messages')).toContainText('Width: Max 500');
     await expect(page.getByTestId('dimension-confirm')).toHaveCount(0);
     await expect(width).toHaveValue(`12'`);
@@ -349,6 +349,146 @@ test.describe('room size input', () => {
     // Typing again clears the error.
     await width.fill('14');
     await expect(width).not.toHaveAttribute('aria-invalid');
+  });
+});
+
+test.describe('typed sizes (production rejections: 72 in the first days)', () => {
+  const furniture = async (page: Page) => {
+    await page.goto('/');
+    await ready(page);
+    await openStep(page, 'furniture');
+    // The sample Desk's card: select it so its fields show.
+    await page.getByRole('button', { name: /^Desk,/ }).click();
+    await showEditor(page);
+  };
+  const deskWidth = async (page: Page) =>
+    (await stored<{ label: string; width: number }[]>(page, 'items')).find(
+      (i) => i.label === 'Desk',
+    )!.width;
+  const commit = async (field: Locator, text: string) => {
+    await field.fill(text);
+    await field.press('Enter');
+  };
+
+  test('every common way of typing a size is read', async ({ page }) => {
+    await furniture(page);
+    const width = page.getByLabel('Width of Desk');
+    for (const [typed, feet] of [
+      [`4'7`, 4 + 7 / 12],
+      [`4' 7"`, 4 + 7 / 12],
+      [`4'7''`, 4 + 7 / 12],
+      ['4ft 7in', 4 + 7 / 12],
+      ['4 ft 7 in', 4 + 7 / 12],
+      ['4ft7', 4 + 7 / 12],
+      ['4-7', 4 + 7 / 12],
+      [`4.5'`, 4.5],
+      ['4.5 ft', 4.5],
+      [`4 1/2'`, 4.5],
+      ['55"', 55 / 12],
+      ['55in', 55 / 12],
+      ['4′7″', 4 + 7 / 12],
+      ['4’7”', 4 + 7 / 12],
+      ['  4 7  ', 4 + 7 / 12],
+      ['140 cm', 140 * 0.0328084],
+      ['1,4 m', 1.4 * 3.28084],
+    ] as const) {
+      await commit(width, typed);
+      await expect(width, typed).not.toHaveAttribute('aria-invalid');
+      await expect.poll(() => deskWidth(page), { message: typed }).toBeCloseTo(feet, 3);
+    }
+  });
+
+  test('a size pair in one field is rejected with a hint, the value stays', async ({ page }) => {
+    // Record captures (the PostHog SDK stays off under automation).
+    await page.addInitScript(() => {
+      const events: [string, Record<string, unknown> | undefined][] = [];
+      (window as unknown as { __events: typeof events }).__events = events;
+      (window as unknown as { posthog: unknown }).posthog = {
+        __SV: 1,
+        capture: (name: string, props?: Record<string, unknown>) => events.push([name, props]),
+      };
+    });
+    await furniture(page);
+    const width = page.getByLabel('Width of Desk');
+    const before = await deskWidth(page);
+    await commit(width, `5' x 3'`);
+    await expect(width).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.getByRole('alert').filter({ hasText: 'One size per field' })).toHaveText(
+      `One size per field: type 5' here and the other size in its own field`,
+    );
+    expect(await deskWidth(page)).toBe(before);
+    // Analytics: the form typed (digits as 9), never the numbers.
+    const got = await page.evaluate(
+      () => (window as unknown as { __events: [string, Record<string, unknown>][] }).__events,
+    );
+    expect(got.filter(([e]) => e === 'dimension_rejected').map(([, p]) => p)).toEqual([
+      { reason: 'pair', units: 'ft-in', shape: `9' x 9'`, outcome: 'rejected' },
+    ]);
+  });
+
+  test('unreadable input says how to type it, with the numbers typed', async ({ page }) => {
+    await furniture(page);
+    const width = page.getByLabel('Width of Desk');
+    await commit(width, '4 pies 7');
+    await expect(page.getByRole('alert').filter({ hasText: "Couldn't read" })).toHaveText(
+      `Couldn't read “4 pies 7”. Type it like 4'7" or 4 7`,
+    );
+  });
+
+  test('a cleared field goes back to its value without an error', async ({ page }) => {
+    await furniture(page);
+    const width = page.getByLabel('Width of Desk');
+    const before = await width.inputValue();
+    await commit(width, '');
+    await expect(width).toHaveValue(before);
+    await expect(width).not.toHaveAttribute('aria-invalid');
+  });
+
+  test(`"60" for a piece: did you mean 60" (5')? Use it, or keep 60 ft`, async ({ page }) => {
+    await furniture(page);
+    const width = page.getByLabel('Width of Desk');
+    await commit(width, '60');
+    const prompt = page.getByTestId('dimension-confirm');
+    await expect(prompt).toHaveText(/That's 60 ft — did you mean 60" \(5'\)\?/);
+    await expect(prompt.getByRole('button', { name: `Use 5'` })).toBeFocused();
+    await prompt.getByRole('button', { name: `Use 5'` }).click();
+    await expect(prompt).toHaveCount(0);
+    await expect.poll(() => deskWidth(page)).toBe(5);
+  });
+
+  test('a piece bigger than the room is allowed, with a note (not rejected)', async ({ page }) => {
+    await furniture(page);
+    const width = page.getByLabel('Width of Desk');
+    await commit(width, `14'`);
+    await expect(width).not.toHaveAttribute('aria-invalid');
+    await expect(page.getByTestId('dimension-note')).toHaveText(
+      'Bigger than the room: it shows as outside the room',
+    );
+    await expect.poll(() => deskWidth(page)).toBe(14);
+  });
+
+  test('a door wider than its wall is made as wide as the wall, and says so', async ({ page }) => {
+    await returningIn(page, 'room-setup');
+    await page.goto('/');
+    await ready(page);
+    await openStep(page, 'room');
+    const width = page.getByLabel('Door width').first();
+    await commit(width, `20'`);
+    await expect(width).not.toHaveAttribute('aria-invalid');
+    await expect(page.getByTestId('dimension-note').first()).toHaveText(
+      `Set to 12': the whole wall`,
+    );
+    await expect
+      .poll(async () => (await stored<{ width: number }[]>(page, 'doors'))[0]!.width)
+      .toBe(12);
+    // "36" there: 36" (3')?
+    await commit(width, '36');
+    const prompt = page.getByTestId('dimension-confirm');
+    await expect(prompt).toContainText(`did you mean 36" (3')?`);
+    await prompt.getByRole('button', { name: `Use 3'` }).click();
+    await expect
+      .poll(async () => (await stored<{ width: number }[]>(page, 'doors'))[0]!.width)
+      .toBe(3);
   });
 });
 
