@@ -162,14 +162,15 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
         summary={
           several ? (
             <>
-              {plan.rooms.length} rooms • {areaText(floorArea(plan), unitSystem)}
+              {`${plan.rooms.length} rooms • `}
+              <span translate="no">{areaText(floorArea(plan), unitSystem)}</span>
             </>
           ) : (
+            // Whole text nodes (not fragments a translator can split), sizes kept untranslated.
             <>
               {isRectangle(room) ? '' : l ? 'L-shape ' : `${room.outline.length} walls, `}
-              {feetToDisplay(roomDims.width, unitSystem)} ×{' '}
-              {feetToDisplay(roomDims.height, unitSystem)} • {plural(doors.length, 'door')} •{' '}
-              {plural(windows.length, 'window')}
+              <span translate="no">{`${feetToDisplay(roomDims.width, unitSystem)} × ${feetToDisplay(roomDims.height, unitSystem)}`}</span>
+              {` • ${plural(doors.length, 'door')} • ${plural(windows.length, 'window')}`}
             </>
           )
         }

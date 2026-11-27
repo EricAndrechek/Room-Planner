@@ -677,6 +677,7 @@ function CornerHandles({
               data-testid="wall-length"
               data-wall={w}
               aria-hidden="true"
+              translate="no"
             >
               {feetToDisplay(f.length, unitSystem)}
             </div>

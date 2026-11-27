@@ -59,7 +59,8 @@ export type AnalyticsEvent =
   | 'app_update_applied'
   | 'storage_persist_result'
   | 'webmcp_available'
-  | 'webmcp_tool_called';
+  | 'webmcp_tool_called'
+  | 'translation_detected';
 
 export type AnalyticsProps = Record<string, string | number | boolean | null | undefined>;
 

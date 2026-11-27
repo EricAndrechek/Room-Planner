@@ -10,8 +10,12 @@ import {
 import { hasShareLink } from '../core/share/link';
 import { createPlanStore, getBrowserStorage } from '../lib/storage';
 import { activateWaitingWorker } from '../lib/swStart';
+import { startTranslationSupport } from '../lib/translation';
 import { ErrorBoundary } from './ErrorBoundary';
 import { Planner } from './planner/Planner';
+
+// Before the planner mounts: browser page translation must not break React's DOM updates.
+if (typeof window !== 'undefined') startTranslationSupport();
 
 const store = typeof window === 'undefined' ? null : createPlanStore(getBrowserStorage());
 

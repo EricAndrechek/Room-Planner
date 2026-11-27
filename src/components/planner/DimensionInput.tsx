@@ -191,7 +191,8 @@ export function DimensionInput({
 
   return (
     <div className="relative w-full">
-      <div className="relative flex items-center">
+      {/* The value and its unit are measurements: a page translator must not reword them. */}
+      <div className="relative flex items-center" translate="no">
         <input
           ref={inputRef}
           id={id}
