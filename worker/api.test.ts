@@ -178,16 +178,14 @@ describe('GET /api/plan for assistants that browse', () => {
     const md = await (await call(p, { headers: { accept: 'text/markdown' } })).text();
     expect(md).toContain('# Thanksgiving\n');
     expect(md).toContain("Dining room is 20' × 12' (240 sq ft) with 1 door and 0 windows.");
-    expect(md).toContain(
-      '## Errors: fix these\n\n- Chair at (11, 6) overlaps Chair at (11.75, 6) by 9".',
-    );
+    expect(md).toContain('## Errors\n\n- Chair at (11, 6) overlaps Chair at (11.75, 6) by 9".');
     expect(md).toContain(
       "- Small table is in the way of the door on the right wall (7'–10' from the top).",
     );
     expect(md).toContain(
       "- Chair at (17.5, 8.25) is in the way of the door on the right wall (7'–10' from the top).",
     );
-    expect(md).toContain('Do not give the user a plan with errors or warnings.');
+    expect(md).toContain('To re-check after changes: ');
     expect(md).not.toContain('](https://');
   });
 
@@ -214,7 +212,7 @@ describe('GET /api/plan for assistants that browse', () => {
     expect(r.status).toBe(422);
     expect(r.headers.get('content-type')).toBe('text/markdown; charset=utf-8');
     expect(await r.text()).toMatch(
-      /^# Room Planner could not read this plan\n\nThe plan in this link is damaged/,
+      /^# Room Planner could not read this plan\n\nThe plan in this link is incomplete or damaged/,
     );
   });
 });

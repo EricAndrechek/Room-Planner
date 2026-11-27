@@ -739,9 +739,9 @@ Details that implementers need:
   L and round pieces, pieces set aside (see "Edit links").
 - `url` is the edit link and `editable` is always `true` (kept for clients written while some
   plans had no link). The link is also the last line of the text content, alone on its line, as
-  Markdown link text (`[Open <plan> in Room Planner](url)`) after a line telling the model to pass
-  it on that way and never as a bare URL, so a client that shows only text still shows it whole and
-  a model does not paste a 900-character address into its reply.
+  Markdown link text (`[Open <plan> in Room Planner](url)`) after a neutral label line, so a client
+  that shows only text still shows it whole. The tool text states facts and gives no instructions
+  to the model (Claude's directory policy; `worker/descriptions.test.ts` scans for directives).
 - `Issue` is `{ code, severity: 'error' | 'warning' | 'info', message, ids: string[] }`. Codes:
   `item_overlap`, `item_outside_room`, `door_blocked`, `doorway_blocked`, `opening_overlap`,
   `opening_off_wall`, `room_overlap`, `window_between_rooms`, `tight_clearance`, `unknown_field`.

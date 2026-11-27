@@ -228,7 +228,7 @@ describe('every plan the format allows', () => {
       expect(s.editable).toBe(true);
       expect(s).not.toHaveProperty('notEditable');
       expect(s.summary).toMatch(said);
-      // The link is the last line, as Markdown link text, never a bare URL.
+      // The link is the last line, as Markdown link text.
       const last = r.text.split('\n').at(-1)!;
       expect(/^\[Open .+ in Room Planner\]\((.+)\)$/.exec(last)?.[1]).toBe(s.url);
       expect(r.text).not.toMatch(/^https?:/m);

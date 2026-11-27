@@ -20,7 +20,7 @@ describe('what agents are told', () => {
   });
 
   it('to create, check, fix and present, asking at most one question', () => {
-    for (const text of [guide, INSTRUCTIONS]) {
+    for (const text of [guide]) {
       expect(text).toMatch(/at most ONE clarifying question/);
       expect(text).toMatch(/create.*check.*fix.*present/is);
       expect(text).toContain('they can drag things in the planner');
@@ -29,11 +29,12 @@ describe('what agents are told', () => {
   });
 
   it('to give the link as Markdown link text, never the bare URL', () => {
-    for (const text of [guide, INSTRUCTIONS, CREATE_PLAN]) {
-      expect(text).toMatch(/markdown link text/i);
-      expect(text).toMatch(/never (as )?(a |the )?bare URL/i);
-      expect(text).not.toMatch(/exactly as (returned|it is)/);
-    }
+    expect(guide).toMatch(/markdown link text/i);
+    expect(guide).toMatch(/never (as )?(a |the )?bare URL/i);
+    expect(guide).not.toMatch(/exactly as (returned|it is)/);
+    // The tool text only states the facts: what the link is and the Markdown line.
+    expect(INSTRUCTIONS).toContain('[Open <name> in Room Planner](url)');
+    expect(CREATE_PLAN).toContain('encodes the whole plan');
   });
 
   it('what a tight gap is, how to seat a table, and how to measure a door from either end', () => {

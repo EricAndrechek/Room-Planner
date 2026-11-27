@@ -274,7 +274,7 @@ describe('what the model reads', () => {
       /^Use when the user wants to lay out, furnish, fit furniture into, or get a floor plan of a room or home: returns a checked plan, a drawing, and an editable Room Planner link\./,
     );
     expect(tool('check_layout').description).toMatch(
-      /^Use to re-check a plan quickly while you rearrange it \(no link, no drawing\)/,
+      /^Use when a plan only needs checking, without making a link or a drawing/,
     );
     expect(tool('read_plan').description).toMatch(
       /^Use when the user shares a Room Planner link, to read and modify that plan/,

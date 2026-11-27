@@ -37,7 +37,7 @@ export { type Issue, type IssueCode };
 export interface ToolOutcome {
   /**
    * The text content. A link, when there is one, is its last line, alone, as Markdown link text
-   * (`[Open <plan> in Room Planner](url)`), the way the model should pass it on.
+   * (`[Open <plan> in Room Planner](url)`), a ready-made link a client can show as is.
    */
   text: string;
   /** `structuredContent`. */
@@ -156,11 +156,7 @@ const describeInvalid = (issues: LoadIssue[]): string => {
   const lines = invalidLines(issues);
   const shown = lines.slice(0, 20);
   const more = lines.length > shown.length ? [`... and ${lines.length - shown.length} more.`] : [];
-  return [
-    'The plan is not valid. Fix these and call again:',
-    ...shown.map((l) => `- ${l}`),
-    ...more,
-  ].join('\n');
+  return ['The plan is not valid:', ...shown.map((l) => `- ${l}`), ...more].join('\n');
 };
 
 /** The display unit of a plan in feet (`ft-in` when it names none). */
@@ -302,11 +298,10 @@ export const markdownLink = (name: string, url: string): string =>
   `[${linkText(`Open ${name.trim() || 'the plan'} in Room Planner`)}](${url})`;
 
 /**
- * The link as text: last, alone on its line, as Markdown link text, so a model passes it on as a
- * link rather than pasting a long URL, and a client that shows only text shows it whole.
+ * The link as text: last, alone on its line, as Markdown link text, so a client that shows only text shows it whole.
  */
 const linkLines = (name: string, url: string): string[] => [
-  'Give the user this link as Markdown link text, like this, never as a bare URL; it holds the whole plan, so keep the URL whole:',
+  'Link to the plan in Room Planner (the whole plan is in the URL):',
   markdownLink(name, url),
 ];
 
@@ -357,7 +352,7 @@ export async function readPlan(args: { url?: unknown }, origin: string): Promise
       result.reason === 'none'
         ? 'This link has no plan in it. A Room Planner plan link contains #s=, #j= or ?config=.'
         : result.reason === 'damaged'
-          ? 'The plan in this link is damaged, most likely cut off or changed when it was copied. Ask the user for the whole link.'
+          ? 'The plan in this link is incomplete or damaged, most likely cut off when it was copied; the full link is needed.'
           : result.reason === 'newer'
             ? `This link holds a plan of version ${result.version}; this server reads versions up to ${PLAN_VERSION}.`
             : 'issues' in result
@@ -388,10 +383,7 @@ export async function readPlan(args: { url?: unknown }, origin: string): Promise
   // A fresh link on this site, never whatever host the link named.
   const link = await planLink(plan, origin);
   const noteLines = notes.length
-    ? [
-        'Not understood or changed when the link was read (fix these in your link):',
-        ...notes.map((n) => `- ${n}`),
-      ]
+    ? ['Not understood or changed when the link was read:', ...notes.map((n) => `- ${n}`)]
     : [];
   return {
     text: [summary, ...noteLines, ...issueLines(issues), ...linkLines(plan.name, link)].join('\n'),
@@ -410,15 +402,15 @@ export async function readPlan(args: { url?: unknown }, origin: string): Promise
 // --- The plan as Markdown, for assistants that browse ------------------------------------------
 
 const SECTIONS: { severity: Issue['severity']; title: string }[] = [
-  { severity: 'error', title: 'Errors: fix these' },
-  { severity: 'warning', title: 'Warnings: fix these too' },
+  { severity: 'error', title: 'Errors' },
+  { severity: 'warning', title: 'Warnings' },
   { severity: 'info', title: 'Tight gaps (6 in to 2 ft: too narrow to walk through)' },
 ];
 
 /**
  * `GET /api/plan` for an assistant that opens web pages (ChatGPT, Claude, Perplexity browsing):
  * the plan in a link checked, as Markdown. Its summary, the issues grouped by severity, what to do
- * next, and the link to give the user. `check` is the address that checks a readable link.
+ * next, and the link. `check` is the address that checks a readable link.
  */
 export function planMarkdown(outcome: ToolOutcome, origin: string): string {
   const checkUrl = `${new URL('/api/plan', origin).toString()}?p=<the text after #p= in your link>`;
@@ -428,7 +420,7 @@ export function planMarkdown(outcome: ToolOutcome, origin: string): string {
       '',
       outcome.text,
       '',
-      `Fix the link and check it again: ${checkUrl} (or ?url=<the whole link, URL-encoded>).`,
+      `To check the link again: ${checkUrl} (or ?url=<the whole link, URL-encoded>).`,
       '',
     ].join('\n');
   }
@@ -462,12 +454,12 @@ export function planMarkdown(outcome: ToolOutcome, origin: string): string {
   out.push('## Next', '');
   if (blocking > 0) {
     out.push(
-      `Move the pieces named above (positions are centres, x to the right and y down, in the plan's unit) until nothing overlaps and no door's swing or doorway is blocked, then check the new link again: ${checkUrl}. Do not give the user a plan with errors or warnings.`,
+      `Positions above are piece centres (x to the right, y down, in the plan's unit). To re-check after changes: ${checkUrl}`,
       '',
     );
   } else {
     out.push(
-      'The layout checks out. Give the user this link as Markdown link text, never as a bare URL:',
+      'The layout checks out. Link to the plan in Room Planner (the whole plan is in the URL):',
       '',
       markdownLink(name, s.url),
       '',
