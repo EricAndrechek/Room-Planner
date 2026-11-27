@@ -11,19 +11,28 @@
       sends it the result of create_plan or read_plan. This is the template: scripts/
       build-viewer.mjs puts the bundled app.ts in place of VIEWER_SCRIPT and writes
       worker/viewer/dist/viewer.html. Self-contained: no fetches, no external files.
+
+      Colours follow the host: its theme (hostContext.theme, else prefers-color-scheme) and the
+      spec's standard variables (hostContext.styles.variables: --color-background-primary, ...),
+      with our own values where the host gives none. The drawing is the export's SVG (drawn
+      without its page, chrome: 'none'), recoloured here by role and by the export's palette
+      values, so a dark host gets a dark floor with light walls; the pieces keep their colours.
     -->
     <style>
       :root {
         --bg: var(--color-background-primary, #ffffff);
-        --panel: var(--color-background-secondary, #f8fafc);
-        --text: var(--color-text-primary, #0f172a);
-        --muted: var(--color-text-secondary, #475569);
-        --line: var(--color-border-secondary, #e2e8f0);
-        --accent: #4f46e5;
-        --accent-text: #ffffff;
-        --error: #dc2626;
-        --warning: #b45309;
-        --info: #2563eb;
+        --panel: var(--color-background-secondary, #f5f5f4);
+        --text: var(--color-text-primary, #1c1917);
+        --muted: var(--color-text-secondary, #57534e);
+        --line: var(--color-border-secondary, #e2e0dc);
+        /* The main action: the host's inverse colours (dark on light, light on dark). */
+        --cta-bg: var(--color-background-inverse, #1c1917);
+        --cta-text: var(--color-text-inverse, #ffffff);
+        --ring: var(--color-ring-primary, #2563eb);
+        --error: var(--color-text-danger, #b91c1c);
+        --warning: var(--color-text-warning, #92400e);
+        --info: var(--color-text-info, #1d4ed8);
+        --success: var(--color-text-success, #15803d);
         --radius: var(--border-radius-lg, 12px);
         --font: var(
           --font-sans,
@@ -35,33 +44,94 @@
           Arial,
           sans-serif
         );
+        /* The drawing: the export's palette (src/core/render/scene/nodes.ts) in light. */
+        --plan-paper: #ffffff;
+        --plan-floor: #ffffff;
+        --plan-wall: #334155;
+        --plan-ink: #0f172a;
+        --plan-text: #334155;
+        --plan-muted: #64748b;
+        --plan-grid: #edf1f6;
+        --plan-door: #cbd5e1;
+        --plan-door-line: #64748b;
+        --plan-swing: #94a3b8;
+        --plan-glass: #e0f2fe;
+        --plan-glass-line: #3b82f6;
+        --hl-error: #dc2626;
+        --hl-warning: #d97706;
+        --hl-focus: #4f46e5;
+        --tint-error: #fef2f2;
+        --tint-warning: #fffbeb;
+        --tint-focus: #e0e7ff;
         color-scheme: light;
       }
+      /* Dark: our values when the host gives no variables (the same block twice: the host's theme,
+         or the system's when the host names none). */
       :root[data-theme='dark'] {
-        --bg: var(--color-background-primary, #0f172a);
-        --panel: var(--color-background-secondary, #1e293b);
-        --text: var(--color-text-primary, #f1f5f9);
-        --muted: var(--color-text-secondary, #cbd5e1);
-        --line: var(--color-border-secondary, #334155);
-        --accent: #818cf8;
-        --accent-text: #0f172a;
-        --error: #f87171;
-        --warning: #fbbf24;
-        --info: #93c5fd;
+        --bg: var(--color-background-primary, #262624);
+        --panel: var(--color-background-secondary, #30302e);
+        --text: var(--color-text-primary, #f5f4ef);
+        --muted: var(--color-text-secondary, #c3c0b6);
+        --line: var(--color-border-secondary, #45443f);
+        --cta-bg: var(--color-background-inverse, #f5f4ef);
+        --cta-text: var(--color-text-inverse, #1c1917);
+        --ring: var(--color-ring-primary, #93c5fd);
+        --error: var(--color-text-danger, #fca5a5);
+        --warning: var(--color-text-warning, #fcd34d);
+        --info: var(--color-text-info, #93c5fd);
+        --success: var(--color-text-success, #86efac);
+        --plan-paper: #1e1e1c;
+        --plan-floor: #34332f;
+        --plan-wall: #d9d6cf;
+        --plan-ink: #f5f4ef;
+        --plan-text: #d9d6cf;
+        --plan-muted: #b3b0a7;
+        --plan-grid: #3d3c37;
+        --plan-door: #5b5952;
+        --plan-door-line: #d9d6cf;
+        --plan-swing: #a8a59c;
+        --plan-glass: #1d3550;
+        --plan-glass-line: #7cc4ff;
+        --hl-error: #f87171;
+        --hl-warning: #fbbf24;
+        --hl-focus: #a5b4fc;
+        --tint-error: #43312e;
+        --tint-warning: #3e3a2b;
+        --tint-focus: #36384c;
         color-scheme: dark;
       }
       @media (prefers-color-scheme: dark) {
         :root:not([data-theme]) {
-          --bg: #0f172a;
-          --panel: #1e293b;
-          --text: #f1f5f9;
-          --muted: #cbd5e1;
-          --line: #334155;
-          --accent: #818cf8;
-          --accent-text: #0f172a;
-          --error: #f87171;
-          --warning: #fbbf24;
+          --bg: #262624;
+          --panel: #30302e;
+          --text: #f5f4ef;
+          --muted: #c3c0b6;
+          --line: #45443f;
+          --cta-bg: #f5f4ef;
+          --cta-text: #1c1917;
+          --ring: #93c5fd;
+          --error: #fca5a5;
+          --warning: #fcd34d;
           --info: #93c5fd;
+          --success: #86efac;
+          --plan-paper: #1e1e1c;
+          --plan-floor: #34332f;
+          --plan-wall: #d9d6cf;
+          --plan-ink: #f5f4ef;
+          --plan-text: #d9d6cf;
+          --plan-muted: #b3b0a7;
+          --plan-grid: #3d3c37;
+          --plan-door: #5b5952;
+          --plan-door-line: #d9d6cf;
+          --plan-swing: #a8a59c;
+          --plan-glass: #1d3550;
+          --plan-glass-line: #7cc4ff;
+          --hl-error: #f87171;
+          --hl-warning: #fbbf24;
+          --hl-focus: #a5b4fc;
+          --tint-error: #43312e;
+          --tint-warning: #3e3a2b;
+          --tint-focus: #36384c;
           color-scheme: dark;
         }
       }
@@ -75,10 +145,28 @@
         color: var(--text);
         font: 14px/1.45 var(--font);
       }
+      /* The host sizes the frame to main (app.ts reports main's height), so nothing may add to it. */
       main {
         padding: 12px;
         display: grid;
-        gap: 10px;
+        gap: 12px;
+      }
+      :root[data-mode='fullscreen'] main {
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+      p {
+        margin: 0;
+      }
+      .head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px 16px;
+      }
+      .titles {
+        flex: 1 1 240px;
+        min-width: 0;
       }
       h1 {
         font-size: 16px;
@@ -86,64 +174,221 @@
         line-height: 1.3;
         overflow-wrap: anywhere;
       }
-      p {
-        margin: 0;
+      .summary {
+        color: var(--muted);
+        font-size: 13px;
+        margin-top: 2px;
       }
-      .muted {
+      .summary.text {
+        white-space: pre-line;
+        overflow-wrap: anywhere;
+      }
+      .actions {
+        display: flex;
+        gap: 8px;
+        flex: 0 1 auto;
+      }
+      button {
+        font: inherit;
+        color: inherit;
+        cursor: pointer;
+      }
+      .open,
+      .ghost {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-height: 40px;
+        border-radius: 999px;
+        padding: 8px 16px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .open {
+        border: 0;
+        background: var(--cta-bg);
+        color: var(--cta-text);
+      }
+      .open:hover {
+        opacity: 0.9;
+      }
+      .ghost {
+        border: 1px solid var(--line);
+        background: transparent;
+        color: var(--text);
+        font-weight: 500;
+      }
+      .ghost:hover {
+        background: var(--panel);
+      }
+      .open svg,
+      .ghost svg {
+        width: 16px;
+        height: 16px;
+        flex: none;
+      }
+      @media (max-width: 520px) {
+        .actions {
+          flex: 1 1 100%;
+        }
+        .open {
+          flex: 1 1 auto;
+        }
+      }
+      button:focus-visible,
+      summary:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
+      }
+      .note {
+        font-size: 13px;
         color: var(--muted);
       }
+      .note:empty {
+        display: none;
+      }
+
+      /* --- The drawing ------------------------------------------------------------------------- */
       .sheet {
-        /* The drawing is a white sheet of paper in either theme: its colours are the app's export. */
-        background: #ffffff;
+        background: var(--plan-paper);
         border: 1px solid var(--line);
         border-radius: var(--radius);
         overflow: hidden;
+        position: relative;
       }
       .sheet svg {
         display: block;
         width: 100%;
         height: auto;
-        /* Not vh: the host sizes the frame to the content, so vh would grow with it. */
-        max-height: 640px;
+        /* Set by app.ts from the host's container size; never vh, which grows with the frame. */
+        max-height: var(--sheet-max, 560px);
+        margin: 0 auto;
       }
+      .figure {
+        display: grid;
+        gap: 6px;
+        min-width: 0;
+      }
+      .picked {
+        font-size: 13px;
+        color: var(--muted);
+      }
+      /* A tall plan on a wide card: the drawing on the left, the issues beside it (app.ts). */
+      main.side {
+        grid-template-columns: auto minmax(0, 1fr);
+        column-gap: 20px;
+        align-items: start;
+      }
+      main.side > .head,
+      main.side > .note {
+        grid-column: 1 / -1;
+      }
+      main.side > .figure {
+        grid-column: 1;
+      }
+      main.side > .issues {
+        grid-column: 2;
+      }
+      main.side .sheet svg {
+        width: var(--sheet-w, 320px);
+        max-height: none;
+      }
+      /* The export's palette, by value, outside the pieces (whose label colours suit their fill). */
+      #sheet svg > rect {
+        fill: var(--plan-paper);
+      }
+      #sheet g:not([data-role='item']) > [fill='#ffffff'] {
+        fill: var(--plan-floor);
+      }
+      #sheet g:not([data-role='item']) > :not(text)[fill='#334155'] {
+        fill: var(--plan-wall);
+      }
+      #sheet g:not([data-role='item']) > [stroke='#334155'] {
+        stroke: var(--plan-wall);
+      }
+      #sheet g:not([data-role='item']) > text[fill='#334155'] {
+        fill: var(--plan-text);
+      }
+      #sheet g[data-role='dimension'] > path {
+        stroke: var(--plan-text);
+      }
+      #sheet g:not([data-role='item']) > [fill='#0f172a'] {
+        fill: var(--plan-ink);
+      }
+      #sheet g:not([data-role='item']) > [fill='#64748b'] {
+        fill: var(--plan-muted);
+      }
+      #sheet g:not([data-role='item']) > [stroke='#64748b'] {
+        stroke: var(--plan-door-line);
+      }
+      #sheet g:not([data-role='item']) > [fill='#cbd5e1'] {
+        fill: var(--plan-door);
+      }
+      #sheet g:not([data-role='item']) > [stroke='#94a3b8'] {
+        stroke: var(--plan-swing);
+      }
+      #sheet g:not([data-role='item']) > [stroke='#edf1f6'] {
+        stroke: var(--plan-grid);
+      }
+      #sheet g:not([data-role='item']) > [fill='#e0f2fe'] {
+        fill: var(--plan-glass);
+      }
+      #sheet g:not([data-role='item']) > [stroke='#3b82f6'] {
+        stroke: var(--plan-glass-line);
+      }
+      #sheet g[data-role='item'] {
+        cursor: pointer;
+      }
+
       /* Issues on the drawing: the pieces, doors, windows and rooms an issue names. */
-      g[data-role='item'].hl-warning > :first-child {
-        stroke: #d97706;
+      #sheet g[data-role='item'].hl-warning > :first-child {
+        stroke: var(--hl-warning);
         stroke-width: 3.5px;
       }
       /* After the warning rule: a piece with both is marked as an error. */
-      g[data-role='item'].hl-error > :first-child {
-        stroke: #dc2626;
+      #sheet g[data-role='item'].hl-error > :first-child {
+        stroke: var(--hl-error);
         stroke-width: 3.5px;
       }
-      g[data-role='door'].hl-warning path,
-      g[data-role='door'].hl-error path {
-        stroke: #d97706;
+      #sheet g[data-role='door'].hl-warning path,
+      #sheet g[data-role='door'].hl-error path {
+        stroke: var(--hl-warning);
         stroke-width: 2.5px;
       }
-      g[data-role='window'].hl-warning rect,
-      g[data-role='window'].hl-error rect,
-      g[data-role='window'].hl-warning path,
-      g[data-role='window'].hl-error path {
-        stroke: #dc2626;
+      #sheet g[data-role='window'].hl-warning > *,
+      #sheet g[data-role='window'].hl-error > * {
+        stroke: var(--hl-error);
       }
       /* A room an issue names (rooms that overlap, a window between rooms): its floor is tinted. */
-      g[data-role='room'].hl-warning > [fill='#ffffff'] {
-        fill: #fffbeb;
+      #sheet g[data-role='room'].hl-warning > [fill='#ffffff'] {
+        fill: var(--tint-warning);
       }
-      g[data-role='room'].hl-error > [fill='#ffffff'] {
-        fill: #fef2f2;
+      #sheet g[data-role='room'].hl-error > [fill='#ffffff'] {
+        fill: var(--tint-error);
       }
-      g[data-role='room'].focus > [fill='#ffffff'] {
-        fill: #e0e7ff;
+      #sheet g[data-role='room'].focus > [fill='#ffffff'] {
+        fill: var(--tint-focus);
       }
-      svg.focusing g[data-role='item']:not(.focus) {
-        opacity: 0.35;
+      #sheet svg.focusing g[data-role='item']:not(.focus) {
+        opacity: 0.3;
       }
-      g.focus > :first-child,
-      g[data-role='door'].focus path {
-        stroke: #4f46e5 !important;
+      #sheet g.focus > :first-child,
+      #sheet g[data-role='door'].focus path {
+        stroke: var(--hl-focus) !important;
         stroke-width: 4px !important;
+      }
+
+      /* --- Issues ------------------------------------------------------------------------------ */
+      .issues {
+        display: grid;
+        gap: 8px;
+      }
+      .issues h2 {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--muted);
+        margin: 0;
       }
       ul {
         list-style: none;
@@ -158,22 +403,19 @@
         align-items: flex-start;
         width: 100%;
         text-align: left;
-        font: inherit;
-        color: inherit;
         background: var(--panel);
         border: 1px solid var(--line);
-        border-radius: 8px;
+        border-radius: 10px;
         padding: 8px 10px;
-        cursor: pointer;
+        min-height: 40px;
+      }
+      .issue .msg {
+        flex: 1;
+        min-width: 0;
       }
       .issue[aria-pressed='true'] {
-        border-color: var(--accent);
-        box-shadow: inset 0 0 0 1px var(--accent);
-      }
-      .issue:focus-visible,
-      .open:focus-visible {
-        outline: 2px solid var(--accent);
-        outline-offset: 2px;
+        border-color: var(--hl-focus);
+        box-shadow: inset 0 0 0 1px var(--hl-focus);
       }
       .badge {
         flex: none;
@@ -195,51 +437,46 @@
       .badge.info {
         color: var(--info);
       }
+      .count {
+        flex: none;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
+        background: var(--bg);
+        border-radius: 999px;
+        padding: 1px 8px;
+        margin-top: 1px;
+      }
       .ok {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
         color: var(--muted);
       }
-      details {
-        margin-top: 8px;
+      .ok::before {
+        content: '✓';
+        color: var(--success);
+        font-weight: 700;
       }
       details > summary {
         cursor: pointer;
         color: var(--muted);
         font-size: 13px;
-        padding: 4px 0;
+        padding: 6px 0;
+        width: fit-content;
       }
-      details > summary:focus-visible {
-        outline: 2px solid var(--accent);
-        outline-offset: 2px;
+      details > summary .hint {
+        opacity: 0.85;
       }
       details > ul {
-        margin-top: 6px;
-      }
-      .actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        align-items: center;
-      }
-      .open {
-        font: inherit;
-        font-weight: 600;
-        border: 0;
-        border-radius: 8px;
-        padding: 9px 14px;
-        min-height: 40px;
-        background: var(--accent);
-        color: var(--accent-text);
-        cursor: pointer;
-      }
-      .note {
-        font-size: 13px;
+        margin-top: 4px;
       }
       [hidden] {
         display: none !important;
       }
       @media (prefers-reduced-motion: no-preference) {
         .issue,
-        g[data-role='item'] {
+        #sheet g[data-role='item'] {
           transition:
             opacity 0.15s,
             border-color 0.15s;
@@ -249,19 +486,51 @@
   </head>
   <body>
     <main>
-      <header>
-        <h1 id="title">Room Planner</h1>
-        <p id="summary" class="muted">Loading the plan…</p>
+      <header class="head">
+        <div class="titles">
+          <h1 id="title">Room Planner</h1>
+          <p id="summary" class="summary">Loading the plan…</p>
+        </div>
+        <div class="actions">
+          <button id="open" class="open" type="button" hidden>
+            Open in Room Planner
+            <svg
+              viewBox="0 0 16 16"
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M6 3h7v7M13 3 4 12" />
+            </svg>
+          </button>
+          <button id="fullscreen" class="ghost" type="button" hidden>
+            <svg
+              viewBox="0 0 16 16"
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" />
+            </svg>
+            <span>Full screen</span>
+          </button>
+        </div>
       </header>
-      <div id="sheet" class="sheet" hidden></div>
-      <section id="issues-section" aria-labelledby="issues-title" hidden>
-        <h2 id="issues-title" class="muted" style="font-size: 13px; margin: 0 0 6px">Issues</h2>
+      <p id="note" class="note" role="status"></p>
+      <div id="figure" class="figure" hidden>
+        <div id="sheet" class="sheet" hidden></div>
+        <p id="picked" class="picked" aria-live="polite" hidden></p>
+      </div>
+      <section id="issues-section" class="issues" aria-labelledby="issues-title" hidden>
+        <h2 id="issues-title">Issues</h2>
         <ul id="issues"></ul>
       </section>
-      <div class="actions">
-        <button id="open" class="open" type="button" hidden>Open in Room Planner</button>
-        <p id="note" class="note muted" role="status"></p>
-      </div>
     </main>
     <script>
       /* VIEWER_SCRIPT */
