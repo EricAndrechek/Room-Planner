@@ -1,7 +1,7 @@
-import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { animationsSettled, openStep, viewPlan } from './ui';
 import { storedOpenings } from './storage';
+import { seriousViolations } from './axe';
 
 // Door types, opening angles, and furniture blocking doors (#27 follow-up).
 
@@ -162,13 +162,9 @@ test('blocked-door warnings and the door card have no serious axe violations', a
   await expect(page.getByTestId('card-door-block')).toBeVisible();
   const scan = async () => {
     await animationsSettled(page);
-    const r = await new AxeBuilder({ page })
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
-      .analyze();
-    const serious = r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
-    expect(
-      serious.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`),
-    ).toEqual([]);
+    // Pieces are drawn to scale: left out of target-size only (e2e/axe.ts).
+    const serious = await seriousViolations(page);
+    expect(serious, serious.join('\n')).toEqual([]);
   };
   await scan();
   await page.getByRole('button', { name: /^1\. Room/ }).click();

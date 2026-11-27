@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { storedPieces } from './storage';
-import { isNarrow, openStep, showEditor, viewPlan } from './ui';
+import { animationsSettled, isNarrow, openStep, showEditor, viewPlan } from './ui';
 
 // "Blocks door" and "Outside room" confused people after a resize or a turn (replays 01a218a4,
 // 01a2147c): each badge now explains itself in one sentence and offers the fix in place, as one
@@ -67,6 +67,8 @@ test('"Blocks door": the badge explains it, and "Move it out of the way" fixes i
   const pb = (await popover(page).boundingBox())!;
   expect(pb.x).toBeGreaterThanOrEqual(0);
   expect(pb.x + pb.width).toBeLessThanOrEqual(vp.width);
+  // Judged on final colours, not mid fade-in.
+  await animationsSettled(page);
   const axe = await new AxeBuilder({ page })
     .include('[data-testid="warning-popover"]')
     .include('[data-testid="piece-badges"]')

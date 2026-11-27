@@ -148,6 +148,7 @@ test.describe('furniture moves in room setup too', () => {
 
   test('a door handle under a piece still wins in Room Setup, and empty floor still pans', async ({
     page,
+    browserName,
   }) => {
     await page.addInitScript(() => {
       if (sessionStorage.getItem('seeded')) return;
@@ -201,7 +202,8 @@ test.describe('furniture moves in room setup too', () => {
 
     // On a phone, a finger on empty floor (the bottom left of the room) pans the plan; nothing on
     // it moves. (With a mouse the plan pans with the wheel or trackpad.)
-    if (isNarrow(page)) {
+    // (Synthetic touches need the Touch constructor, which WebKit does not expose.)
+    if (isNarrow(page) && browserName !== 'webkit') {
       const room = page.getByTestId('room');
       const r0 = (await room.boundingBox())!;
       await page.evaluate(

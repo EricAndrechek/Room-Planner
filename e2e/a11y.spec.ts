@@ -1,7 +1,7 @@
-import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { animationsSettled, openStep, setDetent, viewPlan } from './ui';
 import { storedPieces } from './storage';
+import { seriousViolations } from './axe';
 
 /** Wait for the island to mount and the initial auto-fit zoom to settle. */
 async function ready(page: Page) {
@@ -9,31 +9,11 @@ async function ready(page: Page) {
   await page.waitForTimeout(700);
 }
 
-/** Zero serious/critical axe violations (WCAG 2.x A/AA + best practices). */
+/** Zero serious/critical axe violations (WCAG 2.x A/AA + best practices; see e2e/axe.ts). */
 async function expectNoSeriousViolations(page: Page, skipRules: string[] = []) {
   // Contrast is judged on final colors: a scan taken mid fade-in sees blended, washed-out ones.
   await animationsSettled(page);
-  let builder = new AxeBuilder({ page }).withTags([
-    'wcag2a',
-    'wcag2aa',
-    'wcag21a',
-    'wcag21aa',
-    'wcag22aa',
-    'best-practice',
-  ]);
-  if (skipRules.length) builder = builder.disableRules(skipRules);
-  const results = await builder.analyze();
-  const serious = results.violations.filter(
-    (v) => v.impact === 'serious' || v.impact === 'critical',
-  );
-  const summary = serious.map(
-    (v) =>
-      `${v.id} (${v.impact}): ${v.nodes.length} node(s)\n` +
-      v.nodes
-        .slice(0, 4)
-        .map((n) => `   ${n.target.join(' ')}\n   ${n.failureSummary?.split('\n')[1] ?? ''}`)
-        .join('\n'),
-  );
+  const summary = await seriousViolations(page, skipRules);
   expect(summary, summary.join('\n')).toEqual([]);
 }
 
