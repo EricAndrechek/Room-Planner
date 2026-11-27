@@ -77,6 +77,10 @@ interface RoomCanvasProps {
   highlightDoorIds?: readonly Id[];
   /** A door or window just changed from the phone sheet: drawn lit up for a moment. */
   flashOpeningId?: Id | null;
+  /** A piece's warning badge was pressed (explain it). */
+  onExplainWarning?: (item: Item) => void;
+  /** The piece whose warning is being explained. */
+  explainingId?: Id | null;
   /** Drawn inside the room, above the furniture (guides and measurements). */
   overlay?: ReactNode;
   /** Phones: the editor sheet covers the whole plan (full height); keep it out of reach. */
@@ -100,6 +104,10 @@ const GRID_STYLE = {
     'linear-gradient(#ccc 1px, transparent 1px), linear-gradient(90deg, #ccc 1px, transparent 1px)',
   backgroundSize: `${PIXELS_PER_UNIT}px ${PIXELS_PER_UNIT}px`,
 };
+
+/** Whether a piece shows a warning badge (and so needs the zoom to size it). */
+const flagged = (w: ItemWarning | undefined) =>
+  !!w && (w.outOfBounds || w.collision || !!w.blocksDoor || !!w.blocksDoorway);
 
 const pathOf = (room: Pick<Room, 'outline'>, P: number) =>
   `M ${room.outline.map((p) => `${p.x * P} ${p.y * P}`).join(' L ')} Z`;
@@ -125,6 +133,8 @@ export function RoomCanvas({
   covered = false,
   highlightDoorIds = [],
   flashOpeningId = null,
+  onExplainWarning,
+  explainingId = null,
   corners = null,
   activeRoomId = null,
   rooms: picking = null,
@@ -506,9 +516,11 @@ export function RoomCanvas({
                 onPointerDown={onItemPointerDown}
                 onRotatePointerDown={onRotatePointerDown}
                 onSelect={onSelectItem}
-                // Only the selected piece draws zoom-dependent UI (its rotate handle): others keep
-                // their memoized render while zooming.
-                zoom={isActive('item', item.id) ? zoom : 1}
+                onExplain={onExplainWarning}
+                explaining={explainingId === item.id}
+                // Only the selected piece (its rotate handle) and flagged ones (their badges) draw
+                // zoom-dependent UI: others keep their memoized render while zooming.
+                zoom={isActive('item', item.id) || flagged(warnings.get(item.id)) ? zoom : 1}
               />
             ))}
             {overlay}

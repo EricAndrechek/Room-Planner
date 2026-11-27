@@ -8,6 +8,7 @@ import type { Frame, PiecePatch } from '../../lib/plans';
 import type { Id, Item, Selection, UnitSystem } from '../../types';
 import { FurnitureCard } from './FurnitureCard';
 import { StepHeader } from './StepHeader';
+import type { WarningFix } from './WarningPopover';
 import { Tooltip } from './Tooltip';
 
 /** The outline each "Add" choice draws next to its name (14 x 14). */
@@ -154,6 +155,8 @@ interface FurniturePanelProps {
   onDeleteItem: (id: Id) => void;
   onRotateItem: (id: Id) => void;
   onDuplicateItem: (id: Id) => void;
+  /** A warning's fix, from its row on the card ("Move inside", "Move it out of the way"). */
+  onFixWarning?: (id: Id, fix: WarningFix) => void;
   onToggleColorPicker: (id: Id) => void;
   onCloseColorPicker: () => void;
   /** The piece just added: its card is scrolled into view and briefly highlighted. */
@@ -418,6 +421,7 @@ export function FurniturePanel(props: FurniturePanelProps) {
                             onDelete={props.onDeleteItem}
                             onRotate={props.onRotateItem}
                             onDuplicate={props.onDuplicateItem}
+                            onFixWarning={props.onFixWarning}
                             onToggleColorPicker={props.onToggleColorPicker}
                             onCloseColorPicker={props.onCloseColorPicker}
                           />

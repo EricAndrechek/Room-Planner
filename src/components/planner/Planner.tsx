@@ -45,7 +45,14 @@ import { isRectangle, roomBounds } from '../../core/geometry/walls';
 import { floorBounds, roomAt, roomName } from '../../core/floor';
 import type { Point } from '../../core/geometry';
 import { piecesOutside } from '../../core/placement';
-import { movePiecesInside, narrowedOpenings, resizeRoom, type PiecePreset } from '../../lib/edits';
+import {
+  movePieceClear,
+  movePieceInside,
+  movePiecesInside,
+  narrowedOpenings,
+  resizeRoom,
+  type PiecePreset,
+} from '../../lib/edits';
 import {
   doorsOf,
   floorArea,
@@ -87,6 +94,7 @@ import { Sidebar } from './Sidebar';
 import { SnapOverlay } from './SnapOverlay';
 import { SnapToggle } from './SnapToggle';
 import { FloatingZoomControls } from './ZoomControls';
+import { WarningPopover, warningIssues, type WarningFix } from './WarningPopover';
 
 /** Phones: the mode badge covers the top of the plan (px)... */
 const BADGE_INSET = 40;
@@ -699,6 +707,71 @@ export function Planner({ store, initial }: PlannerProps) {
     furniture.deleteItem(id);
     offerUndo('piece-deleted', `${pieceName(item)} deleted.`);
   };
+  // --- Warnings: what a badge means, and its fix in place --------------------------------------
+  /** The piece whose warning badge was pressed (its explanation shows by it), and a failed fix. */
+  const [explain, setExplain] = useState<{ id: Id; failed: string | null } | null>(null);
+  const explainWarning = (item: Item) => {
+    setSelection({ id: item.id, type: 'item' });
+    setExplain({ id: item.id, failed: null });
+    const kinds = warningIssues(warnings.get(item.id)).map((i) => i.kind);
+    track('warning_explained', { kinds: kinds.join(',') });
+  };
+  const closeExplain = () => {
+    const id = explain?.id;
+    setExplain(null);
+    // Back to the badge it came from (keyboard users), else the plan.
+    requestAnimationFrame(() => {
+      const badge = containerRef.current?.querySelector<HTMLElement>(
+        `[data-item-id="${id}"] + [data-testid="piece-badges"] button`,
+      );
+      if (badge) badge.focus({ preventScroll: true });
+      else focusCanvas();
+    });
+  };
+  /** "Move inside" / "Move it out of the way": one undo step, said, with an Undo offer. */
+  const fixWarning = (id: Id, fix: WarningFix) => {
+    const item = planRef.current.items.find((i) => i.id === id);
+    if (!item) return;
+    if (item.locked) {
+      setExplain({ id, failed: 'It is locked: unlock it in its card to move it.' });
+      return;
+    }
+    const next =
+      fix === 'inside' ? movePieceInside(planRef.current, id) : movePieceClear(planRef.current, id);
+    if (!next || next === planRef.current) {
+      track('warning_fixed', { fix, ok: false });
+      setExplain({
+        id,
+        failed:
+          fix === 'inside'
+            ? "It can't go further in: it is bigger than the room."
+            : 'No clear spot nearby: make some room, or move it by hand.',
+      });
+      return;
+    }
+    history.apply(() => next);
+    track('warning_fixed', { fix, ok: true });
+    setExplain(null);
+    const done = `${pieceName(item)} moved ${fix === 'inside' ? 'inside the room' : 'out of the way'}`;
+    live.announce(done);
+    offerUndo('warning-fixed', `${done}.`);
+    requestAnimationFrame(focusCanvas);
+  };
+  // The explanation follows its piece: gone with the selection, a drag, or its warning.
+  const explainItem = explain
+    ? plan.items.find((i) => i.id === explain.id && i.placement)
+    : undefined;
+  if (
+    explain &&
+    (!explainItem ||
+      selectedItemId !== explain.id ||
+      dragFrame ||
+      rotateFrame ||
+      (!explain.failed && warningIssues(warnings.get(explain.id)).length === 0))
+  ) {
+    setExplain(null);
+  }
+
   /** The selection bar's and the sheet row's actions. */
   const runPieceAction = (id: Id, action: PieceAction, input: SetAsideInput) => {
     if (action === 'rotate') furniture.rotateItem(id, 90);
@@ -1119,6 +1192,7 @@ export function Planner({ store, initial }: PlannerProps) {
               onDuplicateItem={(id) => {
                 furniture.duplicateItem(id);
               }}
+              onFixWarning={fixWarning}
               onToggleColorPicker={sel.toggleColorPicker}
               onCloseColorPicker={sel.closeColorPicker}
               highlight={latestCard(
@@ -1161,6 +1235,8 @@ export function Planner({ store, initial }: PlannerProps) {
               onItemPointerDown={furniture.onItemPointerDown}
               onRotatePointerDown={furniture.onRotatePointerDown}
               onSelectItem={(item) => selectItem(item.id)}
+              onExplainWarning={explainWarning}
+              explainingId={explain?.id ?? null}
               onDoorPointerDown={(e, door) => openings.startOpeningDrag(e, door.id, 'doors')}
               onWindowPointerDown={(e, win) => openings.startOpeningDrag(e, win.id, 'windows')}
               highlightDoorIds={highlightDoorIds}
@@ -1173,13 +1249,25 @@ export function Planner({ store, initial }: PlannerProps) {
                   : null
               }
               selectionBar={
-                selectionActions &&
-                !isMobile && (
-                  <SelectionToolbar
-                    variant="canvas"
-                    item={selectionActions}
-                    onAction={(a) => runPieceAction(selectionActions.id, a, 'toolbar')}
+                explain && explainItem ? (
+                  <WarningPopover
+                    key={explain.id}
+                    item={explainItem}
+                    warning={warnings.get(explain.id)}
+                    failed={explain.failed}
+                    onFix={(fix) => fixWarning(explain.id, fix)}
+                    onClose={closeExplain}
+                    onShown={reveal}
                   />
+                ) : (
+                  selectionActions &&
+                  !isMobile && (
+                    <SelectionToolbar
+                      variant="canvas"
+                      item={selectionActions}
+                      onAction={(a) => runPieceAction(selectionActions.id, a, 'toolbar')}
+                    />
+                  )
                 )
               }
               ghost={

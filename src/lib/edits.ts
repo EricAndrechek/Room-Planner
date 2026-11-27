@@ -8,6 +8,7 @@
 import {
   insideShift,
   bestSpot,
+  clearSpot,
   findFurnitureSpot,
   furnitureSpotBox,
   moveInside,
@@ -537,6 +538,38 @@ export function movePiecesInside(plan: Plan): Plan {
     return next;
   });
   return changed ? { ...plan, items } : plan;
+}
+
+/**
+ * One piece moved the least amount that brings it into its room (as `movePiecesInside` moves every
+ * stranded piece): "Move inside" on its warning. The same plan when it is inside already.
+ */
+export function movePieceInside(plan: Plan, id: Id): Plan {
+  const item = plan.items.find((i) => i.id === id);
+  if (!item?.placement || item.hidden) return plan;
+  const others = activePieces(plan)
+    .filter((p) => p.item.id !== id)
+    .map((p) => p.parts);
+  const next = moveInside(item, homeRoom(plan, item), others);
+  return next === item ? plan : { ...plan, items: plan.items.map((i) => (i.id === id ? next : i)) };
+}
+
+/**
+ * One piece moved to the nearest spot in its room where it overlaps nothing and blocks no door
+ * (`clearSpot`), keeping its turn: "Move it out of the way" on its warning. Null when there is no
+ * such spot.
+ */
+export function movePieceClear(plan: Plan, id: Id): Plan | null {
+  const item = plan.items.find((i) => i.id === id);
+  if (!item?.placement) return null;
+  const at = clearSpot(plan, item, homeRoom(plan, item));
+  if (!at) return null;
+  return {
+    ...plan,
+    items: plan.items.map((i) =>
+      i.id === id ? { ...i, placement: { ...i.placement!, x: at.x, y: at.y } } : i,
+    ),
+  };
 }
 
 // --- Set aside, and back where you want it ----------------------------------------------------

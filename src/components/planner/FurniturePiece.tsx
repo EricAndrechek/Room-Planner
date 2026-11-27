@@ -1,4 +1,10 @@
-import { memo, useId, type PointerEvent as ReactPointerEvent } from 'react';
+import {
+  memo,
+  useId,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react';
 import { AlertTriangle, DoorOpen, Lock, RotateCw } from 'lucide-react';
 import { blendOnWhite, getBorderColor, migrateColor, readableTextOn } from '../../core/colors';
 import { PIXELS_PER_UNIT } from '../../lib/constants';
@@ -23,12 +29,19 @@ interface FurniturePieceProps {
   onSelect: (item: Item) => void;
   /** Canvas zoom: the rotate handle keeps a constant on-screen size. */
   zoom: number;
+  /** A warning badge was pressed: explain it (WarningPopover). Without it the badges are static. */
+  onExplain?: (item: Item) => void;
+  /** This piece's warning is being explained (the badge's `aria-expanded`). */
+  explaining?: boolean;
 }
 
 /** Furniture is drawn at this opacity while the room is being edited (the selected piece is not). */
 const DIMMED_ALPHA = 0.5;
-/** Room setup: pieces stay under the opening handles (z 20) and the corner handles (z 30+). */
-const DIMMED_Z = { idle: 10, active: 19 };
+/**
+ * Room setup: pieces stay under the opening handles (z 20) and the corner handles (z 30+). Warning
+ * badges go above every piece (one more than the selected one), so a neighbour never hides them.
+ */
+const DIMMED_Z = { idle: 10, active: 18 };
 
 const SHADOW_ACTIVE = '0 8px 20px -4px rgba(0, 0, 0, 0.15)';
 const SHADOW = '0 1px 3px rgba(0, 0, 0, 0.08)';
@@ -110,6 +123,8 @@ export const FurniturePiece = memo(function FurniturePiece({
   onRotatePointerDown,
   onSelect,
   zoom,
+  onExplain,
+  explaining = false,
 }: FurniturePieceProps) {
   const descId = useId();
   const isItemLocked = !!item.locked;
@@ -143,8 +158,14 @@ export const FurniturePiece = memo(function FurniturePiece({
     borderWidth = '3px';
   }
 
-  // Positioned like the piece; the amber note sits outside the button (it is not part of its
-  // name: the button's description says it).
+  // Positioned like the piece; the warning badges sit outside the button (they are not part of its
+  // name: the button's description says it), as buttons of their own that explain them.
+  const z = dimmed ? DIMMED_Z[isActive ? 'active' : 'idle'] : isActive ? 50 : 10;
+  // Warning badges keep their size on screen at any zoom (a 24px target): centred on their spot,
+  // counter-scaled (`zoom` reaches every flagged piece, see RoomCanvas).
+  const badgeAt = (fx: number, fy: number) => ({
+    transform: `translate(${fx * 100}%, ${fy * 100}%) scale(${1 / zoom})`,
+  });
   const box = boxOf(item);
   const frame = {
     width: box.width * PIXELS_PER_UNIT,
@@ -178,7 +199,7 @@ export const FurniturePiece = memo(function FurniturePiece({
           ...frame,
           ...shapeStyle,
           color: readableTextOn(fill),
-          zIndex: dimmed ? DIMMED_Z[isActive ? 'active' : 'idle'] : isActive ? 50 : 10,
+          zIndex: z,
           touchAction: 'none',
         }}
         onFocus={() => {
@@ -250,16 +271,6 @@ export const FurniturePiece = memo(function FurniturePiece({
           </span>
         )}
 
-        {hasWarning && (
-          <div
-            className="absolute -top-2 -left-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center shadow-md"
-            title={warningText(warning, true)}
-            aria-hidden="true"
-          >
-            <AlertTriangle className="w-3 h-3 text-white" />
-          </div>
-        )}
-
         {/* Lock badge: a piece the user locked with its padlock */}
         {isItemLocked && (
           <div
@@ -294,21 +305,98 @@ export const FurniturePiece = memo(function FurniturePiece({
           </div>
         )}
       </div>
-      {doorBlock && (
+      {(hasWarning || doorBlock) && (
         <div
           className="absolute pointer-events-none"
-          style={{ ...frame, zIndex: isActive ? 51 : 11 }}
-          aria-hidden="true"
+          style={{ ...frame, zIndex: dimmed ? DIMMED_Z.active + 1 : 51 }}
+          data-testid="piece-badges"
         >
-          <div
-            className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 flex items-center gap-0.5 whitespace-nowrap rounded-full border border-amber-500 bg-amber-100 px-1.5 text-[10px] leading-4 font-semibold text-amber-900 shadow-sm"
-            data-testid="door-block-badge"
-          >
-            <DoorOpen className="w-2.5 h-2.5" />
-            {doorBlock}
-          </div>
+          {hasWarning && (
+            <WarningBadge
+              className="absolute left-0 top-0 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center shadow-md"
+              style={badgeAt(-0.5, -0.5)}
+              label={`${item.label}: ${warningText(warning, true)}. What does this mean?`}
+              title={warningText(warning, true)}
+              testId="warning-badge"
+              onPress={onExplain && (() => onExplain(item))}
+              expanded={explaining}
+            >
+              <AlertTriangle className="w-3.5 h-3.5 text-white" aria-hidden="true" />
+            </WarningBadge>
+          )}
+          {doorBlock && (
+            <WarningBadge
+              className="absolute left-1/2 top-full flex min-h-6 items-center gap-0.5 whitespace-nowrap rounded-full border border-amber-500 bg-amber-100 px-2 text-[10px] leading-4 font-semibold text-amber-900 shadow-sm"
+              style={badgeAt(-0.5, -0.5)}
+              label={`${item.label}: ${doorBlock}. What does this mean?`}
+              testId="door-block-badge"
+              onPress={onExplain && (() => onExplain(item))}
+              expanded={explaining}
+            >
+              <DoorOpen className="w-3 h-3" aria-hidden="true" />
+              {doorBlock}
+            </WarningBadge>
+          )}
         </div>
       )}
     </>
   );
 });
+
+/**
+ * A warning badge on a piece: a button that explains the warning (and offers the fix) when the
+ * planner can, else a plain marker. Its press never starts a drag or a pan.
+ */
+function WarningBadge({
+  className,
+  style,
+  label,
+  title,
+  testId,
+  onPress,
+  expanded,
+  children,
+}: {
+  className: string;
+  style: CSSProperties;
+  label: string;
+  title?: string;
+  testId: string;
+  onPress?: () => void;
+  expanded: boolean;
+  children: ReactNode;
+}) {
+  if (!onPress) {
+    return (
+      <div
+        className={className}
+        style={style}
+        title={title}
+        aria-hidden="true"
+        data-testid={testId}
+      >
+        {children}
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      style={style}
+      className={`${className} touch-hit pointer-events-auto cursor-pointer hover:brightness-95 focus-visible:ring-2 focus-visible:ring-indigo-500 outline-hidden`}
+      title={title}
+      aria-label={label}
+      aria-haspopup="dialog"
+      aria-expanded={expanded}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        onPress();
+      }}
+      data-draggable
+      data-testid={testId}
+    >
+      {children}
+    </button>
+  );
+}

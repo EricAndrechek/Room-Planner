@@ -10,6 +10,7 @@ import { DimensionInput } from './DimensionInput';
 import { PieceMenu } from './PieceActions';
 import { PieceShapeFields } from './PieceShapeFields';
 import { Tooltip } from './Tooltip';
+import { fixLabel, warningIssues, type WarningFix } from './WarningPopover';
 
 interface FurnitureCardProps {
   item: Item;
@@ -30,14 +31,12 @@ interface FurnitureCardProps {
   onDelete: (id: Id) => void;
   onRotate: (id: Id) => void;
   onDuplicate: (id: Id) => void;
+  /** Fix a warning in place (one undo step). */
+  onFixWarning?: (id: Id, fix: WarningFix) => void;
   onToggleColorPicker: (id: Id) => void;
   onCloseColorPicker: () => void;
 }
 
-/**
- * A furniture entry in the sidebar: label, color, lock/visibility, shape, size, position and
- * rotation.
- */
 /**
  * A piece may be bigger than its room (it is drawn, and flagged as outside the room), up to a
  * sanity limit; positions past the far wall go to the far wall.
@@ -47,6 +46,11 @@ const BIGGER_THAN_ROOM = {
   note: 'Bigger than the room: it shows as outside the room',
 };
 const POSITION_CLAMP = { max: 'as far as it fits in the room', min: 'against the wall' };
+
+/**
+ * A furniture entry in the sidebar: label, color, lock/visibility, shape, size, position and
+ * rotation.
+ */
 
 export const FurnitureCard = memo(function FurnitureCard({
   item,
@@ -65,6 +69,7 @@ export const FurnitureCard = memo(function FurnitureCard({
   onDelete,
   onRotate,
   onDuplicate,
+  onFixWarning,
   onToggleColorPicker,
   onCloseColorPicker,
 }: FurnitureCardProps) {
@@ -82,6 +87,22 @@ export const FurnitureCard = memo(function FurnitureCard({
       ? doorBlockText({ door: !!warning.blocksDoor, doorway: !!warning.blocksDoorway })
       : '';
   const color = migrateColor(item.color);
+  /** The warning's fix, on its row: says what it does, with the piece's name for screen readers. */
+  const fixButton = (fix: WarningFix, tone: string) =>
+    onFixWarning &&
+    !isItemLocked && (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onFixWarning(item.id, fix);
+        }}
+        className={`text-[10px] font-medium px-1.5 py-0.5 rounded-sm border bg-white transition-colors ${tone}`}
+        aria-label={`${fixLabel(fix, warningIssues(warning))}: ${item.label}`}
+      >
+        {fixLabel(fix, warningIssues(warning))}
+      </button>
+    );
 
   return (
     <div
@@ -179,23 +200,28 @@ export const FurnitureCard = memo(function FurnitureCard({
       </div>
 
       {hasWarning && (
-        <div className="mb-2 py-1.5 px-2 bg-red-50 border border-red-200 rounded-sm text-center">
+        <div className="mb-2 py-1.5 px-2 bg-red-50 border border-red-200 rounded-sm flex items-center justify-center gap-2 flex-wrap">
           <p className="text-[10px] text-red-700 flex items-center justify-center gap-1">
-            <AlertTriangle className="w-3 h-3" />
+            <AlertTriangle className="w-3 h-3" aria-hidden="true" />
             {text}
           </p>
+          {fixButton(
+            warning?.outOfBounds ? 'inside' : 'clear',
+            'text-red-800 border-red-300 hover:bg-red-100',
+          )}
         </div>
       )}
 
       {doorBlock && (
-        <div
-          className="mb-2 py-1.5 px-2 bg-amber-50 border border-amber-300 rounded-sm text-center"
-          data-testid="card-door-block"
-        >
-          <p className="text-[10px] text-amber-900 flex items-center justify-center gap-1">
+        <div className="mb-2 py-1.5 px-2 bg-amber-50 border border-amber-300 rounded-sm flex items-center justify-center gap-2 flex-wrap">
+          <p
+            className="text-[10px] text-amber-900 flex items-center justify-center gap-1"
+            data-testid="card-door-block"
+          >
             <DoorOpen className="w-3 h-3" aria-hidden="true" />
             {doorBlock}
           </p>
+          {!hasWarning && fixButton('clear', 'text-amber-900 border-amber-400 hover:bg-amber-100')}
         </div>
       )}
 
