@@ -17,7 +17,7 @@ import { itemParts, partsBounds } from './geometry/shapes';
 import { frameAt, isRectangle, openingInFrame, roomBounds, wallFrame } from './geometry/walls';
 import type { Item, Opening, Plan, Room } from './schema';
 import type { UnitSystem } from './types';
-import { feetToDisplay } from './units';
+import { FEET_PER_CM, FEET_PER_INCH, FEET_PER_METER, feetToDisplay, roundNum } from './units';
 
 export type IssueCode =
   | 'item_overlap'
@@ -41,7 +41,9 @@ export interface Issue {
 }
 
 export interface CheckOptions {
-  /** Gaps above zero and below this (feet) are reported as `tight_clearance`. Default 2 (24 in). */
+  /**
+   * Gaps from TUCKED (6 in) up to this (feet) are reported as `tight_clearance`. Default 2 (24 in).
+   */
   minClearance?: number;
   /** Units of the distances in messages. Default: the plan's display setting, else ft-in. */
   unitSystem?: UnitSystem;
@@ -49,8 +51,15 @@ export interface CheckOptions {
   codes?: IssueCode[];
 }
 
-/** Below this (feet, about 1/16 in) a gap is flush, not tight. */
-const MIN_GAP = 0.005;
+/**
+ * Below this (feet: 6 in) a gap is on purpose, not tight: chairs side by side or tucked to a
+ * table, a nightstand by a bed, a dresser a little off the wall. A person passes neither way, and
+ * nobody means to; tight is the gap between this and `minClearance`, too narrow to walk through
+ * yet wider than "touching".
+ */
+export const TUCKED = 0.5;
+/** Rounding slack on the TUCKED bound, so a gap written as exactly 6 in counts as 6 in. */
+const SLACK = 1e-6;
 const WALL_NAMES = ['top', 'right', 'bottom', 'left'];
 
 // --- Shapes ----------------------------------------------------------------------------------
@@ -213,13 +222,63 @@ export const planDoors = (plan: Pick<Plan, 'rooms'>) =>
 
 const nameOf = (item: Item) => item.label.trim() || 'A piece';
 
+const FEET_PER: Record<UnitSystem, number> = {
+  'ft-in': 1,
+  ft: 1,
+  in: FEET_PER_INCH,
+  m: FEET_PER_METER,
+  cm: FEET_PER_CM,
+};
+
+/**
+ * Names for the pieces in messages: the label, with the piece's centre in the display unit
+ * ("Chair at (11, 6)", feet for feet and inches) when another piece has the same label, so an
+ * agent can tell which one to move.
+ */
+const pieceNamer = (plan: Pick<Plan, 'items'>, unitSystem: UnitSystem) => {
+  const counts = new Map<string, number>();
+  for (const { item } of activePieces(plan)) {
+    const n = nameOf(item);
+    counts.set(n, (counts.get(n) ?? 0) + 1);
+  }
+  const coord = (feet: number) => roundNum(feet / FEET_PER[unitSystem], 2);
+  return (item: Item) => {
+    const n = nameOf(item);
+    if ((counts.get(n) ?? 0) < 2 || !item.placement) return n;
+    return `${n} at (${coord(item.placement.x)}, ${coord(item.placement.y)})`;
+  };
+};
+
 const wallName = (room: Room, wall: number) =>
   isRectangle(room) ? `the ${WALL_NAMES[wall]} wall` : `wall ${wall}`;
 
-const doorName = (plan: Plan, room: Room, door: Opening, other?: Room | null) =>
-  other
-    ? `the door between ${roomName(plan, room)} and ${roomName(plan, other)}`
-    : `the door on ${wallName(room, door.wall)}${plan.rooms.length > 1 ? ` of ${roomName(plan, room)}` : ''}`;
+/**
+ * Where an opening is on a rectangle's wall, seen from above: "7'–10' from the top" on a left or
+ * right wall, "from the left" on a top or bottom wall. Empty for any other outline.
+ */
+export const openingSpan = (room: Room, o: Opening, unitSystem: UnitSystem): string => {
+  if (!isRectangle(room) || o.wall > 3) return '';
+  const b = roomBounds(room);
+  const f = wallFrame(room, o.wall);
+  const ends = [o.offset, o.offset + o.width].map((t) =>
+    o.wall % 2 === 0 ? f.origin.x + f.along.x * t - b.left : f.origin.y + f.along.y * t - b.top,
+  );
+  const [a, z] = [Math.min(...ends), Math.max(...ends)];
+  const len = (feet: number) => feetToDisplay(Math.max(0, feet), unitSystem);
+  return `${len(a)}–${len(z)} from the ${o.wall % 2 === 0 ? 'left' : 'top'}`;
+};
+
+const doorName = (
+  plan: Plan,
+  room: Room,
+  door: Opening,
+  other: Room | null | undefined,
+  unitSystem: UnitSystem,
+) => {
+  if (other) return `the door between ${roomName(plan, room)} and ${roomName(plan, other)}`;
+  const span = openingSpan(room, door, unitSystem);
+  return `the door on ${wallName(room, door.wall)}${plan.rooms.length > 1 ? ` of ${roomName(plan, room)}` : ''}${span ? ` (${span})` : ''}`;
+};
 
 /** Every issue with the plan's layout, in a stable order. */
 export function checkLayout(plan: Plan, options: CheckOptions = {}): Issue[] {
@@ -229,6 +288,7 @@ export function checkLayout(plan: Plan, options: CheckOptions = {}): Issue[] {
   const want = (code: IssueCode) => !options.codes || options.codes.includes(code);
   const issues: Issue[] = [];
   const pieces = activePieces(plan);
+  const named = pieceNamer(plan, unitSystem);
   const doors = want('door_blocked') || want('doorway_blocked') ? planDoors(plan) : [];
 
   pieces.forEach(({ item, parts }, i) => {
@@ -236,7 +296,7 @@ export function checkLayout(plan: Plan, options: CheckOptions = {}): Issue[] {
       issues.push({
         code: 'item_outside_room',
         severity: 'error',
-        message: `${nameOf(item)} is outside ${plan.rooms.length > 1 ? 'every room' : 'the room'}.`,
+        message: `${named(item)} is outside ${plan.rooms.length > 1 ? 'every room' : 'the room'}.`,
         ids: [item.id],
       });
     }
@@ -247,7 +307,7 @@ export function checkLayout(plan: Plan, options: CheckOptions = {}): Issue[] {
         issues.push({
           code: 'item_overlap',
           severity: 'error',
-          message: `${nameOf(item)} overlaps ${nameOf(other.item)} by ${len(depth)}.`,
+          message: `${named(item)} overlaps ${named(other.item)} by ${len(depth)}.`,
           ids: [item.id, other.item.id],
         });
       }
@@ -264,14 +324,14 @@ export function checkLayout(plan: Plan, options: CheckOptions = {}): Issue[] {
         issues.push({
           code: 'door_blocked',
           severity: 'warning',
-          message: `${nameOf(item)} is in the way of ${doorName(plan, room, door, other)}.`,
+          message: `${named(item)} is in the way of ${doorName(plan, room, door, other, unitSystem)}.`,
           ids: [item.id, door.id],
         });
       } else if (want('doorway_blocked') && doorways.some(hits)) {
         issues.push({
           code: 'doorway_blocked',
           severity: 'warning',
-          message: `${nameOf(item)} stands in the doorway of ${doorName(plan, room, door, other)}.`,
+          message: `${named(item)} stands in the doorway of ${doorName(plan, room, door, other, unitSystem)}.`,
           ids: [item.id, door.id],
         });
       }
@@ -342,7 +402,8 @@ export function checkLayout(plan: Plan, options: CheckOptions = {}): Issue[] {
     }
   }
 
-  // Tight clearances: straight gaps between pieces, and to the walls of a rectangular room.
+  // Tight clearances: straight gaps between pieces, and to the walls of a rectangular room, from
+  // TUCKED to minClearance.
   const bounds = pieces.map((p) => partsBounds(p.parts));
   (want('tight_clearance') ? pieces : []).forEach(({ item, parts }, i) => {
     const b = bounds[i]!;
@@ -356,7 +417,7 @@ export function checkLayout(plan: Plan, options: CheckOptions = {}): Issue[] {
         ['left', b.left - r.left],
       ];
       for (const [side, gap] of gaps) {
-        if (gap > MIN_GAP && gap < minClearance) {
+        if (gap >= TUCKED - SLACK && gap < minClearance) {
           issues.push({
             code: 'tight_clearance',
             severity: 'info',
@@ -376,7 +437,7 @@ export function checkLayout(plan: Plan, options: CheckOptions = {}): Issue[] {
           : along > 1e-6
             ? Math.max(o.top - b.bottom, b.top - o.bottom)
             : -1;
-      if (gap > MIN_GAP && gap < minClearance) {
+      if (gap >= TUCKED - SLACK && gap < minClearance) {
         issues.push({
           code: 'tight_clearance',
           severity: 'info',
@@ -387,4 +448,48 @@ export function checkLayout(plan: Plan, options: CheckOptions = {}): Issue[] {
     }
   });
   return issues;
+}
+
+// --- Grouping, for people and models -----------------------------------------------------------
+
+const SEVERITY_ORDER: Record<Issue['severity'], number> = { error: 0, warning: 1, info: 2 };
+
+/** Issues that read the same (one code, one message), counted once, with every entity list. */
+export interface IssueGroup {
+  code: IssueCode;
+  severity: Issue['severity'];
+  message: string;
+  /** Each issue's ids, in plan order. */
+  ids: string[][];
+  count: number;
+}
+
+/**
+ * Issues grouped by what they say (code and message: "Only 1'6" between Chair and Table." ten
+ * times is one group of ten), errors first, then warnings, then info, each in plan order.
+ */
+export function groupIssues(issues: readonly Issue[]): IssueGroup[] {
+  const groups = new Map<string, IssueGroup>();
+  for (const i of issues) {
+    const key = `${i.code}\u0000${i.message}`;
+    const g = groups.get(key);
+    if (g) {
+      g.ids.push(i.ids);
+      g.count++;
+    } else {
+      groups.set(key, {
+        code: i.code,
+        severity: i.severity,
+        message: i.message,
+        ids: [i.ids],
+        count: 1,
+      });
+    }
+  }
+  return [...groups.values()]
+    .map((g, order) => ({ g, order }))
+    .sort(
+      (a, b) => SEVERITY_ORDER[a.g.severity] - SEVERITY_ORDER[b.g.severity] || a.order - b.order,
+    )
+    .map(({ g }) => g);
 }
