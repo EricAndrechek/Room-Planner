@@ -492,6 +492,44 @@ test.describe('typed sizes (production rejections: 72 in the first days)', () =>
   });
 });
 
+test('phone: the door type picker is a full-size target, nothing covers it, and the change shows on the plan', async ({
+  page,
+}) => {
+  test.skip(!isNarrow(page), 'phone layout');
+  await returningIn(page, 'room-setup');
+  await page.goto('/');
+  await ready(page);
+  await openStep(page, 'room');
+  const select = page.getByTestId('door-type').first();
+  await select.scrollIntoViewIfNeeded();
+  const b = (await select.boundingBox())!;
+  // A 44px target with 16px text (smaller text makes iOS zoom in on focus).
+  expect(b.height).toBeGreaterThanOrEqual(44);
+  expect(await select.evaluate((el) => getComputedStyle(el).fontSize)).toBe('16px');
+  // Nothing (the sheet's drag area, a toast) sits on top of it.
+  const hit = await page.evaluate(
+    ({ x, y }) => document.elementFromPoint(x, y)?.getAttribute('data-testid'),
+    { x: b.x + b.width / 2, y: b.y + b.height / 2 },
+  );
+  expect(hit).toBe('door-type');
+  await select.tap();
+  await expect(select).toBeFocused();
+  await select.selectOption('sliding');
+  await expect
+    .poll(async () => (await stored<{ type: string }[]>(page, 'doors'))[0]!.type)
+    .toBe('sliding');
+  // The door shows above the sheet, lit up for a moment, so the change is seen.
+  await expect(page.locator('[data-door-swing][data-door-type="sliding"]')).toHaveAttribute(
+    'data-blocked',
+    'true',
+  );
+  await page.waitForTimeout(400);
+  const handle = (await page.getByRole('button', { name: /^Door handle/ }).boundingBox())!;
+  const sheet = (await page.getByTestId('sidebar').boundingBox())!;
+  expect(handle.y + handle.height).toBeLessThanOrEqual(sheet.y + 1);
+  expect(handle.y).toBeGreaterThanOrEqual(0);
+});
+
 test('Add Item lands in free floor near the middle, selected, with its card in view', async ({
   page,
 }) => {

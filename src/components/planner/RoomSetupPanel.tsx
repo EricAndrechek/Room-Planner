@@ -301,14 +301,17 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                       >
                         Type
                       </label>
+                      {/* Phones: a full-size target with 16px text (smaller text zooms iOS in on
+                          focus); the plan shows the changed door above the sheet (Planner). */}
                       <select
                         id={fid('door', index, 'type')}
                         value={door.type}
                         onChange={(e) =>
                           props.onUpdateDoor(door.id, { type: e.target.value as DoorType })
                         }
-                        className={`${smallInput('focus:ring-indigo-500')} bg-white`}
+                        className={`${smallInput('focus:ring-indigo-500')} bg-white min-h-11 text-base md:min-h-0 md:text-xs`}
                         aria-label={`Door ${index + 1} type`}
+                        data-testid="door-type"
                       >
                         {DOOR_TYPES.map((t) => (
                           <option key={t.value} value={t.value}>

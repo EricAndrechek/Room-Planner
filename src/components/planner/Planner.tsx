@@ -314,6 +314,27 @@ export function Planner({ store, initial }: PlannerProps) {
     },
     [revealCard, expandSheet],
   );
+  /**
+   * Phones: a door or window was changed in the sheet (its type, size, place). Show it: pan it out
+   * from under the sheet and light it up briefly, so the change is seen (taps on the door type
+   * looked dead when the door was hidden under the sheet).
+   */
+  const [flashOpening, setFlashOpening] = useState<Id | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(flashTimer.current), []);
+  const showOpening = useCallback(
+    (id: Id) => {
+      if (!isMobile) return;
+      requestAnimationFrame(() => {
+        const el = containerRef.current?.querySelector(`[data-opening-id="${id}"]`);
+        if (el) reveal(el);
+      });
+      setFlashOpening(id);
+      clearTimeout(flashTimer.current);
+      flashTimer.current = setTimeout(() => setFlashOpening(null), 1200);
+    },
+    [isMobile, reveal],
+  );
   /** Pan just enough that a piece is not under the sheet (or off the edge). */
   const revealPiece = useCallback(
     (id: Id) => {
@@ -1044,10 +1065,16 @@ export function Planner({ store, initial }: PlannerProps) {
               highlightedWall={roomShape.highlightedWall}
               onHighlightWall={roomShape.highlightWall}
               onAddDoor={addDoor}
-              onUpdateDoor={openings.updateDoor}
+              onUpdateDoor={(id, patch) => {
+                openings.updateDoor(id, patch);
+                showOpening(id);
+              }}
               onDeleteDoor={openings.deleteDoor}
               onAddWindow={addWindow}
-              onUpdateWindow={openings.updateWindow}
+              onUpdateWindow={(id, patch) => {
+                openings.updateWindow(id, patch);
+                showOpening(id);
+              }}
               onDeleteWindow={openings.deleteWindow}
               onChangeWall={changeOpeningWall}
               highlight={latestCard(
@@ -1137,6 +1164,7 @@ export function Planner({ store, initial }: PlannerProps) {
               onDoorPointerDown={(e, door) => openings.startOpeningDrag(e, door.id, 'doors')}
               onWindowPointerDown={(e, win) => openings.startOpeningDrag(e, win.id, 'windows')}
               highlightDoorIds={highlightDoorIds}
+              flashOpeningId={flashOpening}
               activeRoomId={activeRoomId}
               labelItems={labelItems}
               rooms={

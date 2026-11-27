@@ -75,6 +75,8 @@ interface RoomCanvasProps {
   onWindowPointerDown: (e: ReactPointerEvent<HTMLDivElement>, win: Opening) => void;
   /** Doors whose clearance to highlight (a piece being moved is in their way). */
   highlightDoorIds?: readonly Id[];
+  /** A door or window just changed from the phone sheet: drawn lit up for a moment. */
+  flashOpeningId?: Id | null;
   /** Drawn inside the room, above the furniture (guides and measurements). */
   overlay?: ReactNode;
   /** Phones: the editor sheet covers the whole plan (full height); keep it out of reach. */
@@ -122,6 +124,7 @@ export function RoomCanvas({
   overlay,
   covered = false,
   highlightDoorIds = [],
+  flashOpeningId = null,
   corners = null,
   activeRoomId = null,
   rooms: picking = null,
@@ -472,7 +475,7 @@ export function RoomCanvas({
                   zoom={zoom}
                   onSelect={() => onSelectOpening('door', door.id)}
                   onHandlePointerDown={(e) => onDoorPointerDown(e, door)}
-                  highlight={highlightDoorIds.includes(door.id)}
+                  highlight={highlightDoorIds.includes(door.id) || flashOpeningId === door.id}
                 />
               )),
             )}

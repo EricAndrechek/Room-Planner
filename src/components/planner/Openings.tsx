@@ -104,6 +104,7 @@ export function DoorShape({
           onPointerDown={onHandlePointerDown}
           onFocus={onSelect}
           title="Drag to reposition door"
+          data-opening-id={door.id}
           role="button"
           tabIndex={0}
           aria-pressed={isActive}
@@ -139,6 +140,7 @@ export function WindowShape({
           onPointerDown={onHandlePointerDown}
           onFocus={onSelect}
           title="Drag to reposition window"
+          data-opening-id={win.id}
           role="button"
           tabIndex={0}
           aria-pressed={isActive}
