@@ -228,9 +228,8 @@ export function FileBrowserModal(props: FileBrowserModalProps) {
                           )}
                         </div>
                         <div className="text-[10px] text-slate-600 mt-0.5">
-                          <span>
-                            {feetToDisplay(size.width, unitSystem)} ×{' '}
-                            {feetToDisplay(size.height, unitSystem)}
+                          <span translate="no">
+                            {`${feetToDisplay(size.width, unitSystem)} × ${feetToDisplay(size.height, unitSystem)}`}
                           </span>
                           <span className="mx-1">•</span>
                           <span>{new Date(project.updatedAt).toLocaleDateString()}</span>

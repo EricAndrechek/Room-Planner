@@ -25,6 +25,8 @@ import {
   clearPieces,
   moveCorner,
   moveOpeningToWall,
+  movePieceClear,
+  movePieceInside,
   movePiecesInside,
   narrowedOpenings,
   openingSpot,
@@ -345,6 +347,101 @@ describe('movePiecesInside', () => {
     expect(boxOf(fixed.items[1]!)).toMatchObject({ y: 0 });
     expect(fixed.items.slice(2)).toEqual(plan.items.slice(2));
     expect(movePiecesInside(plan)).toBe(plan);
+  });
+});
+
+describe('fixing one warning in place', () => {
+  it('movePieceInside brings just that piece in (one plan change), and is a no-op inside', () => {
+    const plan = toPlan(defaultLayout());
+    const out = changePiece(changePiece(plan, 'item-1', { x: 10 }), 'item-2', { y: -1 });
+    const fixed = movePieceInside(out, 'item-1');
+    expect(boxOf(fixed.items[0]!)).toMatchObject({ x: 7, y: 0 });
+    // The other stranded piece is not touched.
+    expect(fixed.items[1]).toEqual(out.items[1]);
+    expect(movePieceInside(plan, 'item-1')).toBe(plan);
+  });
+
+  it('movePieceClear moves a piece out of a door swing to the nearest clear spot, same turn', () => {
+    const door: Door = {
+      id: 1,
+      width: 3,
+      position: 4,
+      wall: 'bottom',
+      hinge: 'left',
+      type: 'swing-in',
+    };
+    const chair: FurnitureItem = {
+      id: 2,
+      label: 'Chair',
+      width: 1,
+      height: 1,
+      x: 5,
+      y: 9.6,
+      rotation: 0,
+      color: '#fdba74',
+      visible: true,
+    };
+    const plan = toPlan({
+      roomDims: { width: 12, height: 12 },
+      doors: [door],
+      windows: [],
+      items: [chair],
+    });
+    expect(itemWarnings(plan).get('item-2')?.blocksDoor).toBe(true);
+    const moved = movePieceClear(plan, 'item-2')!;
+    expect(moved).not.toBeNull();
+    const w = itemWarnings(moved).get('item-2');
+    expect(w?.blocksDoor ?? false).toBe(false);
+    expect(w?.blocksDoorway ?? false).toBe(false);
+    expect(w?.collision ?? false).toBe(false);
+    expect(w?.outOfBounds ?? false).toBe(false);
+    const before = boxOf(plan.items[0]!);
+    const after = boxOf(moved.items[0]!);
+    expect(after.rotation).toBe(before.rotation);
+    // Nearby: within a few feet of where it was.
+    expect(Math.hypot(after.x - before.x, after.y - before.y)).toBeLessThan(4);
+  });
+
+  it('movePieceClear moves an overlapping piece off the other one', () => {
+    const plan = toPlan(defaultLayout());
+    const a = boxOf(plan.items[0]!);
+    const overlapping = changePiece(plan, 'item-2', { x: a.x + 0.5, y: a.y + 0.5 });
+    expect(itemWarnings(overlapping).get('item-2')?.collision).toBe(true);
+    const moved = movePieceClear(overlapping, 'item-2')!;
+    expect(itemWarnings(moved).get('item-2')?.collision ?? false).toBe(false);
+  });
+
+  it('movePieceClear is null when nothing is free (a piece as big as the room)', () => {
+    const plan = toPlan({
+      roomDims: { width: 4, height: 4 },
+      doors: [],
+      windows: [],
+      items: [
+        {
+          id: 1,
+          label: 'A',
+          width: 4,
+          height: 4,
+          x: 0,
+          y: 0,
+          rotation: 0,
+          color: '#ffffff',
+          visible: true,
+        },
+        {
+          id: 2,
+          label: 'B',
+          width: 2,
+          height: 2,
+          x: 1,
+          y: 1,
+          rotation: 0,
+          color: '#ffffff',
+          visible: true,
+        },
+      ],
+    });
+    expect(movePieceClear(plan, 'item-2')).toBeNull();
   });
 });
 

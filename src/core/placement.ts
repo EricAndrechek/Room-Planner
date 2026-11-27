@@ -353,6 +353,52 @@ function nearestInside(
   return fallback;
 }
 
+/**
+ * The nearest centre to where a placed piece is now (same size and turn) where it is inside `room`,
+ * overlaps no other piece (touching is fine) and keeps out of every door's swing, track and
+ * doorway: where "Move it out of the way" puts a piece flagged as blocking a door or overlapping.
+ * Null when there is no such spot (or the piece is set aside).
+ */
+export function clearSpot(
+  plan: Pick<Plan, 'items' | 'rooms'>,
+  item: Item,
+  room: Room,
+  step = PLACEMENT_STEP / 2,
+): { x: number; y: number } | null {
+  if (!item.placement) return null;
+  const base = itemParts(item);
+  if (base.length === 0) return null;
+  const others = activePieces(plan)
+    .filter((p) => p.item.id !== item.id)
+    .map((p) => p.parts);
+  const zones: Point[][] = planDoors(plan).flatMap((d) => [...d.clearance, ...d.doorways]);
+  const pb = partsBounds(base);
+  const rb = roomBounds(room);
+  // A coarser grid in a very big room, so the search stays at about 25,000 spots at most.
+  step = Math.max(step, Math.max(rb.right - rb.left, rb.bottom - rb.top) / 160);
+  // Every shift that keeps the piece's box inside the room's box (flush with each wall too).
+  const range = (lo: number, hi: number) => {
+    if (hi < lo - GEOMETRY_EPSILON) return [];
+    const out = new Set<number>([round(lo), round(hi)]);
+    for (let k = Math.ceil(lo / step); k * step <= hi + 1e-9; k++) out.add(round(k * step));
+    return [...out];
+  };
+  const xs = range(rb.left - pb.left, rb.right - pb.right);
+  const ys = range(rb.top - pb.top, rb.bottom - pb.bottom);
+  const shifts: { dx: number; dy: number; d: number }[] = [];
+  for (const dx of xs) for (const dy of ys) shifts.push({ dx, dy, d: Math.hypot(dx, dy) });
+  shifts.sort((a, b) => a.d - b.d || a.dy - b.dy || a.dx - b.dx);
+  for (const { dx, dy } of shifts) {
+    const parts = base.map((part) => part.map((p) => ({ x: p.x + dx, y: p.y + dy })));
+    if (!parts.every((p) => partInRoom(p, room))) continue;
+    if (others.some((o) => partsOverlap(parts, o) > 0)) continue;
+    const shapes = parts.map((p) => shrinkPolygon(p, GEOMETRY_EPSILON));
+    if (zones.some((z) => shapes.some((sh) => polygonsOverlap(sh, z)))) continue;
+    return { x: round(item.placement.x + dx), y: round(item.placement.y + dy) };
+  }
+  return null;
+}
+
 /** Placed, visible pieces that are (partly) outside every room. */
 export const piecesOutside = (plan: Pick<Plan, 'items' | 'rooms'>): Item[] =>
   activePieces(plan)

@@ -126,6 +126,11 @@ function WallPicker({
     </select>
   );
 }
+/** A door or window typed past the end of its wall goes to the end (it never leaves the wall). */
+const OPENING_POSITION_CLAMP = {
+  max: 'as far along the wall as it fits',
+  min: 'the start of the wall',
+};
 const plural = (n: number, word: string) => `${n} ${word}${n !== 1 ? 's' : ''}`;
 
 /** Step 1 group in the sidebar: room size, doors and windows. */
@@ -162,20 +167,19 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
         summary={
           several ? (
             <>
-              {plan.rooms.length} rooms • {areaText(floorArea(plan), unitSystem)}
+              {`${plan.rooms.length} rooms • `}
+              <span translate="no">{areaText(floorArea(plan), unitSystem)}</span>
             </>
           ) : (
+            // Whole text nodes (not fragments a translator can split), sizes kept untranslated.
             <>
               {isRectangle(room) ? '' : l ? 'L-shape ' : `${room.outline.length} walls, `}
-              {feetToDisplay(roomDims.width, unitSystem)} ×{' '}
-              {feetToDisplay(roomDims.height, unitSystem)} • {plural(doors.length, 'door')} •{' '}
-              {plural(windows.length, 'window')}
+              <span translate="no">{`${feetToDisplay(roomDims.width, unitSystem)} × ${feetToDisplay(roomDims.height, unitSystem)}`}</span>
+              {` • ${plural(doors.length, 'door')} • ${plural(windows.length, 'window')}`}
             </>
           )
         }
         activeIcon="bg-indigo-100 text-indigo-600"
-        activeText="text-indigo-700"
-        activeDot="bg-indigo-500"
       />
 
       {/* Unlock button when in furniture mode */}
@@ -297,14 +301,17 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                       >
                         Type
                       </label>
+                      {/* Phones: a full-size target with 16px text (smaller text zooms iOS in on
+                          focus); the plan shows the changed door above the sheet (Planner). */}
                       <select
                         id={fid('door', index, 'type')}
                         value={door.type}
                         onChange={(e) =>
                           props.onUpdateDoor(door.id, { type: e.target.value as DoorType })
                         }
-                        className={`${smallInput('focus:ring-indigo-500')} bg-white`}
+                        className={`${smallInput('focus:ring-indigo-500')} bg-white min-h-11 text-base md:min-h-0 md:text-xs`}
                         aria-label={`Door ${index + 1} type`}
+                        data-testid="door-type"
                       >
                         {DOOR_TYPES.map((t) => (
                           <option key={t.value} value={t.value}>
@@ -337,6 +344,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                           className={smallInput('focus:ring-indigo-500')}
                           min={1}
                           max={wallLen}
+                          clamp={{ max: 'the whole wall', min: 'the narrowest door' }}
                           label="Door width"
                           unitSystem={unitSystem}
                         />
@@ -355,6 +363,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                           className={smallInput('focus:ring-indigo-500')}
                           min={0}
                           max={Math.max(0, wallLen - place.width)}
+                          clamp={OPENING_POSITION_CLAMP}
                           label="Door position"
                           unitSystem={unitSystem}
                         />
@@ -527,6 +536,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                           className={smallInput('focus:ring-blue-500')}
                           min={0.5}
                           max={wallLen}
+                          clamp={{ max: 'the whole wall', min: 'the narrowest window' }}
                           label="Window width"
                           unitSystem={unitSystem}
                         />
@@ -545,6 +555,7 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
                           className={smallInput('focus:ring-blue-500')}
                           min={0}
                           max={Math.max(0, wallLen - place.width)}
+                          clamp={OPENING_POSITION_CLAMP}
                           label="Window position"
                           unitSystem={unitSystem}
                         />

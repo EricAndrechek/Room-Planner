@@ -120,13 +120,13 @@ export function Header(props: HeaderProps) {
             <Maximize2 className="w-3 h-3 shrink-0" />
             {props.floor ? (
               <span className="truncate" data-testid="floor-summary">
-                {props.floor.rooms} rooms ({formatArea(props.floor.area, 1)})
+                {`${props.floor.rooms} rooms `}
+                <span translate="no">{`(${formatArea(props.floor.area, 1)})`}</span>
               </span>
             ) : (
-              <span className="truncate">
-                {feetToDisplay(props.roomDims.width, props.unitSystem)} ×{' '}
-                {feetToDisplay(props.roomDims.height, props.unitSystem)} (
-                {formatArea(props.roomDims.width, props.roomDims.height)})
+              // One text node, kept out of page translation: sizes and units, not words.
+              <span className="truncate" translate="no">
+                {`${feetToDisplay(props.roomDims.width, props.unitSystem)} × ${feetToDisplay(props.roomDims.height, props.unitSystem)} (${formatArea(props.roomDims.width, props.roomDims.height)})`}
               </span>
             )}
           </div>

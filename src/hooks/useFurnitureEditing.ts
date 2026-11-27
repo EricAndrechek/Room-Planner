@@ -58,8 +58,6 @@ export type PlaceInput = 'drag' | 'tap' | 'keyboard';
 interface Options {
   history: History<Plan>;
   selection: ReturnType<typeof useSelection>;
-  /** Room setup locks furniture: selectable, but not movable. */
-  isRoomSetup: boolean;
   startDrag: ReturnType<typeof usePointerDrag>;
   startRotation: ReturnType<typeof useRotationDrag>;
   zoomRef: RefObject<number>;
@@ -71,9 +69,7 @@ interface Options {
   onRotateFrame: (frame: RotateFrame | null) => void;
   /** Speak a message in the live region. */
   announce: (text: string) => void;
-  /** A piece was pressed while room setup locks all furniture (to explain why it does not move). */
-  onLockedPress?: (item: Item) => void;
-  /** A piece was tapped (pressed and let go without moving it) while furniture is editable. */
+  /** A piece was tapped (pressed and let go without moving it), or a locked one pressed. */
   onTap?: (item: Item) => void;
   /** The room new pieces and placed pieces go to (the room selected or in view). */
   roomId: Id;
@@ -95,7 +91,6 @@ export interface DragFrame {
 export function useFurnitureEditing({
   history,
   selection,
-  isRoomSetup,
   startDrag,
   startRotation,
   zoomRef,
@@ -103,7 +98,6 @@ export function useFurnitureEditing({
   onDragFrame,
   onRotateFrame,
   announce,
-  onLockedPress,
   onTap,
   roomId,
 }: Options) {
@@ -297,11 +291,7 @@ export function useFurnitureEditing({
       // Delete act on this piece next (canvas shortcuts only act with focus on the canvas).
       const canvas = e.currentTarget.closest<HTMLElement>('#floor-plan');
       if (canvas && !canvas.contains(document.activeElement)) canvas.focus({ preventScroll: true });
-      // Locked (by mode or individually): selectable, but not movable. The mode lock says why.
-      if (isRoomSetup) {
-        onLockedPress?.(item);
-        return;
-      }
+      // Movable in both steps; a piece the user locked (its padlock) is selectable only.
       if (item.locked) {
         onTap?.(item);
         return;
@@ -357,18 +347,7 @@ export function useFurnitureEditing({
         },
       });
     },
-    [
-      isRoomSetup,
-      startDrag,
-      zoomRef,
-      setPlan,
-      commit,
-      setSelection,
-      onDragFrame,
-      announce,
-      onLockedPress,
-      onTap,
-    ],
+    [startDrag, zoomRef, setPlan, commit, setSelection, onDragFrame, announce, onTap],
   );
 
   const onRotatePointerDown = useCallback(

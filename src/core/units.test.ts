@@ -2,10 +2,15 @@ import { describe, expect, it } from 'vitest';
 import {
   FEET_PER_CM,
   FEET_PER_METER,
+  FEET_PER_MM,
   feetToDisplay,
   feetToInputValue,
   feetToUnitValue,
   formatArea,
+  formatHint,
+  inputShape,
+  otherReading,
+  parseLength,
   parseToFeet,
   roundNum,
   unitValueToFeet,
@@ -67,10 +72,12 @@ describe('parseToFeet', () => {
     close(parseToFeet(input, 'ft-in'), feet);
   });
 
-  it('a second bare number is still in the active unit outside feet & inches', () => {
-    close(parseToFeet('11 7', 'ft'), 18);
-    close(parseToFeet('11 7', 'in'), 18 / 12);
-    close(parseToFeet('1 20', 'm'), 21 * FEET_PER_METER);
+  it('a second bare number is the next unit down: inches after feet, cm after meters', () => {
+    close(parseToFeet('11 7', 'ft'), 11 + 7 / 12);
+    close(parseToFeet('1 20', 'm'), FEET_PER_METER + 20 * FEET_PER_CM);
+    // Inches and centimeters have nothing smaller: two bare numbers are not a length.
+    expect(parseLength('11 7', 'in')).toEqual({ ok: false, problem: 'invalid' });
+    expect(parseLength('20 3', 'cm')).toEqual({ ok: false, problem: 'invalid' });
   });
 
   it('bare digits without a separator stay one number (rejected later if out of range)', () => {
@@ -126,8 +133,9 @@ describe('parseToFeet', () => {
   });
 
   it('does not mistake words for units', () => {
-    // "12 minutes" is not 12 meters - falls back to the active unit.
-    close(parseToFeet('12 minutes', 'ft'), 12);
+    // "12 minutes" is not 12 meters, and not a length at all.
+    expect(parseLength('12 minutes', 'ft')).toEqual({ ok: false, problem: 'invalid' });
+    expect(parseToFeet('12 minutes', 'ft')).toBe(0);
   });
 });
 
@@ -265,5 +273,167 @@ describe('suggestReading', () => {
   it('decimal feet and inches have no reading', () => {
     expect(suggestReading('117', 'ft', range)).toBeNull();
     expect(suggestReading('1404', 'in', range)).toBeNull();
+  });
+});
+
+describe('parseLength: the forms people type (production rejections, Nov 2026)', () => {
+  const ft = (f: number, i = 0) => f + i / 12;
+  it.each<[string, UnitSystem, number]>([
+    // Feet and inches, every way they are written.
+    [`11'7`, 'ft-in', ft(11, 7)],
+    [`11'7"`, 'ft-in', ft(11, 7)],
+    [`11' 7"`, 'ft-in', ft(11, 7)],
+    [`11'-7"`, 'ft-in', ft(11, 7)],
+    [`11'7''`, 'ft-in', ft(11, 7)],
+    [`11'7'`, 'ft-in', ft(11, 7)],
+    ['11ft 7in', 'ft-in', ft(11, 7)],
+    ['11 ft 7 in', 'ft-in', ft(11, 7)],
+    ['11ft7', 'ft-in', ft(11, 7)],
+    ['11ft7in', 'ft-in', ft(11, 7)],
+    ['11 feet 7 inches', 'ft-in', ft(11, 7)],
+    ['11 ft. 7 in.', 'ft-in', ft(11, 7)],
+    ['11-7', 'ft-in', ft(11, 7)],
+    ['11 7', 'ft-in', ft(11, 7)],
+    ['11, 7', 'ft-in', ft(11, 7)],
+    // Decimal and fractional feet.
+    [`11.5'`, 'ft-in', 11.5],
+    ['11.5 ft', 'ft-in', 11.5],
+    ['11.5', 'ft-in', 11.5],
+    [`11 1/2'`, 'ft-in', 11.5],
+    [`11-1/2'`, 'ft-in', 11.5],
+    ['11 1/2 ft', 'ft-in', 11.5],
+    [`11½'`, 'ft-in', 11.5],
+    [`5'6 1/2"`, 'ft-in', ft(5, 6.5)],
+    // Inches alone.
+    ['7"', 'ft-in', ft(0, 7)],
+    ['7in', 'ft-in', ft(0, 7)],
+    ['7 in', 'ft-in', ft(0, 7)],
+    ['7 inches', 'ft-in', ft(0, 7)],
+    ['7½"', 'ft-in', ft(0, 7.5)],
+    ['1/2"', 'ft-in', ft(0, 0.5)],
+    // Unicode primes, curly quotes, full-width characters.
+    ['11′7″', 'ft-in', ft(11, 7)],
+    ['11’7”', 'ft-in', ft(11, 7)],
+    ['11‘7“', 'ft-in', ft(11, 7)],
+    ['11′ 7′′', 'ft-in', ft(11, 7)],
+    ['１１\'７"', 'ft-in', ft(11, 7)],
+    // Spaces around.
+    ['  11\'7"  ', 'ft-in', ft(11, 7)],
+    ['\t12 ', 'ft-in', 12],
+    // Metric with a decimal comma, and metric in any unit system.
+    ['2,5 m', 'm', 2.5 * FEET_PER_METER],
+    ['2,5', 'm', 2.5 * FEET_PER_METER],
+    ['2,5m', 'ft-in', 2.5 * FEET_PER_METER],
+    ['80,5', 'cm', 80.5 * FEET_PER_CM],
+    ['1,200 mm', 'cm', 1200 * FEET_PER_MM],
+    ['250 cm', 'ft-in', 250 * FEET_PER_CM],
+    ['250cm', 'in', 250 * FEET_PER_CM],
+    ['2.5 m', 'ft', 2.5 * FEET_PER_METER],
+    ['900 mm', 'm', 900 * FEET_PER_MM],
+    ['1 m 20 cm', 'cm', FEET_PER_METER + 20 * FEET_PER_CM],
+    ['2 metres', 'cm', 2 * FEET_PER_METER],
+    // Imperial in a metric system.
+    [`11'7"`, 'cm', ft(11, 7)],
+    ['30 in', 'm', 2.5],
+    // Decimal feet system: a second number is inches.
+    ['11 7', 'ft', ft(11, 7)],
+    // Signs (room positions can be negative).
+    ['-3', 'ft', -3],
+    ['−3 ft', 'ft-in', -3],
+    ['+3', 'ft', 3],
+  ])('%j in %s', (input, system, feet) => {
+    const r = parseLength(input, system);
+    expect(r.ok, JSON.stringify(r)).toBe(true);
+    if (r.ok) close(r.feet, feet);
+  });
+
+  it.each<[string, 'pair' | 'invalid' | 'empty']>([
+    ['12x10', 'pair'],
+    ['12 x 10', 'pair'],
+    [`12' x 10'`, 'pair'],
+    [`12'6" x 10'`, 'pair'],
+    ['3m x 4m', 'pair'],
+    ['3 m × 4 m', 'pair'],
+    ['12 by 10', 'pair'],
+    ['12*10', 'pair'],
+    ['', 'empty'],
+    ['   ', 'empty'],
+    ['abc', 'invalid'],
+    ['"', 'invalid'],
+    ['twelve feet', 'invalid'],
+    ['12 minutes', 'invalid'],
+    ['12 pies', 'invalid'],
+    ['11 7 3', 'invalid'],
+    ['6in 2ft', 'invalid'],
+    ['20cm 1m', 'invalid'],
+    ['7in 5', 'invalid'],
+    ['12 ft ft', 'invalid'],
+    ['1 2 3 4', 'invalid'],
+  ])('%j is not a length (%s)', (input, problem) => {
+    expect(parseLength(input, 'ft-in')).toEqual({ ok: false, problem });
+  });
+});
+
+describe('inputShape (analytics: the form, never the numbers)', () => {
+  it.each([
+    [`11'7"`, `99'9"`],
+    ['2,5 m', '9,9 m'],
+    ['12x10', '99x99'],
+    ['  117 ', '999'],
+    ['１１ft', '99ft'],
+    ['123456789012345', '999999999999'],
+    ['', ''],
+  ])('%j -> %j', (input, shape) => {
+    expect(inputShape(input)).toBe(shape);
+  });
+});
+
+describe('otherReading', () => {
+  it('a bare number for a piece in feet & inches is first read as inches', () => {
+    expect(otherReading('60', 'ft-in', { min: 0.1, max: 12 }, 'piece')).toEqual({
+      feet: 5,
+      typed: '60"',
+    });
+    // A room keeps its feet-then-inches reading, and never inches.
+    expect(otherReading('117', 'ft-in', { min: 1, max: 50 }, 'room')).toEqual({
+      feet: 11 + 7 / 12,
+      typed: `11'7"`,
+    });
+    expect(otherReading('75', 'ft-in', { min: 1, max: 50 }, 'room')).toBeNull();
+    // Inches out of range too: the feet-then-inches reading, if that fits.
+    expect(otherReading('117', 'ft-in', { min: 0.1, max: 12 }, 'piece')?.feet).toBeCloseTo(9.75, 6);
+    expect(otherReading('1404', 'ft-in', { min: 0.1, max: 12 }, 'piece')).toBeNull();
+  });
+
+  it('metric: too small in cm reads as meters, too large as mm; m reads as cm', () => {
+    expect(otherReading('0,8', 'cm', { min: 1, max: 12 }, 'piece')).toEqual({
+      feet: 0.8 * FEET_PER_METER,
+      typed: '0.8 m',
+    });
+    expect(otherReading('4500', 'cm', { min: 1, max: 100 }, 'piece')?.typed).toBe('4500 mm');
+    expect(otherReading('80', 'm', { min: 1, max: 12 }, 'piece')).toEqual({
+      feet: 80 * FEET_PER_CM,
+      typed: '80 cm',
+    });
+  });
+
+  it('decimal feet: inches for a piece only', () => {
+    expect(otherReading('30', 'ft', { min: 0.1, max: 12 }, 'piece')?.feet).toBe(2.5);
+    expect(otherReading('30', 'ft', { min: 1, max: 12 }, 'room')).toBeNull();
+  });
+
+  it('only a bare number is reinterpreted', () => {
+    expect(otherReading(`60'`, 'ft-in', { min: 0.1, max: 12 }, 'piece')).toBeNull();
+    expect(otherReading('60 ft', 'ft-in', { min: 0.1, max: 12 }, 'piece')).toBeNull();
+  });
+});
+
+describe('formatHint', () => {
+  it('uses the numbers the user typed', () => {
+    expect(formatHint('11 pies 7', 'ft-in')).toBe(`11'7" or 11 7`);
+    expect(formatHint('12 pies', 'ft-in')).toBe(`12'6" or 12 6`);
+    expect(formatHint('two', 'ft-in')).toBe(`11'6" or 11 6`);
+    expect(formatHint('2,5 metros', 'm')).toBe('2.5 m');
+    expect(formatHint('80 centimetros', 'cm')).toBe('80 cm');
   });
 });

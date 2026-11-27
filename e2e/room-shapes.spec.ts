@@ -1,6 +1,6 @@
-import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { workingPlan } from './storage';
+import { seriousViolations } from './axe';
 import { animationsSettled, announcements, openStep, recordAnnouncements, viewPlan } from './ui';
 
 // Room shapes (PR 7b, issue #11): the Shape control (Rectangle, L-shape, Custom), corner editing
@@ -286,11 +286,8 @@ test('axe: corner handles, add-corner buttons and the wall list', async ({ page 
   await page.getByLabel('Wall 2 length').focus();
   await expect(page.getByTestId('wall-highlight')).toHaveCount(1);
   await animationsSettled(page);
-  const results = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
-    .analyze();
-  const serious = results.violations
-    .filter((v) => v.impact === 'serious' || v.impact === 'critical')
-    .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`);
+  // Furniture now takes presses in Room Setup too; pieces are drawn to scale, so they are left out
+  // of target-size only (e2e/axe.ts).
+  const serious = await seriousViolations(page);
   expect(serious, serious.join('\n')).toEqual([]);
 });

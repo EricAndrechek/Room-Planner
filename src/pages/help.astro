@@ -104,7 +104,11 @@ const sections = [
           along the wall.
         </li>
       </ol>
-      <p>While you set up the room, furniture is locked so you can't move it by accident.</p>
+      <p>
+        Furniture still moves while you set up the room: it is drawn faded so the walls, doors and
+        windows stand out, and where a door, window or corner handle overlaps a piece, the handle
+        wins. To keep a piece from moving, lock it with its padlock.
+      </p>
       <h3>Step 2 — Furniture (green)</h3>
       <ol>
         <li>
@@ -168,8 +172,18 @@ const sections = [
       <p>
         <strong>Tip:</strong> you can type a value in any unit and it is converted automatically —
         for example <code>12'6"</code>, <code>12 ft 6 in</code>, <code>150in</code>,{' '}
-        <code>3.5m</code>, <code>1m 20cm</code> or <code>350cm</code>. A plain number uses the
-        current display unit. Press Enter or click away to apply.
+        <code>3.5m</code>, <code>1m 20cm</code> or <code>350cm</code>. Feet and inches can be typed
+        however you write them: <code>11'7</code>, <code>11' 7"</code>, <code>11ft 7in</code>,{' '}
+        <code>11-7</code> or just <code>11 7</code>, and halves as <code>11 1/2'</code> or{' '}
+        <code>11.5'</code>; a comma works as the decimal point (<code>2,5 m</code>). A plain number
+        uses the current display unit. Press Enter or click away to apply.
+      </p>
+      <p>
+        If a number doesn't fit, the field says why and keeps the old value. When it looks like a
+        different unit was meant (<code>60</code> for a sofa is more likely 60 inches than 60 feet),
+        it asks “did you mean 60" (5')?” first. A door or window wider than its wall is made as wide
+        as the wall, and a piece of furniture may be bigger than the room (it is marked as outside
+        the room).
       </p>
     </section>
 
@@ -374,6 +388,13 @@ const sections = [
         when it stands in the passage just inside any door or opening (about 1½ ft / 45 cm deep).
         While you drag a piece into a door's way, the area that door needs lights up. Doors that
         swing outward only need their doorway clear. Hidden pieces never count.
+      </p>
+      <p>
+        Tap or click a badge to see what it means in one sentence, with the fix right there:{' '}
+        <strong>Move inside</strong> brings a piece that sticks out back into its room, and{' '}
+        <strong>Move it out of the way</strong> moves it to the nearest spot where it blocks no door
+        and overlaps nothing, keeping its turn. Each is one step you can undo. The same buttons are
+        on the piece's card in the list.
       </p>
     </section>
 

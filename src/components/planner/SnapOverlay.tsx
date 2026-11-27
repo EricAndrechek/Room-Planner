@@ -107,6 +107,7 @@ function MeasureLine({ m, zoom, active }: { m: MeasurementLabel; zoom: number; a
         }}
         data-testid="measurement"
         data-side={m.side}
+        translate="no"
       >
         {m.text}
       </div>

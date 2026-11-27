@@ -137,8 +137,8 @@ export function SetAsideList({
               />
               <span className="flex-1 min-w-0 cursor-grab">
                 <span className="block truncate text-sm font-medium text-slate-800">{name}</span>
-                <span className="block text-[11px] text-slate-600">
-                  {feetToDisplay(item.width, unitSystem)} × {feetToDisplay(item.depth, unitSystem)}
+                <span className="block text-[11px] text-slate-600" translate="no">
+                  {`${feetToDisplay(item.width, unitSystem)} × ${feetToDisplay(item.depth, unitSystem)}`}
                 </span>
               </span>
               <button

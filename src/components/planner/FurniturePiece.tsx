@@ -1,4 +1,10 @@
-import { memo, useId, type PointerEvent as ReactPointerEvent } from 'react';
+import {
+  memo,
+  useId,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react';
 import { AlertTriangle, DoorOpen, Lock, RotateCw } from 'lucide-react';
 import { blendOnWhite, getBorderColor, migrateColor, readableTextOn } from '../../core/colors';
 import { PIXELS_PER_UNIT } from '../../lib/constants';
@@ -12,20 +18,31 @@ interface FurniturePieceProps {
   item: Item;
   warning: ItemWarning | undefined;
   isActive: boolean;
-  /** All furniture is locked during room setup. */
-  modeLocked: boolean;
+  /**
+   * Room setup: the room is what is being edited, so furniture is drawn faded (still selectable and
+   * movable) and stays under the door, window, corner and room handles where they overlap.
+   */
+  dimmed: boolean;
   unitSystem: UnitSystem;
   onPointerDown: (e: ReactPointerEvent<HTMLDivElement>, item: Item) => void;
   onRotatePointerDown: (e: ReactPointerEvent<HTMLDivElement>, item: Item) => void;
   onSelect: (item: Item) => void;
-  /** Enter/Space on a piece that room setup locks (to explain why it does not move). */
-  onLockedPress?: (item: Item) => void;
   /** Canvas zoom: the rotate handle keeps a constant on-screen size. */
   zoom: number;
+  /** A warning badge was pressed: explain it (WarningPopover). Without it the badges are static. */
+  onExplain?: (item: Item) => void;
+  /** This piece's warning is being explained (the badge's `aria-expanded`). */
+  explaining?: boolean;
 }
 
-/** Furniture is drawn at this opacity while the room is being edited (and furniture is locked). */
-const MODE_LOCKED_ALPHA = 0.5;
+/** Furniture is drawn at this opacity while the room is being edited (the selected piece is not). */
+const DIMMED_ALPHA = 0.5;
+/**
+ * Room setup: pieces stay under the opening handles (z 20) and the corner handles (z 30+). Warning
+ * badges go above every piece (one more than the selected one; in Items, above the measurements at
+ * z 60 too), so a neighbour or a guide never hides them.
+ */
+const DIMMED_Z = { idle: 10, active: 18 };
 
 const SHADOW_ACTIVE = '0 8px 20px -4px rgba(0, 0, 0, 0.15)';
 const SHADOW = '0 1px 3px rgba(0, 0, 0, 0.08)';
@@ -101,20 +118,23 @@ export const FurniturePiece = memo(function FurniturePiece({
   item,
   warning,
   isActive,
-  modeLocked,
+  dimmed,
   unitSystem,
   onPointerDown,
   onRotatePointerDown,
   onSelect,
-  onLockedPress,
   zoom,
+  onExplain,
+  explaining = false,
 }: FurniturePieceProps) {
   const descId = useId();
   const isItemLocked = !!item.locked;
-  const isLocked = modeLocked || isItemLocked;
+  const isLocked = isItemLocked;
   const color = migrateColor(item.color);
-  // Room setup fades the fill (not the label, which keeps full contrast on the faded color).
-  const fill = modeLocked ? blendOnWhite(color, MODE_LOCKED_ALPHA) : color;
+  // Room setup fades the fill (not the label, which keeps full contrast on the faded color); the
+  // piece being moved or edited shows in full.
+  const faded = dimmed && !isActive;
+  const fill = faded ? blendOnWhite(color, DIMMED_ALPHA) : color;
   const hasWarning = !!warning && (warning.outOfBounds || warning.collision);
   // Softer (amber) than the red overlap warning: in a door's way.
   const doorBlock =
@@ -122,8 +142,8 @@ export const FurniturePiece = memo(function FurniturePiece({
       ? doorBlockText({ door: !!warning.blocksDoor, doorway: !!warning.blocksDoorway })
       : '';
 
-  let borderColor = modeLocked
-    ? blendOnWhite(getBorderColor(color), MODE_LOCKED_ALPHA)
+  let borderColor = faded
+    ? blendOnWhite(getBorderColor(color), DIMMED_ALPHA)
     : getBorderColor(color);
   let borderWidth = '2px';
   let borderStyle = 'solid';
@@ -134,13 +154,19 @@ export const FurniturePiece = memo(function FurniturePiece({
     borderColor = '#d97706'; // amber-600, dashed: distinct from a locked piece's solid amber
     borderWidth = '2px';
     borderStyle = 'dashed';
-  } else if (isItemLocked && !modeLocked) {
+  } else if (isItemLocked) {
     borderColor = '#d97706'; // amber-600
     borderWidth = '3px';
   }
 
-  // Positioned like the piece; the amber note sits outside the button (it is not part of its
-  // name: the button's description says it).
+  // Positioned like the piece; the warning badges sit outside the button (they are not part of its
+  // name: the button's description says it), as buttons of their own that explain them.
+  const z = dimmed ? DIMMED_Z[isActive ? 'active' : 'idle'] : isActive ? 50 : 10;
+  // Warning badges keep their size on screen at any zoom (a 24px target): centred on their spot,
+  // counter-scaled (`zoom` reaches every flagged piece, see RoomCanvas).
+  const badgeAt = (fx: number, fy: number) => ({
+    transform: `translate(${fx * 100}%, ${fy * 100}%) scale(${1 / zoom})`,
+  });
   const box = boxOf(item);
   const frame = {
     width: box.width * PIXELS_PER_UNIT,
@@ -168,17 +194,13 @@ export const FurniturePiece = memo(function FurniturePiece({
         onPointerDown={(e) => onPointerDown(e, item)}
         onClick={() => onSelect(item)}
         className={`absolute flex items-center justify-center text-xs font-bold select-none transition-shadow ${round || lShape ? '' : 'rounded-md'} ${
-          modeLocked
-            ? 'cursor-not-allowed'
-            : isItemLocked
-              ? 'cursor-pointer'
-              : 'cursor-grab active:cursor-grabbing'
+          isItemLocked ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'
         }`}
         style={{
           ...frame,
           ...shapeStyle,
           color: readableTextOn(fill),
-          zIndex: isActive ? 50 : 10,
+          zIndex: z,
           touchAction: 'none',
         }}
         onFocus={() => {
@@ -189,7 +211,6 @@ export const FurniturePiece = memo(function FurniturePiece({
           if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
             e.preventDefault();
             onSelect(item);
-            if (modeLocked) onLockedPress?.(item);
           }
         }}
         role="button"
@@ -203,11 +224,9 @@ export const FurniturePiece = memo(function FurniturePiece({
       >
         <span id={descId} className="sr-only">
           {[
-            modeLocked
-              ? 'Locked while editing the room.'
-              : isItemLocked
-                ? 'Locked; unlock it in the furniture list to move it.'
-                : 'Arrow keys move, R rotates, Alt or Option with R turns by 1 degree, Delete removes.',
+            isItemLocked
+              ? 'Locked; unlock it in the furniture list to move it.'
+              : 'Arrow keys move, R rotates, Alt or Option with R turns by 1 degree, Delete removes.',
             warning?.outOfBounds ? 'Outside the room.' : '',
             warning?.collision ? 'Overlapping other furniture.' : '',
             warning?.blocksDoor
@@ -253,26 +272,8 @@ export const FurniturePiece = memo(function FurniturePiece({
           </span>
         )}
 
-        {hasWarning && (
-          <div
-            className="absolute -top-2 -left-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center shadow-md"
-            title={warningText(warning, true)}
-            aria-hidden="true"
-          >
-            <AlertTriangle className="w-3 h-3 text-white" />
-          </div>
-        )}
-
-        {/* Lock badge: grey while the mode locks all furniture, amber for an individually locked item */}
-        {modeLocked && (
-          <div
-            className="absolute -top-2 -right-2 w-5 h-5 bg-slate-600 rounded-full flex items-center justify-center shadow-md"
-            aria-hidden="true"
-          >
-            <Lock className="w-3 h-3 text-white" />
-          </div>
-        )}
-        {isItemLocked && !modeLocked && (
+        {/* Lock badge: a piece the user locked with its padlock */}
+        {isItemLocked && (
           <div
             className="absolute -top-2 -right-2 w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center shadow-md"
             aria-hidden="true"
@@ -305,21 +306,98 @@ export const FurniturePiece = memo(function FurniturePiece({
           </div>
         )}
       </div>
-      {doorBlock && (
+      {(hasWarning || doorBlock) && (
         <div
           className="absolute pointer-events-none"
-          style={{ ...frame, zIndex: isActive ? 51 : 11 }}
-          aria-hidden="true"
+          style={{ ...frame, zIndex: dimmed ? DIMMED_Z.active + 1 : 61 }}
+          data-testid="piece-badges"
         >
-          <div
-            className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 flex items-center gap-0.5 whitespace-nowrap rounded-full border border-amber-500 bg-amber-100 px-1.5 text-[10px] leading-4 font-semibold text-amber-900 shadow-sm"
-            data-testid="door-block-badge"
-          >
-            <DoorOpen className="w-2.5 h-2.5" />
-            {doorBlock}
-          </div>
+          {hasWarning && (
+            <WarningBadge
+              className="absolute left-0 top-0 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center shadow-md"
+              style={badgeAt(-0.5, -0.5)}
+              label={`${item.label}: ${warningText(warning, true)}. What does this mean?`}
+              title={warningText(warning, true)}
+              testId="warning-badge"
+              onPress={onExplain && (() => onExplain(item))}
+              expanded={explaining}
+            >
+              <AlertTriangle className="w-3.5 h-3.5 text-white" aria-hidden="true" />
+            </WarningBadge>
+          )}
+          {doorBlock && (
+            <WarningBadge
+              className="absolute left-1/2 top-full flex min-h-6 items-center gap-0.5 whitespace-nowrap rounded-full border border-amber-500 bg-amber-100 px-2 text-[10px] leading-4 font-semibold text-amber-900 shadow-sm"
+              style={badgeAt(-0.5, -0.5)}
+              label={`${item.label}: ${doorBlock}. What does this mean?`}
+              testId="door-block-badge"
+              onPress={onExplain && (() => onExplain(item))}
+              expanded={explaining}
+            >
+              <DoorOpen className="w-3 h-3" aria-hidden="true" />
+              {doorBlock}
+            </WarningBadge>
+          )}
         </div>
       )}
     </>
   );
 });
+
+/**
+ * A warning badge on a piece: a button that explains the warning (and offers the fix) when the
+ * planner can, else a plain marker. Its press never starts a drag or a pan.
+ */
+function WarningBadge({
+  className,
+  style,
+  label,
+  title,
+  testId,
+  onPress,
+  expanded,
+  children,
+}: {
+  className: string;
+  style: CSSProperties;
+  label: string;
+  title?: string;
+  testId: string;
+  onPress?: () => void;
+  expanded: boolean;
+  children: ReactNode;
+}) {
+  if (!onPress) {
+    return (
+      <div
+        className={className}
+        style={style}
+        title={title}
+        aria-hidden="true"
+        data-testid={testId}
+      >
+        {children}
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      style={style}
+      className={`${className} touch-hit pointer-events-auto cursor-pointer hover:brightness-95 focus-visible:ring-2 focus-visible:ring-indigo-500 outline-hidden`}
+      title={title}
+      aria-label={label}
+      aria-haspopup="dialog"
+      aria-expanded={expanded}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        onPress();
+      }}
+      data-draggable
+      data-testid={testId}
+    >
+      {children}
+    </button>
+  );
+}

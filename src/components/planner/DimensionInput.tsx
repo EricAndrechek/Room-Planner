@@ -4,17 +4,21 @@ import { track } from '../../lib/analytics';
 import {
   feetToDisplay,
   feetToInputValue,
-  parseToFeet,
+  formatHint,
+  inputShape,
+  normalizeLength,
+  otherReading,
+  parseLength,
   roundNum,
-  suggestReading,
   unitSuffix,
+  type Reading,
 } from '../../core/units';
 import type { UnitSystem } from '../../types';
 
 interface DimensionInputProps {
   /** Current value in feet. */
   value: number;
-  /** Called with the parsed value in feet, only when it is within [min, max] (else rejected). */
+  /** Called with the new value in feet: within [min, max], or adjusted as `clamp` / `allowAbove` say. */
   onChange: (feet: number) => void;
   className?: string;
   placeholder?: string;
@@ -31,6 +35,16 @@ interface DimensionInputProps {
    */
   confirmAbove?: number;
   /**
+   * Out of range is clamped instead of rejected, with a note saying why: e.g. a door wider than
+   * its wall becomes as wide as the wall ("Set to 12': the whole wall").
+   */
+  clamp?: { max: string; min?: string };
+  /**
+   * Above `max` is still allowed up to `upTo` feet, with `note` under the field (a piece bigger
+   * than its room: it is drawn, and flagged as outside the room).
+   */
+  allowAbove?: { upTo: number; note: string };
+  /**
    * Where to show the error and the "did you mean?" prompt instead of under the field: e.g. a
    * full-width row under a Width/Length pair, where a half-width column would cramp them.
    */
@@ -45,11 +59,22 @@ const bigSize = (feet: number, unitSystem: UnitSystem) =>
     ? `${roundNum(feet, 1)} ft`
     : feetToDisplay(feet, unitSystem);
 
+/** What the user typed, quoted back in a message: trimmed and cut short. */
+const quoted = (draft: string) => {
+  const t = draft.trim();
+  return t.length > 14 ? `${t.slice(0, 13)}…` : t;
+};
+
+/** Why a typed size was not used as typed (analytics `reason`). */
+type Reason = 'min' | 'max' | 'invalid' | 'pair';
+
 /**
- * Text input for lengths. Shows the value in the active unit system and
- * accepts free-form input with any unit (`12'6"`, `11 7`, `150cm`, `1.5m`...),
- * committing on blur or Enter. Out-of-range input is rejected with an inline error (the previous
- * value stays); it is never silently clamped.
+ * Text input for lengths. Shows the value in the active unit system and accepts free-form input
+ * with any unit (`12'6"`, `11 7`, `11'7`, `11 1/2'`, `150cm`, `2,5 m`...; see `parseLength`),
+ * committing on blur or Enter. An empty field goes back to its value. Input that is not a length,
+ * or out of range, is rejected with an inline error that says how to type it (the previous value
+ * stays), unless the field clamps or allows it (`clamp`, `allowAbove`); a bare number with a likely
+ * other reading in range (`60` for a 5' sofa: 60") asks "did you mean?" first.
  */
 export function DimensionInput({
   value,
@@ -62,6 +87,8 @@ export function DimensionInput({
   unitSystem = 'ft-in',
   id,
   confirmAbove,
+  clamp,
+  allowAbove,
   messageSlot,
   messageLabel,
 }: DimensionInputProps) {
@@ -69,63 +96,137 @@ export function DimensionInput({
   const [draft, setDraft] = useState<string | null>(null);
   // Why the last entry was rejected (the previous value was kept); cleared by the next edit.
   const [error, setError] = useState('');
+  // What happened to the last entry when it was used, adjusted (clamped, or bigger than the room).
+  const [note, setNote] = useState('');
   const focusText = useRef('');
   const uid = useId();
   const errorId = `${uid}-error`;
+  const noteId = `${uid}-note`;
   const promptId = `${uid}-confirm`;
   const inputRef = useRef<HTMLInputElement>(null);
-  // An unusually large entry waiting for "did you mean?" (`alt`: the other likely reading).
-  const [pending, setPending] = useState<{ feet: number; alt: number | null } | null>(null);
+  // An entry waiting for "did you mean?": an unusually large room side, or out of range with a
+  // likely other reading (`alt`). `keep` is what keeping it as typed means (null: it can't be).
+  const [pending, setPending] = useState<{
+    feet: number;
+    alt: Reading | null;
+    why: 'large' | 'range';
+    keep: { feet: number; note: string } | null;
+  } | null>(null);
   const firstChoice = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (pending) firstChoice.current?.focus();
   }, [pending]);
+  const kind = confirmAbove !== undefined ? 'room' : 'piece';
+  const show = (feet: number) => feetToDisplay(feet, unitSystem);
 
   const choose = (
     choice: 'reinterpret' | 'keep' | 'cancel',
     e?: MouseEvent<HTMLButtonElement> | null,
   ) => {
     if (!pending) return;
-    if (choice === 'reinterpret' && pending.alt !== null) onChange(pending.alt);
-    else if (choice === 'keep') onChange(pending.feet);
+    if (choice === 'reinterpret' && pending.alt !== null) onChange(pending.alt.feet);
+    else if (choice === 'keep' && pending.keep) {
+      onChange(pending.keep.feet);
+      setNote(pending.keep.note);
+    }
     setPending(null);
     track('dimension_confirm', { choice });
     // Keyboard users go back to the field; a tap does not pop the phone keyboard up again.
     if (!e || e.detail === 0) inputRef.current?.focus();
   };
 
-  const reject = (message: string, reason: 'min' | 'max' | 'invalid') => {
+  // No field name in analytics: furniture fields are labelled with the user's own item names. The
+  // input's shape (digits as 9) says which forms are typed, never what was typed.
+  const reject = (message: string, reason: Reason, text: string) => {
     setError(message);
-    // No field name: furniture fields are labelled with the user's own item names.
-    track('dimension_rejected', { reason, units: unitSystem });
+    track('dimension_rejected', {
+      reason,
+      units: unitSystem,
+      shape: inputShape(text),
+      outcome: 'rejected',
+    });
+  };
+  /** Used, but not as typed: clamped to the limit, or allowed past it; the note says so. */
+  const adjust = (feet: number, message: string, reason: Reason, outcome: string, text: string) => {
+    onChange(feet);
+    setNote(message);
+    track('dimension_adjusted', { reason, units: unitSystem, shape: inputShape(text), outcome });
   };
 
   const commitValue = () => {
     if (draft === null) return;
+    const text = draft;
     setDraft(null);
     // Untouched: keep the exact value (re-parsing the rounded-sm display would nudge it).
-    if (draft === focusText.current) return;
-    // Out-of-range or unreadable input is rejected, never clamped: the previous value stays.
-    if (!/\d/.test(draft)) {
-      reject(`Type a length, e.g. ${feetToDisplay(12.5, unitSystem)}`, 'invalid');
+    if (text === focusText.current) return;
+    setNote('');
+    const parsed = parseLength(text, unitSystem);
+    if (!parsed.ok) {
+      // Cleared and left: nothing to use, nothing wrong. The value stays.
+      if (parsed.problem === 'empty') return;
+      if (parsed.problem === 'pair') {
+        const first = normalizeLength(text).split(/\s*(?:x|\*|by)\s*/)[0];
+        reject(
+          `One size per field: type ${first} here and the other size in its own field`,
+          'pair',
+          text,
+        );
+      } else {
+        reject(
+          `Couldn't read “${quoted(text)}”. Type it like ${formatHint(text, unitSystem)}`,
+          'invalid',
+          text,
+        );
+      }
       return;
     }
-    const feet = parseToFeet(draft, unitSystem);
-    if (feet < min - 1e-9) {
-      reject(`Min ${feetToDisplay(min, unitSystem)}`, 'min');
-      return;
-    }
+    const feet = parsed.feet;
     const hi = Math.max(min, max);
-    if (feet > hi + 1e-9) {
-      // "117" meant as 11'7" is the usual slip: say how to type feet and inches.
-      const hint =
-        unitSystem === 'ft-in' && /^\s*\d+\s*$/.test(draft) ? `. For 11'7", type 11 7` : '';
-      reject(`Max ${feetToDisplay(hi, unitSystem)}${hint}`, 'max');
+    const low = feet < min - 1e-9;
+    const high = feet > hi + 1e-9;
+    if (low || high) {
+      const reason: Reason = low ? 'min' : 'max';
+      const canKeep =
+        high && allowAbove && feet <= allowAbove.upTo + 1e-9
+          ? { feet, note: allowAbove.note }
+          : null;
+      // A bare number that reads as something sensible another way (60 -> 60" for a sofa): ask.
+      // (A room's other reading must be an ordinary size: below the "are you sure?" line.)
+      const alt = otherReading(text, unitSystem, { min, max: confirmAbove ?? hi }, kind);
+      if (alt) {
+        setError('');
+        setPending({ feet, alt, why: 'range', keep: canKeep });
+        track('dimension_rejected', {
+          reason,
+          units: unitSystem,
+          shape: inputShape(text),
+          outcome: 'suggested',
+        });
+        return;
+      }
+      if (canKeep) {
+        adjust(feet, canKeep.note, reason, 'allowed', text);
+        return;
+      }
+      if (clamp && (high || clamp.min)) {
+        const to = high ? hi : min;
+        adjust(to, `Set to ${show(to)}: ${high ? clamp.max : clamp.min}`, reason, 'clamped', text);
+        return;
+      }
+      reject(
+        low
+          ? `Min ${show(min)} (that's ${show(feet)})`
+          : `Max ${show(hi)} (that's ${bigSize(feet, unitSystem)})`,
+        reason,
+        text,
+      );
       return;
     }
     setError('');
+    setNote('');
     if (confirmAbove !== undefined && feet > confirmAbove + 1e-9) {
-      setPending({ feet, alt: suggestReading(draft, unitSystem, { min, max: confirmAbove }) });
+      const alt = otherReading(text, unitSystem, { min, max: confirmAbove }, 'room');
+      setPending({ feet, alt, why: 'large', keep: { feet, note: '' } });
       return;
     }
     onChange(feet);
@@ -134,13 +235,34 @@ export function DimensionInput({
   // The error / "did you mean?" prompt: under the field, or in `messageSlot` (a full-width row
   // under a pair of fields), named after the field so it is clear which one it is about.
   const prefix = messageLabel ? <span className="font-semibold">{messageLabel}: </span> : null;
+  // The question: "That's a 117 ft room — did you mean 11'7"?" for a room side, or "That's 60 ft —
+  // did you mean 60" (5')?" for a bare number out of range.
+  const question = (p: NonNullable<typeof pending>) => {
+    const what =
+      p.why === 'large' ? `a ${bigSize(p.feet, unitSystem)} room` : bigSize(p.feet, unitSystem);
+    if (!p.alt) return `That's ${what} — keep it?`;
+    const typed =
+      p.alt.typed === show(p.alt.feet) ? p.alt.typed : `${p.alt.typed} (${show(p.alt.feet)})`;
+    return `That's ${what} — did you mean ${typed}?`;
+  };
   const messages =
-    error || pending ? (
+    error || pending || note ? (
       <>
         {error && (
           <p id={errorId} className="mt-1 text-[10px] leading-tight text-red-700" role="alert">
             {prefix}
             {error}
+          </p>
+        )}
+        {note && !error && !pending && (
+          <p
+            id={noteId}
+            className="mt-1 text-[10px] leading-tight text-amber-800"
+            role="status"
+            data-testid="dimension-note"
+          >
+            {prefix}
+            {note}
           </p>
         )}
         {pending && (
@@ -159,10 +281,7 @@ export function DimensionInput({
           >
             <p id={`${promptId}-text`} className="text-[11px] leading-snug mb-1.5">
               {prefix}
-              That&apos;s a {bigSize(pending.feet, unitSystem)} room —{' '}
-              {pending.alt !== null
-                ? `did you mean ${feetToDisplay(pending.alt, unitSystem)}?`
-                : 'keep it?'}
+              {question(pending)}
             </p>
             <div className="flex flex-wrap gap-1.5 [&>button]:whitespace-nowrap">
               <button
@@ -171,14 +290,16 @@ export function DimensionInput({
                 onClick={(e) => choose(pending.alt !== null ? 'reinterpret' : 'keep', e)}
                 className="px-2 py-1 rounded-sm bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-medium transition-colors"
               >
-                {pending.alt !== null ? `Use ${feetToDisplay(pending.alt, unitSystem)}` : 'Keep'}
+                {pending.alt !== null ? `Use ${show(pending.alt.feet)}` : 'Keep'}
               </button>
               <button
                 type="button"
-                onClick={(e) => choose(pending.alt !== null ? 'keep' : 'cancel', e)}
+                onClick={(e) => choose(pending.alt !== null && pending.keep ? 'keep' : 'cancel', e)}
                 className="px-2 py-1 rounded-sm bg-white border border-amber-300 hover:bg-amber-100 text-amber-950 text-[11px] font-medium transition-colors"
               >
-                {pending.alt !== null ? `Keep ${bigSize(pending.feet, unitSystem)}` : 'Cancel'}
+                {pending.alt !== null && pending.keep
+                  ? `Keep ${bigSize(pending.feet, unitSystem)}`
+                  : 'Cancel'}
               </button>
             </div>
           </div>
@@ -191,7 +312,8 @@ export function DimensionInput({
 
   return (
     <div className="relative w-full">
-      <div className="relative flex items-center">
+      {/* The value and its unit are measurements: a page translator must not reword them. */}
+      <div className="relative flex items-center" translate="no">
         <input
           ref={inputRef}
           id={id}
@@ -201,6 +323,7 @@ export function DimensionInput({
           onChange={(e) => {
             setDraft(e.target.value);
             if (error) setError('');
+            if (note) setNote('');
           }}
           onFocus={() => {
             focusText.current = shown;
@@ -219,7 +342,9 @@ export function DimensionInput({
           placeholder={placeholder}
           aria-label={label || placeholder}
           aria-invalid={error ? true : undefined}
-          aria-describedby={error ? errorId : pending ? `${promptId}-text` : undefined}
+          aria-describedby={
+            error ? errorId : pending ? `${promptId}-text` : note ? noteId : undefined
+          }
         />
         {suffix && (
           <span className="absolute right-1.5 text-[10px] text-slate-500 pointer-events-none select-none bg-white px-0.5">

@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { ChevronDown, Plus, Sofa, Trash2, Unlock } from 'lucide-react';
+import { ChevronDown, Plus, Sofa, Trash2 } from 'lucide-react';
 import { glowClass, useCardHighlight, type CardRef } from '../../hooks/useCardHighlight';
 import type { ItemWarning } from '../../core/geometry';
 import { feetToDisplay } from '../../core/units';
@@ -8,6 +8,7 @@ import type { Frame, PiecePatch } from '../../lib/plans';
 import type { Id, Item, Selection, UnitSystem } from '../../types';
 import { FurnitureCard } from './FurnitureCard';
 import { StepHeader } from './StepHeader';
+import type { WarningFix } from './WarningPopover';
 import { Tooltip } from './Tooltip';
 
 /** The outline each "Add" choice draws next to its name (14 x 14). */
@@ -154,6 +155,8 @@ interface FurniturePanelProps {
   onDeleteItem: (id: Id) => void;
   onRotateItem: (id: Id) => void;
   onDuplicateItem: (id: Id) => void;
+  /** A warning's fix, from its row on the card ("Move inside", "Move it out of the way"). */
+  onFixWarning?: (id: Id, fix: WarningFix) => void;
   onToggleColorPicker: (id: Id) => void;
   onCloseColorPicker: () => void;
   /** The piece just added: its card is scrolled into view and briefly highlighted. */
@@ -298,8 +301,7 @@ export function FurniturePanel(props: FurniturePanelProps) {
           </>
         }
         activeIcon="bg-emerald-100 text-emerald-600"
-        activeText="text-emerald-800"
-        activeDot="bg-emerald-600"
+        locked={false}
       />
 
       {!isActiveMode && expanded && (
@@ -309,7 +311,7 @@ export function FurniturePanel(props: FurniturePanelProps) {
             onClick={props.onActivate}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg text-xs font-medium transition-colors"
           >
-            <Unlock className="w-3 h-3" />
+            <Sofa className="w-3 h-3" aria-hidden="true" />
             Switch to Furniture Mode
           </button>
         </div>
@@ -419,6 +421,7 @@ export function FurniturePanel(props: FurniturePanelProps) {
                             onDelete={props.onDeleteItem}
                             onRotate={props.onRotateItem}
                             onDuplicate={props.onDuplicateItem}
+                            onFixWarning={props.onFixWarning}
                             onToggleColorPicker={props.onToggleColorPicker}
                             onCloseColorPicker={props.onCloseColorPicker}
                           />

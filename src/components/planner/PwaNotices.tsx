@@ -12,7 +12,7 @@ const TOAST_DISMISS =
   'shrink-0 p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors';
 
 interface PwaNoticesProps {
-  /** An app notice (e.g. "Furniture is locked…"), shown above the PWA toast. */
+  /** An app notice (e.g. "1 piece is outside the room."), shown above the PWA toast. */
   notice?: Notice | null;
   onDismissNotice?: () => void;
   /**

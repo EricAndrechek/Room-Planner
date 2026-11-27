@@ -42,9 +42,9 @@ export type AnalyticsEvent =
   | 'room_renamed'
   | 'room_duplicated'
   | 'opening_moved'
-  | 'locked_piece_pressed'
   | 'dimension_rejected'
   | 'dimension_confirm'
+  | 'dimension_adjusted'
   | 'room_resized'
   | 'room_shape_changed'
   | 'room_corner_added'
@@ -59,7 +59,10 @@ export type AnalyticsEvent =
   | 'app_update_applied'
   | 'storage_persist_result'
   | 'webmcp_available'
-  | 'webmcp_tool_called';
+  | 'webmcp_tool_called'
+  | 'translation_detected'
+  | 'warning_explained'
+  | 'warning_fixed';
 
 export type AnalyticsProps = Record<string, string | number | boolean | null | undefined>;
 

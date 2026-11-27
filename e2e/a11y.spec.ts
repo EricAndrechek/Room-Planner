@@ -1,7 +1,7 @@
-import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { animationsSettled, openStep, setDetent, viewPlan } from './ui';
 import { storedPieces } from './storage';
+import { seriousViolations } from './axe';
 
 /** Wait for the island to mount and the initial auto-fit zoom to settle. */
 async function ready(page: Page) {
@@ -9,24 +9,11 @@ async function ready(page: Page) {
   await page.waitForTimeout(700);
 }
 
-/** Zero serious/critical axe violations (WCAG 2.x A/AA + best practices). */
-async function expectNoSeriousViolations(page: Page) {
+/** Zero serious/critical axe violations (WCAG 2.x A/AA + best practices; see e2e/axe.ts). */
+async function expectNoSeriousViolations(page: Page, skipRules: string[] = []) {
   // Contrast is judged on final colors: a scan taken mid fade-in sees blended, washed-out ones.
   await animationsSettled(page);
-  const results = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
-    .analyze();
-  const serious = results.violations.filter(
-    (v) => v.impact === 'serious' || v.impact === 'critical',
-  );
-  const summary = serious.map(
-    (v) =>
-      `${v.id} (${v.impact}): ${v.nodes.length} node(s)\n` +
-      v.nodes
-        .slice(0, 4)
-        .map((n) => `   ${n.target.join(' ')}\n   ${n.failureSummary?.split('\n')[1] ?? ''}`)
-        .join('\n'),
-  );
+  const summary = await seriousViolations(page, skipRules);
   expect(summary, summary.join('\n')).toEqual([]);
 }
 
@@ -75,7 +62,7 @@ for (const [name, viewport] of [
       await expectNoSeriousViolations(page);
     });
 
-    test('room setup: locked-piece notice, wall controls and a size error have no serious violations', async ({
+    test('room setup: a selected piece, wall controls and a size error have no serious violations', async ({
       page,
     }) => {
       await page.addInitScript(() => {
@@ -86,8 +73,13 @@ for (const [name, viewport] of [
       });
       await page.goto('/');
       await ready(page);
+      // Furniture is selectable (and movable) in room setup: its actions show, no lock notice.
       await page.getByRole('button', { name: /^Desk,/ }).click();
-      await expect(page.getByTestId('app-notice')).toBeVisible();
+      await expect(page.getByRole('button', { name: /^Desk,/ })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      await expect(page.getByTestId('app-notice')).toHaveCount(0);
       await expectNoSeriousViolations(page);
 
       await openStep(page, 'room');
@@ -109,7 +101,11 @@ for (const [name, viewport] of [
       await width.fill('6');
       await width.press('Enter');
       await expect(page.getByTestId('app-notice')).toContainText('outside the room');
-      await expectNoSeriousViolations(page);
+      // Six pieces piled into a 6 ft room cover each other and each other's warning badges, so
+      // some targets are partly hidden: target-size is skipped for this one scan. Every piece and
+      // every fix has an equivalent full-size control (its card in the list, the notice's "Move
+      // them inside"), the WCAG 2.5.8 "equivalent" exception; the badges are 24px on their own.
+      await expectNoSeriousViolations(page, ['target-size']);
     });
 
     test('the New plan menu has no serious violations', async ({ page }) => {

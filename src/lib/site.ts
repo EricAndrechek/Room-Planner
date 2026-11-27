@@ -24,7 +24,7 @@ export const FEATURES = [
   'Drag, resize, rotate, duplicate and lock furniture, with exact sizes and positions',
   'Set pieces aside and drop them back exactly where you want them',
   'Snapping to walls and other pieces, with clear-distance labels',
-  'Warnings for overlapping pieces, pieces outside the room and furniture that blocks a door',
+  'Warnings for overlapping pieces, pieces outside the room and furniture that blocks a door, each with a one-tap fix',
   'Several floor plans, saved automatically in your browser',
   'Share links that carry the whole layout',
   'Export as a PNG image or PDF (A4 or Letter), or print',

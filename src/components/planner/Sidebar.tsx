@@ -172,10 +172,14 @@ export function Sidebar({
               className={`mt-3 p-2 rounded-lg text-[11px] ${isRoomSetup ? 'bg-indigo-50 text-indigo-700' : 'bg-emerald-50 text-emerald-700'}`}
             >
               <div className="flex items-center gap-2">
-                <Lock className="w-3 h-3 shrink-0" />
+                {isRoomSetup ? (
+                  <Home className="w-3 h-3 shrink-0" aria-hidden="true" />
+                ) : (
+                  <Lock className="w-3 h-3 shrink-0" aria-hidden="true" />
+                )}
                 <span>
                   {isRoomSetup
-                    ? 'Set up your room, doors & windows. Furniture is locked.'
+                    ? 'Set up your room, doors & windows.'
                     : 'Arrange furniture. Room layout is locked.'}
                 </span>
               </div>

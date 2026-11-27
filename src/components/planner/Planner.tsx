@@ -45,7 +45,14 @@ import { isRectangle, roomBounds } from '../../core/geometry/walls';
 import { floorBounds, roomAt, roomName } from '../../core/floor';
 import type { Point } from '../../core/geometry';
 import { piecesOutside } from '../../core/placement';
-import { movePiecesInside, narrowedOpenings, resizeRoom, type PiecePreset } from '../../lib/edits';
+import {
+  movePieceClear,
+  movePieceInside,
+  movePiecesInside,
+  narrowedOpenings,
+  resizeRoom,
+  type PiecePreset,
+} from '../../lib/edits';
 import {
   doorsOf,
   floorArea,
@@ -87,10 +94,7 @@ import { Sidebar } from './Sidebar';
 import { SnapOverlay } from './SnapOverlay';
 import { SnapToggle } from './SnapToggle';
 import { FloatingZoomControls } from './ZoomControls';
-
-/** A repeat press on a locked piece within this time does not bring the notice back. */
-const LOCKED_PROMPT_THROTTLE_MS = 3000;
-const LOCKED_PROMPT_MS = 6000;
+import { WarningPopover, warningIssues, type WarningFix } from './WarningPopover';
 
 /** Phones: the mode badge covers the top of the plan (px)... */
 const BADGE_INSET = 40;
@@ -273,46 +277,9 @@ export function Planner({ store, initial }: PlannerProps) {
     (mode: DesignMode) => {
       if (mode === designMode) return;
       setDesignMode(mode);
-      if (mode === DESIGN_MODES.FURNITURE) dismissNotice('locked-piece');
       track('mode_changed', { to: mode });
     },
-    [designMode, dismissNotice],
-  );
-
-  /**
-   * A piece was pressed (or Enter/arrows/R used on it) while room setup locks furniture: say why
-   * nothing moves, with a one-tap way into Furniture mode that keeps the piece selected.
-   */
-  const lastLockedPrompt = useRef(0);
-  const promptLockedPiece = useCallback(
-    (item: Item, input: 'pointer' | 'keyboard') => {
-      const now = Date.now();
-      if (now - lastLockedPrompt.current < LOCKED_PROMPT_THROTTLE_MS) return;
-      lastLockedPrompt.current = now;
-      track('locked_piece_pressed', { mode: DESIGN_MODES.ROOM_SETUP, input });
-      showNotice({
-        key: 'locked-piece',
-        message: 'Furniture is locked while you edit the room.',
-        action: {
-          label: 'Move furniture',
-          onClick: () => {
-            changeDesignMode(DESIGN_MODES.FURNITURE);
-            setSelection({ id: item.id, type: 'item' });
-            dismissNotice('locked-piece');
-          },
-        },
-        timeoutMs: LOCKED_PROMPT_MS,
-      });
-    },
-    [changeDesignMode, dismissNotice, setSelection, showNotice],
-  );
-  const onLockedPointerPress = useCallback(
-    (item: Item) => promptLockedPiece(item, 'pointer'),
-    [promptLockedPiece],
-  );
-  const onLockedKeyPress = useCallback(
-    (item: Item) => promptLockedPiece(item, 'keyboard'),
-    [promptLockedPiece],
+    [designMode],
   );
 
   const changeUnitSystem = useCallback(
@@ -355,6 +322,27 @@ export function Planner({ store, initial }: PlannerProps) {
     },
     [revealCard, expandSheet],
   );
+  /**
+   * Phones: a door or window was changed in the sheet (its type, size, place). Show it: pan it out
+   * from under the sheet and light it up briefly, so the change is seen (taps on the door type
+   * looked dead when the door was hidden under the sheet).
+   */
+  const [flashOpening, setFlashOpening] = useState<Id | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(flashTimer.current), []);
+  const showOpening = useCallback(
+    (id: Id) => {
+      if (!isMobile) return;
+      requestAnimationFrame(() => {
+        const el = containerRef.current?.querySelector(`[data-opening-id="${id}"]`);
+        if (el) reveal(el);
+      });
+      setFlashOpening(id);
+      clearTimeout(flashTimer.current);
+      flashTimer.current = setTimeout(() => setFlashOpening(null), 1200);
+    },
+    [isMobile, reveal],
+  );
   /** Pan just enough that a piece is not under the sheet (or off the edge). */
   const revealPiece = useCallback(
     (id: Id) => {
@@ -389,7 +377,6 @@ export function Planner({ store, initial }: PlannerProps) {
   const furniture = useFurnitureEditing({
     history,
     selection: sel,
-    isRoomSetup,
     startDrag,
     startRotation,
     zoomRef,
@@ -397,7 +384,6 @@ export function Planner({ store, initial }: PlannerProps) {
     onDragFrame: setDragFrame,
     onRotateFrame: setRotateFrame,
     announce: live.announce,
-    onLockedPress: onLockedPointerPress,
     onTap: isMobile ? onPieceTap : undefined,
     roomId: activeRoomId,
   });
@@ -620,7 +606,8 @@ export function Planner({ store, initial }: PlannerProps) {
   // --- Keyboard ----------------------------------------------------------------------
   const selectedItem =
     selection?.type === 'item' ? plan.items.find((i) => i.id === selection.id) : undefined;
-  const canEditSelected = !!selectedItem && !isRoomSetup && !selectedItem.locked;
+  // Furniture moves in both steps (Room Setup only puts the room's handles first).
+  const canEditSelected = !!selectedItem && !selectedItem.locked;
 
   // The sheet now covers the plan: focus there would be out of sight, so it moves to the handle.
   useEffect(() => {
@@ -655,7 +642,7 @@ export function Planner({ store, initial }: PlannerProps) {
           requestAnimationFrame(focusCanvas);
           return true;
         }
-        if (!selectedItem || isRoomSetup) return false;
+        if (!selectedItem) return false;
         deleteWithUndo(selectedItem.id);
         requestAnimationFrame(focusCanvas);
         return true;
@@ -666,10 +653,6 @@ export function Planner({ store, initial }: PlannerProps) {
         focusCanvas();
       },
       nudge: (dirX, dirY, size) => {
-        if (isRoomSetup && selectedItem) {
-          promptLockedPiece(selectedItem, 'keyboard');
-          return true;
-        }
         const step = nudgeStep(size, unitSystem);
         const handle = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>(
           '[data-room-handle]',
@@ -685,20 +668,12 @@ export function Planner({ store, initial }: PlannerProps) {
         return true;
       },
       toInventory: () => {
-        if (isRoomSetup && selectedItem) {
-          promptLockedPiece(selectedItem, 'keyboard');
-          return true;
-        }
         if (!selectedItem) return false;
         setAsideWithUndo(selectedItem.id, 'keyboard');
         return true;
       },
       showShortcuts: () => setShortcutsOpen(true),
       rotateSelected: (degrees) => {
-        if (isRoomSetup && selectedItem) {
-          promptLockedPiece(selectedItem, 'keyboard');
-          return true;
-        }
         if (!canEditSelected) return false;
         furniture.changeItem(selectedItem.id, {
           rotation: normalizeDegrees((selectedItem.placement?.rotation ?? 0) + degrees),
@@ -732,6 +707,71 @@ export function Planner({ store, initial }: PlannerProps) {
     furniture.deleteItem(id);
     offerUndo('piece-deleted', `${pieceName(item)} deleted.`);
   };
+  // --- Warnings: what a badge means, and its fix in place --------------------------------------
+  /** The piece whose warning badge was pressed (its explanation shows by it), and a failed fix. */
+  const [explain, setExplain] = useState<{ id: Id; failed: string | null } | null>(null);
+  const explainWarning = (item: Item) => {
+    setSelection({ id: item.id, type: 'item' });
+    setExplain({ id: item.id, failed: null });
+    const kinds = warningIssues(warnings.get(item.id)).map((i) => i.kind);
+    track('warning_explained', { kinds: kinds.join(',') });
+  };
+  const closeExplain = () => {
+    const id = explain?.id;
+    setExplain(null);
+    // Back to the badge it came from (keyboard users), else the plan.
+    requestAnimationFrame(() => {
+      const badge = containerRef.current?.querySelector<HTMLElement>(
+        `[data-item-id="${id}"] + [data-testid="piece-badges"] button`,
+      );
+      if (badge) badge.focus({ preventScroll: true });
+      else focusCanvas();
+    });
+  };
+  /** "Move inside" / "Move it out of the way": one undo step, said, with an Undo offer. */
+  const fixWarning = (id: Id, fix: WarningFix) => {
+    const item = planRef.current.items.find((i) => i.id === id);
+    if (!item) return;
+    if (item.locked) {
+      setExplain({ id, failed: 'It is locked: unlock it in its card to move it.' });
+      return;
+    }
+    const next =
+      fix === 'inside' ? movePieceInside(planRef.current, id) : movePieceClear(planRef.current, id);
+    if (!next || next === planRef.current) {
+      track('warning_fixed', { fix, ok: false });
+      setExplain({
+        id,
+        failed:
+          fix === 'inside'
+            ? "It can't go further in: it is bigger than the room."
+            : 'No clear spot nearby: make some room, or move it by hand.',
+      });
+      return;
+    }
+    history.apply(() => next);
+    track('warning_fixed', { fix, ok: true });
+    setExplain(null);
+    const done = `${pieceName(item)} moved ${fix === 'inside' ? 'inside the room' : 'out of the way'}`;
+    live.announce(done);
+    offerUndo('warning-fixed', `${done}.`);
+    requestAnimationFrame(focusCanvas);
+  };
+  // The explanation follows its piece: gone with the selection, a drag, or its warning.
+  const explainItem = explain
+    ? plan.items.find((i) => i.id === explain.id && i.placement)
+    : undefined;
+  if (
+    explain &&
+    (!explainItem ||
+      selectedItemId !== explain.id ||
+      dragFrame ||
+      rotateFrame ||
+      (!explain.failed && warningIssues(warnings.get(explain.id)).length === 0))
+  ) {
+    setExplain(null);
+  }
+
   /** The selection bar's and the sheet row's actions. */
   const runPieceAction = (id: Id, action: PieceAction, input: SetAsideInput) => {
     if (action === 'rotate') furniture.rotateItem(id, 90);
@@ -911,9 +951,7 @@ export function Planner({ store, initial }: PlannerProps) {
   const inventory = useMemo(() => inventoryPieces(plan), [plan]);
   const placed = useMemo(() => placedPieces(plan), [plan]);
   const selectionActions =
-    selectedItem && !isRoomSetup && !dragFrame && !rotateFrame && !placingId
-      ? selectedItem
-      : undefined;
+    selectedItem && !dragFrame && !rotateFrame && !placingId ? selectedItem : undefined;
   const roomNames = useMemo(() => plan.rooms.map((r) => roomName(plan, r)), [plan]);
   const dragItem = draggingId ? plan.items.find((i) => i.id === draggingId) : undefined;
   const ghostItem = placingItem ?? dragItem;
@@ -951,8 +989,11 @@ export function Planner({ store, initial }: PlannerProps) {
       ? {
           label: 'Edit',
           icon: <Pencil className="w-4 h-4" aria-hidden="true" />,
-          tone: isRoomSetup ? ('room' as const) : ('furniture' as const),
+          tone:
+            isRoomSetup && selection.type !== 'item' ? ('room' as const) : ('furniture' as const),
           onClick: () => {
+            // A piece's card is in the Items step: go there for it.
+            if (selection.type === 'item') changeDesignMode(DESIGN_MODES.FURNITURE);
             revealCard(selection.type, selection.id);
             expandSheet('tap');
           },
@@ -1097,10 +1138,16 @@ export function Planner({ store, initial }: PlannerProps) {
               highlightedWall={roomShape.highlightedWall}
               onHighlightWall={roomShape.highlightWall}
               onAddDoor={addDoor}
-              onUpdateDoor={openings.updateDoor}
+              onUpdateDoor={(id, patch) => {
+                openings.updateDoor(id, patch);
+                showOpening(id);
+              }}
               onDeleteDoor={openings.deleteDoor}
               onAddWindow={addWindow}
-              onUpdateWindow={openings.updateWindow}
+              onUpdateWindow={(id, patch) => {
+                openings.updateWindow(id, patch);
+                showOpening(id);
+              }}
               onDeleteWindow={openings.deleteWindow}
               onChangeWall={changeOpeningWall}
               highlight={latestCard(
@@ -1145,6 +1192,7 @@ export function Planner({ store, initial }: PlannerProps) {
               onDuplicateItem={(id) => {
                 furniture.duplicateItem(id);
               }}
+              onFixWarning={fixWarning}
               onToggleColorPicker={sel.toggleColorPicker}
               onCloseColorPicker={sel.closeColorPicker}
               highlight={latestCard(
@@ -1187,10 +1235,12 @@ export function Planner({ store, initial }: PlannerProps) {
               onItemPointerDown={furniture.onItemPointerDown}
               onRotatePointerDown={furniture.onRotatePointerDown}
               onSelectItem={(item) => selectItem(item.id)}
-              onLockedItemPress={onLockedKeyPress}
+              onExplainWarning={explainWarning}
+              explainingId={explain?.id ?? null}
               onDoorPointerDown={(e, door) => openings.startOpeningDrag(e, door.id, 'doors')}
               onWindowPointerDown={(e, win) => openings.startOpeningDrag(e, win.id, 'windows')}
               highlightDoorIds={highlightDoorIds}
+              flashOpeningId={flashOpening}
               activeRoomId={activeRoomId}
               labelItems={labelItems}
               rooms={
@@ -1199,13 +1249,25 @@ export function Planner({ store, initial }: PlannerProps) {
                   : null
               }
               selectionBar={
-                selectionActions &&
-                !isMobile && (
-                  <SelectionToolbar
-                    variant="canvas"
-                    item={selectionActions}
-                    onAction={(a) => runPieceAction(selectionActions.id, a, 'toolbar')}
+                explain && explainItem ? (
+                  <WarningPopover
+                    key={explain.id}
+                    item={explainItem}
+                    warning={warnings.get(explain.id)}
+                    failed={explain.failed}
+                    onFix={(fix) => fixWarning(explain.id, fix)}
+                    onClose={closeExplain}
+                    onShown={reveal}
                   />
+                ) : (
+                  selectionActions &&
+                  !isMobile && (
+                    <SelectionToolbar
+                      variant="canvas"
+                      item={selectionActions}
+                      onAction={(a) => runPieceAction(selectionActions.id, a, 'toolbar')}
+                    />
+                  )
                 )
               }
               ghost={
