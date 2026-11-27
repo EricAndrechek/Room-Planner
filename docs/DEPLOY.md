@@ -91,7 +91,13 @@ there. `MCP_SHOTS_DIR=<dir>` saves screenshots of the plan viewer.
 
 `server.json` (repository root) is the MCP Registry entry and the one source of the MCP server's
 identity: the Worker's `initialize` serverInfo and its server card read their name, version, title,
-description, website and icons from it. It is published as `com.andrechek.room-planner/mcp`. To
+description, website and icons from it. It is published as `com.andrechek.room-planner/room-planner`
+(since 1.1.0; until then `com.andrechek.room-planner/mcp`: directories name the one-click install
+after the last segment, so it said "mcp"). Only the registry name changed; the endpoint stays
+`https://room-planner.andrechek.com/mcp`. To retire an old name, log in as below (the same key
+covers `com.andrechek.room-planner/*`) and run
+`mcp-publisher status --status deprecated --all-versions --message "Renamed to com.andrechek.room-planner/room-planner" com.andrechek.room-planner/mcp`
+(check `mcp-publisher status --help` for the pinned release's flags); `deleted` hides it entirely. To
 release, bump `version` in `server.json` in a PR. After the merge,
 `.github/workflows/mcp-registry.yml` validates it, skips a version the registry already has,
 waits until `https://room-planner.andrechek.com/mcp/server-card` serves the new version

@@ -21,56 +21,65 @@
     "properties": {
       "label": {
         "type": "string",
-        "maxLength": 80
+        "maxLength": 80,
+        "description": "E.g. \"Queen bed\"."
       },
       "width": {
         "type": "number",
         "exclusiveMinimum": 0,
         "maximum": 10000,
-        "description": "Bounding-box size along x before rotation."
+        "description": "Along x, before rotation."
       },
       "depth": {
         "type": "number",
         "exclusiveMinimum": 0,
         "maximum": 10000,
-        "description": "Bounding-box size along y before rotation."
+        "description": "Along y, before rotation."
       },
       "color": {
+        "description": "Fill, \"#rrggbb\".",
         "type": "string",
         "pattern": "^#[0-9a-fA-F]{6}$"
       },
       "shape": {
+        "description": "\"ellipse\": round or oval; \"l\" needs cut.",
         "type": "string",
         "enum": ["rect", "l", "ellipse"]
       },
       "cut": {
-        "description": "Shape \"l\" only: the rectangle removed from one corner of the bounding box.",
+        "description": "Shape \"l\" only: the rectangle removed from one corner.",
         "type": "object",
         "properties": {
           "corner": {
             "type": "string",
-            "enum": ["tl", "tr", "br", "bl"]
+            "enum": ["tl", "tr", "br", "bl"],
+            "description": "Corner removed."
           },
           "width": {
             "type": "number",
             "exclusiveMinimum": 0,
-            "maximum": 10000
+            "maximum": 10000,
+            "description": "Removed part, along x."
           },
           "depth": {
             "type": "number",
             "exclusiveMinimum": 0,
-            "maximum": 10000
+            "maximum": 10000,
+            "description": "Removed part, along y."
           }
         },
         "required": ["corner", "width", "depth"]
       },
       "locked": {
+        "description": "Not movable in the planner.",
         "type": "boolean"
       },
       "hidden": {
+        "description": "Not drawn or checked.",
         "type": "boolean"
       },
       "notes": {
+        "description": "The user's notes.",
         "type": "string",
         "maxLength": 500
       },
@@ -122,57 +131,66 @@
         "description": "An id from get_plan."
       },
       "label": {
+        "description": "E.g. \"Queen bed\".",
         "type": "string",
         "maxLength": 80
       },
       "width": {
-        "description": "Bounding-box size along x before rotation.",
+        "description": "Along x, before rotation.",
         "type": "number",
         "exclusiveMinimum": 0,
         "maximum": 10000
       },
       "depth": {
-        "description": "Bounding-box size along y before rotation.",
+        "description": "Along y, before rotation.",
         "type": "number",
         "exclusiveMinimum": 0,
         "maximum": 10000
       },
       "color": {
+        "description": "Fill, \"#rrggbb\".",
         "type": "string",
         "pattern": "^#[0-9a-fA-F]{6}$"
       },
       "shape": {
+        "description": "\"ellipse\": round or oval; \"l\" needs cut.",
         "type": "string",
         "enum": ["rect", "l", "ellipse"]
       },
       "cut": {
-        "description": "Shape \"l\" only: the rectangle removed from one corner of the bounding box.",
+        "description": "Shape \"l\" only: the rectangle removed from one corner.",
         "type": "object",
         "properties": {
           "corner": {
             "type": "string",
-            "enum": ["tl", "tr", "br", "bl"]
+            "enum": ["tl", "tr", "br", "bl"],
+            "description": "Corner removed."
           },
           "width": {
             "type": "number",
             "exclusiveMinimum": 0,
-            "maximum": 10000
+            "maximum": 10000,
+            "description": "Removed part, along x."
           },
           "depth": {
             "type": "number",
             "exclusiveMinimum": 0,
-            "maximum": 10000
+            "maximum": 10000,
+            "description": "Removed part, along y."
           }
         },
         "required": ["corner", "width", "depth"]
       },
       "locked": {
+        "description": "Not movable in the planner.",
         "type": "boolean"
       },
       "hidden": {
+        "description": "Not drawn or checked.",
         "type": "boolean"
       },
       "notes": {
+        "description": "The user's notes.",
         "type": "string",
         "maxLength": 500
       },
@@ -271,7 +289,8 @@
     "properties": {
       "kind": {
         "type": "string",
-        "enum": ["door", "window"]
+        "enum": ["door", "window"],
+        "description": "Door or window."
       },
       "roomId": {
         "type": "string",
@@ -280,13 +299,13 @@
         "description": "A room id from get_plan. Default: the first room."
       },
       "wall": {
-        "description": "Wall index. Wall i runs from outline[i] to outline[i+1].",
+        "description": "Wall i runs from outline[i] to outline[i+1].",
         "type": "integer",
         "minimum": 0,
         "maximum": 9007199254740991
       },
       "offset": {
-        "description": "Distance along the wall from its start corner to the near edge of the opening.",
+        "description": "From the wall's start corner to the opening's near edge.",
         "type": "number",
         "minimum": 0
       },
@@ -297,7 +316,7 @@
         "maximum": 10000
       },
       "type": {
-        "description": "Doors only.",
+        "description": "Doors only. \"swing-in\": into the room that lists it.",
         "type": "string",
         "enum": [
           "swing-in",
@@ -311,7 +330,7 @@
         ]
       },
       "hinge": {
-        "description": "Doors only. Seen from inside the room facing the wall, \"start\" is on the left.",
+        "description": "Doors only. \"start\": on the left, from inside facing the wall.",
         "type": "string",
         "enum": ["start", "end"]
       },
@@ -342,13 +361,13 @@
         "description": "An id from get_plan."
       },
       "wall": {
-        "description": "Wall index. Wall i runs from outline[i] to outline[i+1].",
+        "description": "Wall i runs from outline[i] to outline[i+1].",
         "type": "integer",
         "minimum": 0,
         "maximum": 9007199254740991
       },
       "offset": {
-        "description": "Distance along the wall from its start corner to the near edge of the opening.",
+        "description": "From the wall's start corner to the opening's near edge.",
         "type": "number",
         "minimum": 0
       },
@@ -359,7 +378,7 @@
         "maximum": 10000
       },
       "type": {
-        "description": "Doors only.",
+        "description": "Doors only. \"swing-in\": into the room that lists it.",
         "type": "string",
         "enum": [
           "swing-in",
@@ -373,7 +392,7 @@
         ]
       },
       "hinge": {
-        "description": "Doors only. Seen from inside the room facing the wall, \"start\" is on the left.",
+        "description": "Doors only. \"start\": on the left, from inside facing the wall.",
         "type": "string",
         "enum": ["start", "end"]
       },
@@ -486,17 +505,19 @@
         "properties": {
           "version": {
             "type": "number",
-            "const": 4
+            "const": 4,
+            "description": "Always 4."
           },
           "name": {
             "default": "Untitled",
+            "description": "Plan name.",
             "type": "string",
             "maxLength": 100
           },
           "unit": {
             "type": "string",
             "enum": ["ft", "in", "m", "cm"],
-            "description": "Unit of every length in this document."
+            "description": "Unit of every length."
           },
           "rooms": {
             "minItems": 1,
@@ -508,9 +529,10 @@
                 "id": {
                   "type": "string",
                   "pattern": "^[A-Za-z0-9_-]{1,40}$",
-                  "description": "Unique within the plan. Letters, digits, \"-\" and \"_\"."
+                  "description": "Unique in the plan."
                 },
                 "name": {
+                  "description": "E.g. \"Bedroom\".",
                   "type": "string",
                   "maxLength": 80
                 },
@@ -524,20 +546,23 @@
                       "x": {
                         "type": "number",
                         "minimum": -100000,
-                        "maximum": 100000
+                        "maximum": 100000,
+                        "description": "Floor x (grows right)."
                       },
                       "y": {
                         "type": "number",
                         "minimum": -100000,
-                        "maximum": 100000
+                        "maximum": 100000,
+                        "description": "Floor y (grows DOWN)."
                       }
                     },
                     "required": ["x", "y"]
                   },
-                  "description": "Interior corners in floor coordinates, clockwise as drawn (y grows downward). A rectangle is 4 points starting at its top-left corner; its walls are then 0 = top, 1 = right, 2 = bottom, 3 = left."
+                  "description": "Interior corners, clockwise. Rectangle from top-left: walls 0 top, 1 right, 2 bottom, 3 left."
                 },
                 "openings": {
                   "default": [],
+                  "description": "Doors and windows.",
                   "maxItems": 64,
                   "type": "array",
                   "items": {
@@ -546,22 +571,23 @@
                       "id": {
                         "type": "string",
                         "pattern": "^[A-Za-z0-9_-]{1,40}$",
-                        "description": "Unique within the plan. Letters, digits, \"-\" and \"_\"."
+                        "description": "Unique in the plan."
                       },
                       "kind": {
                         "type": "string",
-                        "enum": ["door", "window"]
+                        "enum": ["door", "window"],
+                        "description": "Door or window."
                       },
                       "wall": {
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 9007199254740991,
-                        "description": "Wall index. Wall i runs from outline[i] to outline[i+1]."
+                        "description": "Wall i runs from outline[i] to outline[i+1]."
                       },
                       "offset": {
                         "type": "number",
                         "minimum": 0,
-                        "description": "Distance along the wall from its start corner to the near edge of the opening."
+                        "description": "From the wall's start corner to the opening's near edge."
                       },
                       "width": {
                         "type": "number",
@@ -570,13 +596,13 @@
                         "description": "Width along the wall."
                       },
                       "from": {
-                        "description": "Input only: which end of the wall offset is measured from. \"start\" (default) is the start corner (on a rectangle: top wall from the left, right wall from the top, bottom wall from the right, left wall from the bottom); \"end\" is the other end. Or name the end as seen from above: \"left\" or \"right\" on a top or bottom wall, \"top\" or \"bottom\" on a left or right wall. The plan comes back with offset measured from the start corner.",
+                        "description": "Input only: the end offset is measured from. Default \"start\".",
                         "type": "string",
                         "enum": ["start", "end", "left", "right", "top", "bottom"]
                       },
                       "type": {
                         "default": "swing-in",
-                        "description": "Doors only.",
+                        "description": "Doors only. \"swing-in\": into the room that lists it.",
                         "type": "string",
                         "enum": [
                           "swing-in",
@@ -591,11 +617,12 @@
                       },
                       "hinge": {
                         "default": "start",
-                        "description": "Doors only. Seen from inside the room facing the wall, \"start\" is on the left.",
+                        "description": "Doors only. \"start\": on the left, from inside facing the wall.",
                         "type": "string",
                         "enum": ["start", "end"]
                       },
                       "swingAngle": {
+                        "description": "Doors only: how far it opens, degrees.",
                         "anyOf": [
                           {
                             "type": "number",
@@ -615,10 +642,12 @@
               },
               "required": ["id", "outline"],
               "additionalProperties": {}
-            }
+            },
+            "description": "One floor: rooms touch to share a wall, never overlap."
           },
           "items": {
             "default": [],
+            "description": "Furniture.",
             "maxItems": 500,
             "type": "array",
             "items": {
@@ -627,19 +656,22 @@
                 "id": {
                   "type": "string",
                   "pattern": "^[A-Za-z0-9_-]{1,40}$",
-                  "description": "Unique within the plan. Letters, digits, \"-\" and \"_\"."
+                  "description": "Unique in the plan."
                 },
                 "label": {
                   "type": "string",
-                  "maxLength": 80
+                  "maxLength": 80,
+                  "description": "E.g. \"Queen bed\"."
                 },
                 "color": {
                   "default": "#93c5fd",
+                  "description": "Fill, \"#rrggbb\".",
                   "type": "string",
                   "pattern": "^#[0-9a-fA-F]{6}$"
                 },
                 "shape": {
                   "default": "rect",
+                  "description": "\"ellipse\": round or oval; \"l\" needs cut.",
                   "type": "string",
                   "enum": ["rect", "l", "ellipse"]
                 },
@@ -647,51 +679,57 @@
                   "type": "number",
                   "exclusiveMinimum": 0,
                   "maximum": 10000,
-                  "description": "Bounding-box size along x before rotation."
+                  "description": "Along x, before rotation."
                 },
                 "depth": {
                   "type": "number",
                   "exclusiveMinimum": 0,
                   "maximum": 10000,
-                  "description": "Bounding-box size along y before rotation."
+                  "description": "Along y, before rotation."
                 },
                 "cut": {
-                  "description": "Shape \"l\" only: the rectangle removed from one corner of the bounding box.",
+                  "description": "Shape \"l\" only: the rectangle removed from one corner.",
                   "type": "object",
                   "properties": {
                     "corner": {
                       "type": "string",
-                      "enum": ["tl", "tr", "br", "bl"]
+                      "enum": ["tl", "tr", "br", "bl"],
+                      "description": "Corner removed."
                     },
                     "width": {
                       "type": "number",
                       "exclusiveMinimum": 0,
-                      "maximum": 10000
+                      "maximum": 10000,
+                      "description": "Removed part, along x."
                     },
                     "depth": {
                       "type": "number",
                       "exclusiveMinimum": 0,
-                      "maximum": 10000
+                      "maximum": 10000,
+                      "description": "Removed part, along y."
                     }
                   },
                   "required": ["corner", "width", "depth"]
                 },
                 "placement": {
-                  "description": "Centre of the piece in floor coordinates and its clockwise rotation in degrees. Omit it to set the piece aside: kept in the plan, not on the floor.",
+                  "description": "Omit to set the piece aside: off the floor, not checked.",
                   "type": "object",
                   "properties": {
                     "x": {
                       "type": "number",
                       "minimum": -100000,
-                      "maximum": 100000
+                      "maximum": 100000,
+                      "description": "Floor x of the CENTRE."
                     },
                     "y": {
                       "type": "number",
                       "minimum": -100000,
-                      "maximum": 100000
+                      "maximum": 100000,
+                      "description": "Floor y of the CENTRE."
                     },
                     "rotation": {
                       "default": 0,
+                      "description": "Clockwise degrees.",
                       "type": "number",
                       "minimum": 0,
                       "exclusiveMaximum": 360
@@ -700,12 +738,15 @@
                   "required": ["x", "y"]
                 },
                 "locked": {
+                  "description": "Not movable in the planner.",
                   "type": "boolean"
                 },
                 "hidden": {
+                  "description": "Not drawn or checked.",
                   "type": "boolean"
                 },
                 "notes": {
+                  "description": "The user's notes.",
                   "type": "string",
                   "maxLength": 500
                 }
@@ -715,9 +756,11 @@
             }
           },
           "settings": {
+            "description": "Display preferences.",
             "type": "object",
             "properties": {
               "unitSystem": {
+                "description": "Display unit. Default: unit (\"ft\" as \"ft-in\").",
                 "type": "string",
                 "enum": ["ft-in", "ft", "in", "m", "cm"]
               }

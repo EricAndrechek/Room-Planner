@@ -54,7 +54,7 @@ A powerful, intuitive tool for planning room layouts with furniture, doors, and 
 
 ### 🤖 For AI Assistants
 
-- **MCP Server** - `https://room-planner.andrechek.com/mcp`: Claude, ChatGPT, VS Code, Cursor and other MCP apps can lay out a room or a whole floor of connected rooms, check it and hand you an edit link; apps with MCP Apps show the plan in the chat. Free, no account; listed in the [MCP Registry](https://registry.modelcontextprotocol.io) as `com.andrechek.room-planner/mcp`. See [/agents/](https://room-planner.andrechek.com/agents/)
+- **MCP Server** - `https://room-planner.andrechek.com/mcp`: Claude, ChatGPT, VS Code, Cursor and other MCP apps can lay out a room or a whole floor of connected rooms, check it and hand you an edit link; apps with MCP Apps show the plan in the chat. Free, no account; listed in the [MCP Registry](https://registry.modelcontextprotocol.io) as `com.andrechek.room-planner/room-planner`. See [/agents/](https://room-planner.andrechek.com/agents/)
 - **WebMCP** - In Chrome with WebMCP turned on, the browser's own assistant can edit the plan you have open: furniture, doors, windows and rooms, each change one undo step, and replacing the plan asks first
 - **REST API** - The same operations over plain HTTP for agents without MCP (curl, agent frameworks, ChatGPT Custom GPT Actions): [`/openapi.json`](https://room-planner.andrechek.com/openapi.json)
 - **Plan links without tools** - Assistants with no connector can still hand you a plan: a compressed `#s=` link built with code, or the readable `#p=` form (see [/agents/#plan-links](https://room-planner.andrechek.com/agents/#plan-links))
@@ -200,7 +200,7 @@ The public site URL used for canonical links, Open Graph tags, the sitemap and
   (`/mcp/server-card`), the AI catalog (`/.well-known/ai-catalog.json`, `/.well-known/ard.json`), a
   `room-planner` Agent Skill (`/.well-known/agent-skills/`), a site search for agents
   (`/.well-known/search`), and `server.json`, the MCP Registry entry
-  (`com.andrechek.room-planner/mcp`, proven by `/.well-known/mcp-registry-auth`).
+  (`com.andrechek.room-planner/room-planner`, proven by `/.well-known/mcp-registry-auth`).
   Merging a `version` bump in `server.json` publishes it to the registry
   (`.github/workflows/mcp-registry.yml`; [docs/DEPLOY.md](docs/DEPLOY.md)).
 - The REST API (`worker/api.ts`, `/api/*`, the same functions as the MCP tools) and its

@@ -10,6 +10,7 @@ import worker from './index';
 import { MAX_BODY, overMemoryLimit, type Env } from './http';
 import { aiCatalog } from '../scripts/discovery.mjs';
 import server from '../server.json';
+import { FORMAT_DETAILS, FORMAT_ESSENTIALS } from './descriptions';
 import { VIEWER_MIME_TYPE, VIEWER_URI } from './viewer';
 
 const ORIGIN = 'https://room-planner.andrechek.com';
@@ -242,6 +243,83 @@ describe.each(ERAS)('MCP over $name', ({ mode }) => {
   });
 });
 
+describe('what the model reads', () => {
+  /** Every property of a JSON Schema, nested ones included, as `path`, with its schema. */
+  const properties = (
+    schema: Record<string, unknown>,
+    path: string,
+  ): [string, Record<string, unknown>][] => {
+    const own = Object.entries(
+      (schema.properties ?? {}) as Record<string, Record<string, unknown>>,
+    );
+    const nested = [
+      ...own.map(([k, v]): [Record<string, unknown>, string] => [v, `${path}.${k}`]),
+      ...(schema.items ? [[schema.items, `${path}[]`] as [Record<string, unknown>, string]] : []),
+      ...((schema.anyOf ?? []) as Record<string, unknown>[]).map(
+        (v, i): [Record<string, unknown>, string] => [v, `${path}|${i}`],
+      ),
+    ];
+    return [
+      ...own.map(([k, v]): [string, Record<string, unknown>] => [`${path}.${k}`, v]),
+      ...nested.flatMap(([v, p]) => properties(v, p)),
+    ];
+  };
+
+  it('starts each tool with when to use it, says the format once, and stays small', async () => {
+    const client = await connect('legacy');
+    const { tools } = await client.listTools();
+    const instructions = client.getInstructions() ?? '';
+    const tool = (name: string) => tools.find((t) => t.name === name)!;
+    expect(tool('create_plan').description).toMatch(
+      /^Use when the user wants to lay out, furnish, fit furniture into, or get a floor plan of a room or home: returns a checked plan, a drawing, and an editable Room Planner link\./,
+    );
+    expect(tool('check_layout').description).toMatch(
+      /^Use to re-check a plan quickly while you rearrange it \(no link, no drawing\)/,
+    );
+    expect(tool('read_plan').description).toMatch(
+      /^Use when the user shares a Room Planner link, to read and modify that plan/,
+    );
+    // Each part of the format is said once: the essentials in create_plan (some clients drop the
+    // instructions), the rest in the instructions; the other tools point at create_plan.
+    const everything = [instructions, ...tools.map((t) => t.description ?? '')];
+    for (const [part, where] of [
+      [FORMAT_ESSENTIALS, tool('create_plan').description],
+      [FORMAT_DETAILS, instructions],
+    ] as const) {
+      expect(where).toContain(part);
+      for (const line of part.split('\n')) {
+        expect(
+          everything.filter((t) => t.includes(line)),
+          line,
+        ).toHaveLength(1);
+      }
+    }
+    for (const name of ['check_layout', 'read_plan']) {
+      expect(tool(name).description).toContain('create_plan');
+    }
+    // Directories flag a description over 4,000 characters. The whole of it (about 4k tokens, from
+    // 5.6k) is mostly the two plan schemas, every property described.
+    for (const t of tools) expect(t.description!.length, t.name).toBeLessThanOrEqual(1600);
+    expect(instructions.length).toBeLessThanOrEqual(3200);
+    expect(JSON.stringify(tools).length + instructions.length).toBeLessThanOrEqual(18000);
+  });
+
+  it('describes every argument, nested properties included', async () => {
+    const client = await connect('legacy');
+    const { tools } = await client.listTools();
+    for (const t of tools) {
+      const all = properties(t.inputSchema as Record<string, unknown>, t.name);
+      expect(all.length, t.name).toBeGreaterThan(0);
+      const undescribed = all
+        .filter(([, v]) => typeof v.description !== 'string' || !v.description.trim())
+        .map(([p]) => p);
+      expect(undescribed, t.name).toEqual([]);
+      for (const [p, v] of all)
+        expect((v.description as string).length, p).toBeLessThanOrEqual(100);
+    }
+  });
+});
+
 describe('HTTP', () => {
   it('answers a CORS preflight for any origin', async () => {
     const r = await call(
@@ -321,7 +399,7 @@ describe('HTTP', () => {
       description: string;
       remotes: { url: string; supportedProtocolVersions: string[] }[];
     };
-    expect(card.name).toBe('com.andrechek.room-planner/mcp');
+    expect(card.name).toBe('com.andrechek.room-planner/room-planner');
     expect(card.description.length).toBeLessThanOrEqual(100);
     expect(card.remotes[0]!.url).toBe(`${ORIGIN}/mcp`);
     expect(
@@ -354,6 +432,14 @@ describe('registry entry', () => {
       websiteUrl: server.websiteUrl,
       icons: server.icons,
     });
+  });
+
+  it('is named room-planner in the registry, at the /mcp endpoint', () => {
+    // Directories derive the install name from the last segment of the registry name. Only the
+    // name changed (1.1.0); the endpoint stays /mcp.
+    expect(server.name).toBe('com.andrechek.room-planner/room-planner');
+    expect(server.remotes).toHaveLength(1);
+    expect(server.remotes[0]!.url).toBe('https://room-planner.andrechek.com/mcp');
   });
 
   it('server.json and the AI Catalog agree with the server card', async () => {

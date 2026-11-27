@@ -1,7 +1,7 @@
 name: MCP Registry
 
 # Publishes the MCP server (server.json) to the official MCP Registry as
-# com.andrechek.room-planner/mcp, with no manual step. The name is proven over HTTP: the registry
+# com.andrechek.room-planner/room-planner, with no manual step. The name is proven over HTTP: the registry
 # fetches public/.well-known/mcp-registry-auth from room-planner.andrechek.com and checks it
 # against a signature made with the MCP_REGISTRY_PRIVATE_KEY secret (docs/DEPLOY.md). Advisory
 # only: not a required check (the ruleset requires just `ci`). Never name a job `ci`.

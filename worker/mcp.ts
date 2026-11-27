@@ -54,21 +54,25 @@ const object = (properties: Record<string, unknown>, required: string[]) => () =
   additionalProperties: false,
 });
 
-const planArgs = object({ plan: planSchema() }, ['plan']);
+/** The plan argument: the format is in create_plan's description. */
+const planArg = () => ({
+  ...planSchema(),
+  description: "The whole plan; format in create_plan's description.",
+});
+const planArgs = object({ plan: planArg() }, ['plan']);
 const checkArgs = object(
   {
-    plan: planSchema(),
+    plan: planArg(),
     minClearance: {
       type: 'number',
       minimum: 0,
-      description:
-        "Report gaps from 6 in (15 cm) up to this as tight_clearance, in the plan's unit. Default 24 in.",
+      description: "Gaps from 6 in up to this are tight_clearance; plan's unit, default 24 in.",
     },
   },
   ['plan'],
 );
 const urlArgs = object(
-  { url: { type: 'string', description: 'The whole Room Planner link, as the user gave it.' } },
+  { url: { type: 'string', description: 'The whole link, as the user gave it.' } },
   ['url'],
 );
 

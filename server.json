@@ -1,9 +1,9 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "com.andrechek.room-planner/mcp",
+  "name": "com.andrechek.room-planner/room-planner",
   "title": "Room Planner",
   "description": "Lay out a room to scale, check furniture, doors and clearances, and get a link to edit the plan.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "websiteUrl": "https://room-planner.andrechek.com/agents/",
   "repository": {
     "url": "https://github.com/EricAndrechek/Room-Planner",
