@@ -106,9 +106,12 @@ describe('pages through the Markdown router', () => {
     const e = env();
     const card = await get('/mcp/server-card', { accept: 'text/markdown' }, e);
     expect(card.headers.get('content-type')).toBe('application/mcp-server-card+json');
+    // The API answers itself: in Markdown, as GET /api/plan does for assistants that browse.
     const api = await get('/api/plan', { accept: 'text/markdown' }, e);
     expect(api.status).toBe(400);
-    expect(api.headers.get('content-type')).toBe('application/problem+json');
+    expect(api.headers.get('content-type')).toBe('text/markdown; charset=utf-8');
+    const json = await get('/api/plan', { accept: 'application/json' }, e);
+    expect(json.headers.get('content-type')).toBe('application/problem+json');
     expect(e.fetched).toEqual([]);
   });
 });

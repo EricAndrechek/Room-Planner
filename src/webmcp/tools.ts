@@ -329,7 +329,7 @@ export function createTools(host: WebMcpHost): WebMcpTool[] {
     check_layout: {
       title: 'Check the layout',
       description:
-        'The layout problems the plan shows: pieces that overlap or are outside the rooms (errors); pieces in a door swing or doorway, overlapping doors and windows, overlapping rooms (warnings); gaps below minClearance (tight_clearance, info). Each issue is {code, severity, message, ids}, ids naming the piece first. Returns {ok, issues}; ok is true when nothing is an error or a warning.',
+        'The layout problems the plan shows: pieces that overlap or are outside the rooms (errors); pieces in a door swing or doorway, overlapping doors and windows, overlapping rooms (warnings); gaps from 6 in up to minClearance (tight_clearance, info). Each issue is {code, severity, message, ids}, ids naming the piece first. Returns {ok, issues}; ok is true when nothing is an error or a warning.',
       annotations: { readOnlyHint: true },
       run: ({ minClearance }) => {
         const plan = host.plan();

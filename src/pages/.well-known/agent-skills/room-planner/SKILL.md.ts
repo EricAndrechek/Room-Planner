@@ -43,7 +43,7 @@ The format the tools, the REST API and \`#s=\` links take (the readable \`#p=\` 
 
 ${FORMAT}
 
-Check before you hand a plan over: the tools and \`POST /api/plan/check\` report overlapping pieces, pieces outside every room, blocked doors and doorways and tight clearances. Fix what they report and check again. If the user's sizes can't fit (a bed longer than the room), say so rather than shrinking things.
+Check before you hand a plan over: the tools, \`POST /api/plan/check\` and (for a link you wrote, from an assistant that can open web pages) \`GET ${url('api/plan')}?url=<the link, URL-encoded>\` report overlapping pieces, pieces outside every room, blocked doors and doorways and tight clearances. Fix every error and warning yourself and check again. If the user's sizes can't fit (a bed longer than the room), say so rather than shrinking things.
 
 ## Examples
 
@@ -58,6 +58,8 @@ The answer has \`issues\` and \`url\`. Reply with the link as text: [Open your b
 **"Sketch my flat: a 14×12 living room next to a 10×12 bedroom"**, with no tools at all (the readable form):
 
 ${readableMarkdown(url(''), READABLE_EXAMPLES.flat, 'your flat')}
+
+If you can open web pages, check it first: open ${url('api/plan')}?p=${READABLE_EXAMPLES.flat} and fix what it lists.
 
 ## More
 

@@ -8,11 +8,12 @@
  * Pure: no SDK, no Worker APIs. The server (mcp.ts), the unit tests and the e2e tests call it.
  */
 import * as z from 'zod/mini';
-import { checkLayout, type Issue, type IssueCode } from '../src/core/check';
+import { checkLayout, groupIssues, type Issue, type IssueCode } from '../src/core/check';
 import { isRectangle, outlineArea, roomBounds } from '../src/core/geometry/walls';
 import { formatIssues, loadPlan, type LoadIssue } from '../src/core/load';
 import { PLAN_VERSION, Plan, UNITS, type Unit, type UNIT_SYSTEMS } from '../src/core/schema';
 import { readPlanLink } from '../src/core/share/plan';
+import { readReadableLink } from '../src/core/share/readable';
 import {
   FEET_PER_CM,
   FEET_PER_INCH,
@@ -34,7 +35,10 @@ export { type Issue, type IssueCode };
  * made here.
  */
 export interface ToolOutcome {
-  /** The text content. A link, when there is one, is its last line, alone. */
+  /**
+   * The text content. A link, when there is one, is its last line, alone, as Markdown link text
+   * (`[Open <plan> in Room Planner](url)`), the way the model should pass it on.
+   */
   text: string;
   /** `structuredContent`. */
   structured?: Record<string, unknown>;
@@ -241,16 +245,34 @@ export function summarize(
   return [...(name ? [`"${plan.name}":`] : []), ...head, ...rooms, ...doors, ...pieces].join(' ');
 }
 
-const issueLines = (issues: Issue[]): string[] =>
-  issues.length === 0
-    ? ['No layout issues.']
-    : [
-        `${count(issues.length, 'issue')}:`,
-        ...issues.map(
-          (i) =>
-            `- ${i.severity}: ${i.message} (${i.code}${i.ids.length ? `: ${i.ids.join(', ')}` : ''})`,
-        ),
-      ];
+/** Entity ids listed for a group of issues, at most this many issues' worth. */
+const IDS_SHOWN = 4;
+
+/**
+ * The issues for the model, grouped (the same message ten times is one line, `×10`), errors
+ * first, each with its code and the ids it names.
+ */
+export const issueLines = (issues: Issue[]): string[] => {
+  if (issues.length === 0) return ['No layout issues.'];
+  const by = (sev: Issue['severity']) => issues.filter((i) => i.severity === sev).length;
+  const counts = [
+    count(by('error'), 'error'),
+    count(by('warning'), 'warning'),
+    `${by('info')} info`,
+  ].filter((c) => !c.startsWith('0 '));
+  return [
+    `${count(issues.length, 'issue')} (${counts.join(', ')}):`,
+    ...groupIssues(issues).map((g) => {
+      const ids = g.ids
+        .slice(0, IDS_SHOWN)
+        .map((l) => l.join(', '))
+        .filter(Boolean);
+      const more = g.ids.length > IDS_SHOWN ? '; …' : '';
+      const refs = ids.length ? `: ${ids.join('; ')}${more}` : '';
+      return `- ${g.severity}${g.count > 1 ? ` ×${g.count}` : ''}: ${g.message} (${g.code}${refs})`;
+    }),
+  ];
+};
 
 /** Distances in the agent's unit converted to feet. */
 const toFeet = (value: number, unit: Unit) => value * FEET_PER_UNIT[unit];
@@ -266,16 +288,26 @@ export async function createPlan(args: { plan?: unknown }, origin: string): Prom
   const summary = summarize(plan, unitSystem);
   const url = await planLink(plan, origin);
   return {
-    text: [summary, ...issueLines(issues), ...linkLines(url)].join('\n'),
+    text: [summary, ...issueLines(issues), ...linkLines(plan.name, url)].join('\n'),
     structured: { plan: fromFeet(plan, unit), issues, summary, url, editable: true },
     stats: { ...planStats(plan, unit, issues), editable: true },
   };
 }
 
-/** The link as text: last, alone on its line, so a client that shows only text shows it whole. */
-const linkLines = (url: string): string[] => [
-  'Open and edit the plan in Room Planner (the whole plan is in the link; give it to the user exactly as it is):',
-  url,
+/** Text for a Markdown link: brackets and backslashes escaped, on one line. */
+const linkText = (text: string) => text.replace(/\s+/g, ' ').replace(/([\\[\]])/g, '\\$1');
+
+/** The link as Markdown link text, `[Open <plan name> in Room Planner](url)`. */
+export const markdownLink = (name: string, url: string): string =>
+  `[${linkText(`Open ${name.trim() || 'the plan'} in Room Planner`)}](${url})`;
+
+/**
+ * The link as text: last, alone on its line, as Markdown link text, so a model passes it on as a
+ * link rather than pasting a long URL, and a client that shows only text shows it whole.
+ */
+const linkLines = (name: string, url: string): string[] => [
+  'Give the user this link as Markdown link text, like this, never as a bare URL; it holds the whole plan, so keep the URL whole:',
+  markdownLink(name, url),
 ];
 
 /** `check_layout`: every layout problem, no link and no drawing. */
@@ -345,17 +377,101 @@ export async function readPlan(args: { url?: unknown }, origin: string): Promise
   const unitSystem = displayUnitOf(plan);
   const issues = checkLayout(plan, { unitSystem });
   const summary = summarize(plan, unitSystem);
+  // What the link said that the planner could not use: a readable link's statements it skipped,
+  // and what loading changed (a door clamped onto its wall, a piece without a size dropped).
+  const readable = readReadableLink(href);
+  const notes = [
+    ...(readable.status === 'ok' ? readable.notes : []),
+    // Ids are filled in for every link that has none (readable links never do): not news.
+    ...result.repairs.filter((r) => !/: given the id "/.test(r)),
+  ];
   // A fresh link on this site, never whatever host the link named.
   const link = await planLink(plan, origin);
+  const noteLines = notes.length
+    ? [
+        'Not understood or changed when the link was read (fix these in your link):',
+        ...notes.map((n) => `- ${n}`),
+      ]
+    : [];
   return {
-    text: [summary, ...issueLines(issues), ...linkLines(link)].join('\n'),
+    text: [summary, ...noteLines, ...issueLines(issues), ...linkLines(plan.name, link)].join('\n'),
     structured: {
       plan: fromFeet(plan, unitOfDisplay(unitSystem)),
       issues,
       summary,
       url: link,
       editable: true,
+      ...(notes.length ? { notes } : {}),
     },
     stats: { ...planStats(plan, unitOfDisplay(unitSystem), issues), editable: true },
   };
+}
+
+// --- The plan as Markdown, for assistants that browse ------------------------------------------
+
+const SECTIONS: { severity: Issue['severity']; title: string }[] = [
+  { severity: 'error', title: 'Errors: fix these' },
+  { severity: 'warning', title: 'Warnings: fix these too' },
+  { severity: 'info', title: 'Tight gaps (6 in to 2 ft: too narrow to walk through)' },
+];
+
+/**
+ * `GET /api/plan` for an assistant that opens web pages (ChatGPT, Claude, Perplexity browsing):
+ * the plan in a link checked, as Markdown. Its summary, the issues grouped by severity, what to do
+ * next, and the link to give the user. `check` is the address that checks a readable link.
+ */
+export function planMarkdown(outcome: ToolOutcome, origin: string): string {
+  const checkUrl = `${new URL('/api/plan', origin).toString()}?p=<the text after #p= in your link>`;
+  if (outcome.isError) {
+    return [
+      '# Room Planner could not read this plan',
+      '',
+      outcome.text,
+      '',
+      `Fix the link and check it again: ${checkUrl} (or ?url=<the whole link, URL-encoded>).`,
+      '',
+    ].join('\n');
+  }
+  const s = outcome.structured as {
+    plan: Plan;
+    issues: Issue[];
+    summary: string;
+    url: string;
+    notes?: string[];
+  };
+  const name = s.plan.name?.trim() || 'Plan';
+  const out = [`# ${name}`, '', s.summary.replace(`"${s.plan.name}": `, ''), ''];
+  if (s.notes?.length) {
+    out.push('## Not understood in the link', '', ...s.notes.map((n) => `- ${n}`), '');
+  }
+  const groups = groupIssues(s.issues);
+  const blocking = s.issues.filter((i) => i.severity !== 'info').length + (s.notes?.length ?? 0);
+  if (blocking === 0) {
+    out.push(
+      `No overlaps, blocked doors or pieces outside ${s.plan.rooms.length > 1 ? 'the rooms' : 'the room'}.`,
+      '',
+    );
+  }
+  for (const { severity, title } of SECTIONS) {
+    const list = groups.filter((g) => g.severity === severity);
+    if (!list.length) continue;
+    out.push(`## ${title}`, '');
+    for (const g of list) out.push(`- ${g.count > 1 ? `×${g.count} ` : ''}${g.message}`);
+    out.push('');
+  }
+  out.push('## Next', '');
+  if (blocking > 0) {
+    out.push(
+      `Move the pieces named above (positions are centres, x to the right and y down, in the plan's unit) until nothing overlaps and no door's swing or doorway is blocked, then check the new link again: ${checkUrl}. Do not give the user a plan with errors or warnings.`,
+      '',
+    );
+  } else {
+    out.push(
+      'The layout checks out. Give the user this link as Markdown link text, never as a bare URL:',
+      '',
+      markdownLink(name, s.url),
+      '',
+    );
+  }
+  return out.join('\n');
 }

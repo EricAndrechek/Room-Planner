@@ -72,6 +72,13 @@ export interface SceneInput {
    * the golden drawings carry no ids.
    */
   ids?: boolean;
+  /**
+   * What frames the plan. 'page' (the default) is the export's page: the title and size above
+   * the plan, the scale bar, date and site under it. 'none' is the plan alone with a narrow
+   * margin, for a view that shows the name and size itself (the MCP plan viewer); the "Set aside"
+   * list stays.
+   */
+  chrome?: 'page' | 'none';
 }
 
 export const DEFAULT_SITE = 'room-planner.andrechek.com';
@@ -79,6 +86,8 @@ export const DEFAULT_SITE = 'room-planner.andrechek.com';
 /** Drawing size of the room's longer side, in scene units (~px at 1x). */
 const TARGET_SPAN = 880;
 const MARGIN = 36;
+/** The margin without the page around the plan (`chrome: 'none'`). */
+const BARE_MARGIN = 8;
 const DIM_GAP = 26; // wall face -> dimension line
 const FONT_TITLE = 22;
 const FONT_SUB = 12.5;
@@ -214,15 +223,16 @@ const inventoryList = (
   unitSystem: UnitSystem,
   width: number,
   top: number,
+  margin = MARGIN,
 ): { node: GroupNode; height: number } | null => {
   if (items.length === 0) return null;
   const cols = width >= 760 ? 3 : 2;
-  const colW = (width - 2 * MARGIN) / cols;
+  const colW = (width - 2 * margin) / cols;
   const rows = Math.ceil(items.length / cols);
   const children: SceneNode[] = [
     {
       kind: 'text',
-      x: MARGIN,
+      x: margin,
       y: r2(top + FONT_SUB * 0.8),
       text: `Set aside (${items.length})`,
       size: FONT_SUB,
@@ -233,7 +243,7 @@ const inventoryList = (
   ];
   const first = top + FONT_SUB + 10;
   items.forEach((item, i) => {
-    const x = MARGIN + Math.floor(i / rows) * colW;
+    const x = margin + Math.floor(i / rows) * colW;
     const y = first + (i % rows) * LIST_LINE;
     const color = migrateColor(item.color);
     children.push(
@@ -395,26 +405,32 @@ export const buildPlanScene = (input: SceneInput): Scene => {
     maxY: content.maxY,
   };
 
-  // Page layout: header, plan, the inventory (if any), footer.
+  // Page layout: header, plan, the inventory (if any), footer. Without the page: the plan and
+  // the inventory, in a narrow margin.
+  const page = input.chrome !== 'none';
+  const margin = page ? MARGIN : BARE_MARGIN;
   const planW = planBox.maxX - planBox.minX;
   const planH = planBox.maxY - planBox.minY;
-  const width = Math.ceil(Math.max(planW + 2 * MARGIN, 600));
-  const headerH = FONT_TITLE + 8 + FONT_SUB + 22;
-  const footerH = 50;
+  const width = Math.ceil(page ? Math.max(planW + 2 * MARGIN, 600) : planW + 2 * margin);
+  const headerH = page ? FONT_TITLE + 8 + FONT_SUB + 22 : 0;
+  const footerH = page ? 50 : 0;
+  const gap = page ? 24 : 16;
   const stored = inventoryList(
     plan.items.filter((i) => !i.placement),
     unitSystem,
     width,
-    MARGIN + headerH + planH + 24,
+    margin + headerH + planH + gap,
+    margin,
   );
-  const listH = stored ? stored.height + 24 : 0;
-  const height = Math.ceil(MARGIN + headerH + planH + listH + footerH + MARGIN);
+  const listH = stored ? stored.height + gap : 0;
+  const height = Math.ceil(margin + headerH + planH + listH + footerH + margin);
   const ox = (width - planW) / 2 - planBox.minX;
-  const oy = MARGIN + headerH - planBox.minY;
+  const oy = margin + headerH - planBox.minY;
   const nodes: SceneNode[] = planNodes.map((n) => translateNode(n, ox, oy));
   if (stored) nodes.push(stored.node);
 
   const title = (input.title ?? plan.name).trim() || 'Untitled';
+  if (!page) return { width, height, title, background: '#ffffff', nodes };
   // One rectangle: its area as width x depth, as always; otherwise the outlines' total.
   const area =
     rooms.length === 1 && isRectangle(rooms[0]!)

@@ -302,7 +302,15 @@ test('the Agent Skills index (RFC v0.2.0) lists the room-planner skill with its 
   expect(front, 'front matter').not.toBeNull();
   expect(front![1]).toBe(entry.name);
   expect(JSON.parse(front![2]!)).toBe(entry.description);
-  for (const s of ['#s=', '#p=', PATHS.mcp, '/api/plan/link', 'link text', 'y grows DOWN']) {
+  for (const s of [
+    '#s=',
+    '#p=',
+    PATHS.mcp,
+    '/api/plan/link',
+    '/api/plan?url=',
+    'link text',
+    'y grows DOWN',
+  ]) {
     expect(text).toContain(s);
   }
   expect(text.length).toBeLessThan(20_000); // about 5k tokens at most, per agentskills.io

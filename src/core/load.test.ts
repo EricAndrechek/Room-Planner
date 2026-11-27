@@ -283,3 +283,75 @@ describe('JSON Schema', () => {
     expect(schema.required).toEqual(['version', 'unit', 'rooms']);
   });
 });
+
+describe('openings measured from either end (from)', () => {
+  const room = (openings: unknown[], outline?: unknown) => ({
+    version: 4,
+    unit: 'ft',
+    rooms: [
+      {
+        id: 'r',
+        outline: outline ?? [
+          { x: 0, y: 0 },
+          { x: 20, y: 0 },
+          { x: 20, y: 12 },
+          { x: 0, y: 12 },
+        ],
+        openings,
+      },
+    ],
+  });
+  const offsets = (doc: unknown) => {
+    const r = loadPlan(doc, 'strict');
+    if (!r.ok) throw new Error(JSON.stringify(r));
+    return r.plan.rooms[0]!.openings.map((o) => [o.wall, o.offset, 'from' in o]);
+  };
+
+  it('turns every way of saying it into an offset from the start corner, and drops from', () => {
+    const door = (wall: number, offset: number, from?: string) => ({
+      id: `d${wall}${from ?? ''}`,
+      kind: 'door',
+      wall,
+      offset,
+      width: 3,
+      ...(from ? { from } : {}),
+    });
+    expect(
+      offsets(
+        room([
+          door(0, 2, 'end'),
+          door(0, 2, 'right'),
+          door(0, 2, 'left'),
+          door(1, 2, 'bottom'),
+          door(2, 2, 'left'),
+          door(2, 2, 'start'),
+          door(3, 2, 'top'),
+          door(3, 2),
+        ]),
+      ),
+    ).toEqual([
+      [0, 15, false],
+      [0, 15, false],
+      [0, 2, false],
+      [1, 7, false],
+      [2, 15, false],
+      [2, 2, false],
+      [3, 7, false],
+      [3, 2, false],
+    ]);
+  });
+
+  it('refuses an unknown end, or an end the wall has not, in strict mode only', () => {
+    const bad = room([
+      { id: 'a', kind: 'door', wall: 0, offset: 2, width: 3, from: 'middle' },
+      { id: 'b', kind: 'door', wall: 1, offset: 2, width: 3, from: 'left' },
+    ]);
+    const strict = loadPlan(bad, 'strict');
+    expect(!strict.ok && strict.reason === 'invalid' && formatIssues(strict.issues)).toEqual([
+      'rooms.0.openings.0.from: Must be one of "start", "end", "left", "right", "top", "bottom".',
+      'rooms.0.openings.1.from: This wall has no left end (it runs up and down); use "top" or "bottom", or "start" or "end".',
+    ]);
+    const lenient = loadPlan(bad, 'lenient');
+    expect(lenient.ok && lenient.plan.rooms[0]!.openings.map((o) => o.offset)).toEqual([2, 2]);
+  });
+});

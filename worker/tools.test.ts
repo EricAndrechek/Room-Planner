@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { buildShareUrl } from '../src/core/share/link';
-import { checkPlan, createPlan, readPlan, readPlanInput, summarize, unknownFields } from './tools';
+import { DINING } from './fixtures';
+import {
+  checkPlan,
+  createPlan,
+  markdownLink,
+  readPlan,
+  readPlanInput,
+  summarize,
+  unknownFields,
+} from './tools';
 
 const ORIGIN = 'https://room-planner.andrechek.com';
 
@@ -219,7 +228,10 @@ describe('every plan the format allows', () => {
       expect(s.editable).toBe(true);
       expect(s).not.toHaveProperty('notEditable');
       expect(s.summary).toMatch(said);
-      expect(r.text.split('\n').at(-1)).toBe(s.url);
+      // The link is the last line, as Markdown link text, never a bare URL.
+      const last = r.text.split('\n').at(-1)!;
+      expect(/^\[Open .+ in Room Planner\]\((.+)\)$/.exec(last)?.[1]).toBe(s.url);
+      expect(r.text).not.toMatch(/^https?:/m);
       expect(r.stats.editable).toBe(true);
     });
   }
@@ -228,6 +240,33 @@ describe('every plan the format allows', () => {
     const r = await createPlan({ plan: { version: 4, unit: 'ft', rooms: [room(10, 10)] } }, ORIGIN);
     expect(r.structured).toMatchObject({ editable: true });
     expect((r.structured as { url: string }).url).toMatch(/#s=/);
+  });
+});
+
+describe('the text for the model', () => {
+  it('links as Markdown link text, with brackets in the name escaped', () => {
+    expect(markdownLink('Den [draft]', 'https://x.test/#s=a')).toBe(
+      '[Open Den \\[draft\\] in Room Planner](https://x.test/#s=a)',
+    );
+    expect(markdownLink('  ', 'https://x.test/#s=a')).toBe(
+      '[Open the plan in Room Planner](https://x.test/#s=a)',
+    );
+  });
+
+  it('groups issues that say the same, errors first (the dining plan from the Claude app)', async () => {
+    const r = await createPlan({ plan: DINING }, ORIGIN);
+    const s = r.structured as { url: string; issues: unknown[] };
+    // Chairs side by side and at the table are not tight gaps; the chairs 16 in from the buffet
+    // are one line.
+    expect(r.text).not.toContain('between Chair and Chair');
+    expect(r.text).toContain(
+      '- info ×3: Only 16 in between Chair and Buffet. (tight_clearance: chair-6, buffet; chair-7, buffet; chair-8, buffet)',
+    );
+    expect(r.text).toMatch(/^6 issues \(6 info\):$/m);
+    expect(s.issues).toHaveLength(6);
+    expect(r.text.split('\n').at(-1)).toBe(
+      `[Open Thanksgiving Dining – starter layout in Room Planner](${s.url})`,
+    );
   });
 });
 

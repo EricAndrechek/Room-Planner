@@ -80,6 +80,12 @@ const planResult = {
         "The link that opens the plan in Room Planner, saved in the user's browser. Show it as Markdown link text, e.g. [Open your bedroom in Room Planner](url); it holds the whole plan, so pass it on whole.",
     },
     editable: { type: 'boolean', description: 'Always true.' },
+    notes: {
+      type: 'array',
+      items: { type: 'string' },
+      description:
+        'readPlanLink only, when there are any: what the link said that the planner could not use or changed (a statement it did not understand, a door clamped onto its wall). Fix them in the link.',
+    },
   },
 };
 
@@ -145,7 +151,8 @@ export function openApiSpec(site: string): Record<string, unknown> {
       summary: 'Lay out rooms and furniture, check the layout, and get a link that opens the plan.',
       description:
         `Free, no account and no key. The same operations as ${SITE_NAME}'s MCP server (${origin}/mcp). ` +
-        'Write a plan, call checkLayout until it has no errors, then createPlanLink and give the user the link as Markdown link text. ' +
+        'Write a plan, call checkLayout and fix every error and warning (move the pieces it names) until there are none, then createPlanLink, and give the user the link as Markdown link text, never the bare URL. ' +
+        'An assistant that can only open web pages checks a link it wrote with GET /api/plan?url=<the link, URL-encoded> (or ?p=<the text after #p=>), which answers it in Markdown. ' +
         'Nothing is stored: every call takes the whole plan. Limit: 120 requests a minute per address. ' +
         `Privacy: ${origin}/privacy/.`,
       contact: {
@@ -162,7 +169,7 @@ export function openApiSpec(site: string): Record<string, unknown> {
           operationId: 'checkLayout',
           summary: 'Check a plan for layout problems',
           description:
-            "Overlapping pieces, pieces outside every room, furniture in a door's swing or doorway, overlapping rooms, windows between rooms, and gaps tighter than minClearance (info). Cheap: call it while arranging. ok is true when nothing is an error or a warning.",
+            "Overlapping pieces, pieces outside every room, furniture in a door's swing or doorway, overlapping rooms, windows between rooms, and gaps from 6 in up to minClearance (info: too narrow to walk through). Cheap: call it while arranging. ok is true when nothing is an error or a warning.",
           requestBody: {
             ...planBody,
             content: {
@@ -180,7 +187,7 @@ export function openApiSpec(site: string): Record<string, unknown> {
                           type: 'number',
                           minimum: 0,
                           description:
-                            "Report gaps below this as tight_clearance, in the plan's unit. Default 24 in.",
+                            "Report gaps from 6 in (15 cm) up to this as tight_clearance, in the plan's unit. Default 24 in.",
                         },
                       },
                     },
@@ -231,9 +238,10 @@ export function openApiSpec(site: string): Record<string, unknown> {
       '/api/plan': {
         get: {
           operationId: 'readPlanLink',
-          summary: 'Read the plan in a Room Planner link',
+          summary: 'Read and check the plan in a Room Planner link',
           description:
-            'Give url (any Room Planner link the user pasted), or the part after #s= or #p= of one. Returns the plan in the unit it is shown in, ready to change and send to createPlanLink.',
+            'Give url (any Room Planner link, URL-encoded), or the part after #s= or #p= of one. Returns the plan in the unit it is shown in, its issues, what the link said that could not be used (notes), and a fresh link, ready to change and send to createPlanLink. ' +
+            'An assistant that can only open web pages checks a link it wrote here before giving it to the user: with Accept: text/markdown, or from an assistant fetcher (ChatGPT-User, Claude-User, Perplexity-User), the answer is Markdown: the issues by severity, naming pieces and where they are, and the link once nothing is wrong.',
           parameters: [
             {
               name: 'url',
@@ -259,6 +267,8 @@ export function openApiSpec(site: string): Record<string, unknown> {
               description: 'The plan in the link.',
               content: {
                 'application/json': { schema: { $ref: '#/components/schemas/PlanResult' } },
+                // For Accept: text/markdown and assistant fetchers.
+                'text/markdown': { schema: { type: 'string' } },
               },
             },
             ...errors,

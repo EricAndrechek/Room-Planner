@@ -45,7 +45,7 @@ ${FEATURES.map((f) => `- ${f}`).join('\n')}
 ## Use Room Planner from an agent
 
 - [MCP server](${url(MCP_PATH)}): free remote MCP server (Streamable HTTP, no authentication): ${url(MCP_PATH)} with \`create_plan\`, \`check_layout\` and \`read_plan\`, and an MCP Apps viewer. [Server card](${url(PATHS.serverCard)}); MCP Registry name \`${registry.name}\`.
-- [REST API](${url(PATHS.openapi)}): the same operations over plain HTTP (OpenAPI 3.1): \`POST /api/plan/check\`, \`POST /api/plan/link\`, \`GET /api/plan?url=\`. No key.
+- [REST API](${url(PATHS.openapi)}): the same operations over plain HTTP (OpenAPI 3.1): \`POST /api/plan/check\`, \`POST /api/plan/link\`, \`GET /api/plan?url=\`. No key. Assistants that browse the web check a link they wrote by opening \`GET /api/plan?url=<the link, URL-encoded>\`, which answers them in Markdown.
 - [Plan JSON Schema](${url(PLAN_SCHEMA_PATH)}): the plan format the tools, the API and \`#s=\` links take.
 - [Plan links](${url('agents/')}#plan-links): give the user a ready-made plan as a link, with tools, HTTP, code or none (below).
 - [Agent skill](${url(PATHS.skill)}): how to make a plan for the user (the section below, the plan format and examples) as an Agent Skill, listed in the [Agent Skills index](${url(PATHS.agentSkills)}).

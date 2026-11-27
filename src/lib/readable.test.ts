@@ -119,6 +119,31 @@ describe('readable links (#p=)', () => {
     expect(shape(s)).toEqual(shape(clean));
   });
 
+  it('measure an opening from either end of its wall', async () => {
+    // A 20 x 12 room. Doors 2 ft from the far end of each wall, 3 ft wide, and the same doors
+    // written from the near end.
+    const room = 'ft;room:Dining:20x12;';
+    const far = await opened(
+      `${SITE}#p=${room}door:top:end-2:3;door:right:end-2:3;door:bottom:right-2:3;window:left:bottom-2:3`,
+    );
+    const near = await opened(
+      `${SITE}#p=${room}door:top:15:3;door:right:7:3;door:bottom:15:3;window:left:7:3`,
+    );
+    expect(shape(far)).toEqual(shape(near));
+    // Bottom wall: the format measures clockwise, from the right end, so 2 ft from the right.
+    expect(far.rooms[0]!.openings[2]).toMatchObject({ wall: 2, offset: 2, width: 3 });
+    // An end the wall has not: measured from the near end, with a note.
+    const odd = parseReadable(`${room}door:top:bottom-2:3`);
+    expect(odd.status === 'ok' && odd.notes).toEqual([
+      'statement 3 (door): a top wall has no bottom end; measured from the left',
+    ]);
+    // Numbered walls of an outline: `end-` measures from corner i + 1.
+    const l = parseReadable('ft;room:L:0,0,10,0,10,5,5,5,5,10,0,10;door:1:end-1:2');
+    expect(l.status === 'ok' && l.data.rooms).toMatchObject([
+      { openings: [{ kind: 'door', wall: 1, offset: 2, width: 2 }] },
+    ]);
+  });
+
   it('report a link without a room as damaged, and never throw', () => {
     expect(parseReadable('ft;item:Bed:5x6').status).toBe('damaged');
     expect(parseReadable('').status).toBe('damaged');

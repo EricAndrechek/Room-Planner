@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkLayout, type Issue } from './check';
+import { checkLayout, groupIssues, type Issue } from './check';
 import { loadPlan } from './load';
 import type { PlanInput, Plan } from './schema';
 
@@ -166,6 +166,59 @@ describe('checkLayout', () => {
     const tight = checkLayout(p, { codes: ['tight_clearance'] });
     expect(tight.map((i) => i.message)).toContain('Only 6" between Bed and Desk.');
     expect(tight.every((i) => i.severity === 'info')).toBe(true);
+  });
+
+  it('a tight gap is one a person cannot pass, not pieces set side by side (under 6 in)', () => {
+    // Chairs 4 in apart and 3 in off a table, a stool 2 in off the wall: on purpose. A stool 16
+    // in from the table, a buffet 16 in behind it, a stool 13 in off the wall: tight.
+    const p = load({
+      unit: 'in',
+      rooms: [{ id: 'room-1', outline: rect(144, 120), openings: [] }],
+      items: [
+        { id: 't', label: 'Table', width: 72, depth: 36, placement: at(72, 41) },
+        { id: 'c1', label: 'Chair', width: 18, depth: 20, placement: at(45, 10) },
+        { id: 'c2', label: 'Chair', width: 18, depth: 20, placement: at(67, 10) },
+        { id: 'c3', label: 'Chair', width: 18, depth: 20, placement: at(89, 10) },
+        { id: 'w1', label: 'Stool', width: 18, depth: 18, placement: at(11, 41) },
+        { id: 'w2', label: 'Stool', width: 18, depth: 18, placement: at(122, 41) },
+        { id: 'b', label: 'Buffet', width: 60, depth: 18, placement: at(72, 84) },
+      ],
+    });
+    const messages = checkLayout(p, { codes: ['tight_clearance'] }).map((i) => i.message);
+    expect(messages).toEqual([
+      'Table is 23 in from the top wall.',
+      'Only 16 in between Table and Stool.',
+      'Only 16 in between Table and Buffet.',
+      'Stool is 13 in from the right wall.',
+    ]);
+  });
+
+  it('groups issues that say the same, errors first', () => {
+    const issue = (severity: Issue['severity'], message: string, ids: string[]): Issue => ({
+      code: severity === 'error' ? 'item_overlap' : 'tight_clearance',
+      severity,
+      message,
+      ids,
+    });
+    const groups = groupIssues([
+      issue('info', "Only 1' between Table and Chair.", ['t', 'c1']),
+      issue('error', 'Bed overlaps Desk by 2".', ['bed', 'desk']),
+      issue('info', "Only 1' between Table and Chair.", ['t', 'c2']),
+      issue('info', 'Only 1\'6" between Sofa and Table.', ['s', 't']),
+    ]);
+    expect(groups.map((g) => [g.severity, g.count, g.message, g.ids])).toEqual([
+      ['error', 1, 'Bed overlaps Desk by 2".', [['bed', 'desk']]],
+      [
+        'info',
+        2,
+        "Only 1' between Table and Chair.",
+        [
+          ['t', 'c1'],
+          ['t', 'c2'],
+        ],
+      ],
+      ['info', 1, 'Only 1\'6" between Sofa and Table.', [['s', 't']]],
+    ]);
   });
 
   it('ignores hidden pieces and pieces in the inventory', () => {

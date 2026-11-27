@@ -8,6 +8,7 @@ import { API_EXAMPLE_PLAN } from '../src/lib/openapi';
 import { API_CURL, READABLE_EXAMPLES } from '../src/lib/site';
 import worker from './index';
 import { MAX_BODY, type Env } from './http';
+import { CHATGPT_READABLE } from './fixtures';
 import { checkPlan, createPlan } from './tools';
 
 const ORIGIN = 'https://room-planner.andrechek.com';
@@ -146,5 +147,74 @@ describe('the API over HTTP', () => {
     expect(r.status).toBe(429);
     expect(r.headers.get('retry-after')).toBe('60');
     expect(r.headers.get('content-type')).toBe('application/problem+json');
+  });
+});
+
+describe('GET /api/plan for assistants that browse', () => {
+  const p = `/api/plan?p=${encodeURIComponent(CHATGPT_READABLE)}`;
+
+  it('answers Markdown to an assistant fetcher or Accept: text/markdown, JSON otherwise', async () => {
+    for (const headers of <Record<string, string>[]>[
+      { 'user-agent': 'Mozilla/5.0 (compatible; ChatGPT-User/1.0; +https://openai.com/bot)' },
+      { 'user-agent': 'Claude-User (claude-code/1.0; +https://www.anthropic.com)' },
+      { 'user-agent': 'Perplexity-User/1.0' },
+      { accept: 'text/markdown, text/plain;q=0.5' },
+    ]) {
+      const r = await call(p, { headers });
+      expect(r.status, JSON.stringify(headers)).toBe(200);
+      expect(r.headers.get('content-type')).toBe('text/markdown; charset=utf-8');
+      expect(r.headers.get('x-robots-tag')).toBe('noindex');
+      expect(r.headers.get('vary')).toBe('Accept, User-Agent');
+    }
+    const json = await call(p, {
+      headers: { 'user-agent': 'ChatGPT-User/1.0', accept: 'application/json' },
+    });
+    expect(json.headers.get('content-type')).toBe('application/json');
+    expect(((await json.json()) as { issues: unknown[] }).issues.length).toBeGreaterThan(0);
+    expect((await call(p)).headers.get('content-type')).toBe('application/json');
+  });
+
+  it('says what is wrong with the plan ChatGPT wrote, naming pieces and places', async () => {
+    const md = await (await call(p, { headers: { accept: 'text/markdown' } })).text();
+    expect(md).toContain('# Thanksgiving\n');
+    expect(md).toContain("Dining room is 20' × 12' (240 sq ft) with 1 door and 0 windows.");
+    expect(md).toContain(
+      '## Errors: fix these\n\n- Chair at (11, 6) overlaps Chair at (11.75, 6) by 9".',
+    );
+    expect(md).toContain(
+      "- Small table is in the way of the door on the right wall (7'–10' from the top).",
+    );
+    expect(md).toContain(
+      "- Chair at (17.5, 8.25) is in the way of the door on the right wall (7'–10' from the top).",
+    );
+    expect(md).toContain('Do not give the user a plan with errors or warnings.');
+    expect(md).not.toContain('](https://');
+  });
+
+  it('gives the link as Markdown link text once the plan checks out, and says what it skipped', async () => {
+    const ok =
+      'ft;room:Bedroom:12x11;door:bottom:end-1:3;item:Queen_bed:5x6.7@6,3.35;item:Desk:4x2:wobbly';
+    const md = await (
+      await call(`/api/plan?p=${encodeURIComponent(ok)}`, { headers: { accept: 'text/markdown' } })
+    ).text();
+    expect(md).toContain('## Not understood in the link\n\n- statement 5 (item): "wobbly" ignored');
+    const clean = await (
+      await call(`/api/plan?p=${encodeURIComponent(ok.replace(':wobbly', ''))}`, {
+        headers: { accept: 'text/markdown' },
+      })
+    ).text();
+    expect(clean).toContain('No overlaps, blocked doors or pieces outside the room.');
+    expect(clean).toMatch(
+      /\[Open Bedroom in Room Planner\]\(https:\/\/room-planner\.andrechek\.com\/#s=[\w-]+\)/,
+    );
+  });
+
+  it('explains a damaged link in Markdown too', async () => {
+    const r = await call('/api/plan?s=AAAA', { headers: { accept: 'text/markdown' } });
+    expect(r.status).toBe(422);
+    expect(r.headers.get('content-type')).toBe('text/markdown; charset=utf-8');
+    expect(await r.text()).toMatch(
+      /^# Room Planner could not read this plan\n\nThe plan in this link is damaged/,
+    );
   });
 });

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { viewerHtml } from '../scripts/build-viewer.mjs';
+import { DINING } from '../worker/fixtures';
 import { createPlan, readPlan, type ToolOutcome } from '../worker/tools';
 import { storedDims, storedOpenings, storedPieces, workingPlan } from './storage';
 
@@ -239,20 +240,25 @@ const toResult = (o: ToolOutcome) => ({
 
 /**
  * A minimal MCP Apps host: an iframe with the viewer that answers `ui/initialize`, sends the
- * tool result after `ui/notifications/initialized`, and records what the view asks for.
+ * tool result after `ui/notifications/initialized`, sizes the frame as the view asks, and records
+ * what the view asks for. Its page is Claude's background in each theme.
  */
 async function host(
   page: Page,
   result: unknown,
-  { theme = 'light', width = 720 }: { theme?: 'light' | 'dark'; width?: number } = {},
+  {
+    theme = 'light',
+    width = 720,
+    displayModes = ['inline'],
+  }: { theme?: 'light' | 'dark'; width?: number; displayModes?: string[] } = {},
 ) {
   await page.setContent(
-    `<!doctype html><html><body style="margin:0;padding:16px;background:${theme === 'dark' ? '#0b1120' : '#f1f5f9'}">` +
+    `<!doctype html><html><body style="margin:0;padding:16px;background:${theme === 'dark' ? '#262624' : '#faf9f5'}">` +
       `<iframe id="view" title="Room Planner plan" sandbox="allow-scripts" style="border:0;width:min(${width}px,calc(100vw - 32px));height:400px;display:block"></iframe>` +
       `</body></html>`,
   );
   await page.evaluate(
-    ({ html, result, theme }) => {
+    ({ html, result, theme, displayModes }) => {
       const w = window as unknown as { __log: { method: string; params: unknown }[] };
       w.__log = [];
       const frame = document.getElementById('view') as HTMLIFrameElement;
@@ -271,6 +277,7 @@ async function host(
               hostContext: {
                 theme,
                 displayMode: 'inline',
+                availableDisplayModes: displayModes,
                 containerDimensions: { maxHeight: 2000 },
               },
             },
@@ -285,14 +292,29 @@ async function host(
             '*',
           );
         } else if (msg.method === 'ui/notifications/size-changed') {
-          frame.style.height = `${msg.params.height}px`;
+          // Full screen is the window's size, whatever the view says.
+          if (frame.style.position !== 'fixed') frame.style.height = `${msg.params.height}px`;
         } else if (msg.method === 'ui/open-link') {
           reply({ result: {} });
+        } else if (msg.method === 'ui/request-display-mode') {
+          const mode = msg.params.mode;
+          if (mode === 'fullscreen') {
+            frame.style.cssText = 'border:0;position:fixed;inset:0;width:100vw;height:100vh';
+          }
+          reply({ result: { mode } });
+          frame.contentWindow!.postMessage(
+            {
+              jsonrpc: '2.0',
+              method: 'ui/notifications/host-context-changed',
+              params: { displayMode: mode },
+            },
+            '*',
+          );
         }
       });
       frame.srcdoc = html;
     },
-    { html: await VIEWER(), result, theme },
+    { html: await VIEWER(), result, theme, displayModes },
   );
   const view = page.frameLocator('#view');
   await expect(view.locator('#summary')).not.toHaveText(/Loading|Checking/);
@@ -362,7 +384,11 @@ test.describe('plan viewer', () => {
     const view = await host(page, bare);
     await expect(view.locator('#sheet')).toBeHidden();
     await expect(view.locator('#summary')).toContainText('132 in × 144 in');
-    await expect(view.locator('#summary')).toContainText('#s=');
+    // The link at the end of the text (Markdown or bare) still gets the button.
+    await view.getByRole('button', { name: 'Open in Room Planner' }).press('Enter');
+    await expect
+      .poll(async () => (await viewerLog(page)).find((m) => m.method === 'ui/open-link')?.params)
+      .toEqual({ url: (outcome.structured as { url: string }).url });
 
     const bad = await createPlan({ plan: { version: 4, unit: 'yd' } }, 'https://x.test');
     const errorView = await host(page, toResult(bad));
@@ -424,6 +450,138 @@ test.describe('plan viewer', () => {
     }
   });
 
+  test('the dining plan: the plan alone, the link first, gaps grouped and closed', async ({
+    page,
+    baseURL,
+  }) => {
+    const outcome = await createPlan({ plan: DINING }, new URL(baseURL!).origin);
+    const view = await host(page, toResult(outcome), { width: 390 });
+    await expect(view.locator('#sheet svg')).toBeVisible();
+    await expect(view.getByRole('heading', { level: 1 })).toHaveText(DINING.name);
+    // The heading names the plan once: the drawing has no title, date or site of its own.
+    await expect(view.locator('#sheet g[data-role="title"]')).toHaveCount(0);
+    await expect(view.locator('#sheet g[data-role="footer"]')).toHaveCount(0);
+    await expect(view.locator('#sheet svg text', { hasText: DINING.name })).toHaveCount(0);
+    await expect(view.locator('#sheet svg text', { hasText: 'room-planner' })).toHaveCount(0);
+    // The main action comes first.
+    const first = await view
+      .locator('body')
+      .evaluate(
+        () =>
+          [...document.querySelectorAll<HTMLElement>('button, summary, a[href], [tabindex]')].find(
+            (el) => el.offsetParent !== null,
+          )?.id,
+      );
+    expect(first).toBe('open');
+    await expect(view.getByRole('button', { name: 'Full screen' })).toBeHidden();
+    // At phone size, pieces show their names but not their sizes; hover or a tap gives them.
+    const chair = view.locator('g[data-id="chair-1"]');
+    await expect(chair.locator('text').nth(0)).toBeVisible();
+    await expect(chair.locator('text').nth(1)).toBeHidden();
+    await chair.locator('rect').dispatchEvent('click');
+    await expect(view.locator('#picked')).toHaveText(/^Chair · 18 in × 20 in$/);
+    await expect(chair).toHaveClass(/focus/);
+
+    // No errors or warnings: one line says so; the tight gaps are grouped, closed, and counted.
+    await expect(view.locator('#issues .ok')).toContainText('No overlaps');
+    const details = view.locator('#issues-section details');
+    await expect(details.locator('summary')).toHaveText('6 tight gaps');
+    await expect(details).not.toHaveAttribute('open');
+    const group = view.getByRole('button', { name: /Chair and Buffet/ });
+    await expect(group).toBeHidden();
+    await details.locator('summary').press('Enter');
+    await expect(group).toHaveCount(1);
+    await expect(group).toContainText('×3');
+    await group.press('Enter');
+    for (const id of ['chair-6', 'chair-7', 'chair-8', 'buffet']) {
+      await expect(view.locator(`g[data-id="${id}"]`)).toHaveClass(/focus/);
+    }
+    await expect(view.locator('g[data-id="chair-1"]')).not.toHaveClass(/focus/);
+
+    // Closed again, the frame shrinks back to the content: no blank space under it.
+    const heights = async () =>
+      (await viewerLog(page))
+        .filter((m) => m.method === 'ui/notifications/size-changed')
+        .map((m) => (m.params as { height: number }).height);
+    const open = (await heights()).at(-1)!;
+    await details.locator('summary').press('Enter');
+    await expect.poll(async () => (await heights()).at(-1)).toBeLessThan(open);
+    const content = await view
+      .locator('main')
+      .evaluate((el) => Math.ceil(el.getBoundingClientRect().height));
+    await expect.poll(async () => (await heights()).at(-1)).toBe(content);
+    const frame = await page.locator('#view').boundingBox();
+    expect(Math.round(frame!.height)).toBe(content);
+    // The last thing in the view ends at the frame's bottom, less main's padding.
+    const gap = await view.locator('body').evaluate(() => {
+      const last = document.querySelector('#issues-section')!.getBoundingClientRect().bottom;
+      return window.innerHeight - last;
+    });
+    expect(gap).toBeGreaterThanOrEqual(0);
+    expect(gap).toBeLessThanOrEqual(16);
+  });
+
+  test('offers full screen only when the host has it', async ({ page, baseURL }) => {
+    const outcome = await createPlan({ plan: DINING }, new URL(baseURL!).origin);
+    const view = await host(page, toResult(outcome), { displayModes: ['inline', 'fullscreen'] });
+    const button = view.getByRole('button', { name: 'Full screen' });
+    await expect(button).toBeVisible();
+    await button.press('Enter');
+    await expect
+      .poll(async () => (await viewerLog(page)).find((m) => m.method === 'ui/request-display-mode'))
+      .toEqual({ method: 'ui/request-display-mode', params: { mode: 'fullscreen' } });
+    await expect(view.locator('html')).toHaveAttribute('data-mode', 'fullscreen');
+    await expect(view.getByRole('button', { name: 'Exit full screen' })).toBeVisible();
+    // In full screen the drawing may be as tall as the window allows, not the inline 560 px.
+    await expect
+      .poll(() =>
+        view
+          .locator('#sheet')
+          .evaluate((el) => parseFloat(el.style.getPropertyValue('--sheet-max'))),
+      )
+      .toBeGreaterThan(560);
+    if (SHOTS && test.info().project.name === 'chromium') {
+      await page.waitForTimeout(200);
+      await page.screenshot({ path: `${SHOTS}/dining-fullscreen-light.png` });
+    }
+  });
+
+  test('dining plan screenshots: phone and desktop, dark and light', async ({
+    page,
+    baseURL,
+    browserName,
+  }) => {
+    test.skip(!SHOTS || browserName !== 'chromium', 'Set MCP_SHOTS_DIR to save screenshots');
+    const outcome = await createPlan({ plan: DINING }, new URL(baseURL!).origin);
+    for (const theme of ['dark', 'light'] as const) {
+      for (const [name, width] of [
+        ['phone', 390],
+        ['desktop', 720],
+      ] as const) {
+        await page.setViewportSize({ width: width + 32, height: 1400 });
+        const view = await host(page, toResult(outcome), { theme, width });
+        await expect(view.locator('#sheet svg')).toBeVisible();
+        await view.locator('body').evaluate(() => document.fonts.ready);
+        await page.waitForTimeout(300);
+        // The host page around the frame, to its bottom: blank space in the view would show.
+        const shot = async (path: string) => {
+          const box = (await page.locator('#view').boundingBox())!;
+          await page.screenshot({
+            path,
+            clip: { x: 0, y: 0, width: width + 32, height: Math.ceil(box.y + box.height + 16) },
+          });
+        };
+        await shot(`${SHOTS}/dining-${name}-${theme}.png`);
+        if (name === 'phone') {
+          await view.locator('#issues-section summary').press('Enter');
+          await view.getByRole('button', { name: /Chair and Buffet/ }).press('Enter');
+          await page.waitForTimeout(300);
+          await shot(`${SHOTS}/dining-${name}-${theme}-gaps.png`);
+        }
+      }
+    }
+  });
+
   test('screenshots for review', async ({ page, baseURL, browserName }) => {
     test.skip(!SHOTS || browserName !== 'chromium', 'Set MCP_SHOTS_DIR to save screenshots');
     const outcome = await createPlan({ plan: bedroom }, new URL(baseURL!).origin);
@@ -439,6 +597,14 @@ test.describe('plan viewer', () => {
         await page.waitForTimeout(200);
         await page.locator('#view').screenshot({ path: `${SHOTS}/viewer-${name}-${theme}.png` });
       }
+      // A floor of several rooms, with its labels, shared walls and set-aside list.
+      await page.setViewportSize({ width: 720 + 32, height: 1200 });
+      const flat = await createPlan({ plan: floor }, new URL(baseURL!).origin);
+      const view = await host(page, toResult(flat), { theme });
+      await expect(view.locator('#sheet svg')).toBeVisible();
+      await view.locator('body').evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(200);
+      await page.locator('#view').screenshot({ path: `${SHOTS}/viewer-floor-${theme}.png` });
     }
   });
 });
