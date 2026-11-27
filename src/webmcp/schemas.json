@@ -11,7 +11,7 @@
         "type": "number",
         "minimum": 0,
         "maximum": 10000,
-        "description": "Gaps above zero and below this are reported as tight_clearance. Default 24 in (61 cm)."
+        "description": "Gaps from 6 in (15 cm) up to this are reported as tight_clearance. Default 24 in (61 cm)."
       }
     },
     "additionalProperties": false
@@ -568,6 +568,11 @@
                         "exclusiveMinimum": 0,
                         "maximum": 10000,
                         "description": "Width along the wall."
+                      },
+                      "from": {
+                        "description": "Input only: which end of the wall offset is measured from. \"start\" (default) is the start corner (on a rectangle: top wall from the left, right wall from the top, bottom wall from the right, left wall from the bottom); \"end\" is the other end. Or name the end as seen from above: \"left\" or \"right\" on a top or bottom wall, \"top\" or \"bottom\" on a left or right wall. The plan comes back with offset measured from the start corner.",
+                        "type": "string",
+                        "enum": ["start", "end", "left", "right", "top", "bottom"]
                       },
                       "type": {
                         "default": "swing-in",

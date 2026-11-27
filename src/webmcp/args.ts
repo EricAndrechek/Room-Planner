@@ -90,7 +90,7 @@ export const CheckLayoutArgs = z.strictObject({
   minClearance: z.optional(
     d(
       z.number().check(z.minimum(0), z.maximum(10000)),
-      'Gaps above zero and below this are reported as tight_clearance. Default 24 in (61 cm).',
+      'Gaps from 6 in (15 cm) up to this are reported as tight_clearance. Default 24 in (61 cm).',
     ),
   ),
 });

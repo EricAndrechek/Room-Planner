@@ -62,6 +62,8 @@ const prompts = [
   'Lay out a 350 × 400 cm living room with a three-seat sofa facing a TV stand, a coffee table and two armchairs. Keep 90 cm walkways and nothing in front of the door.',
   'Plan a small flat: a 12 × 14 ft living room with a 10 × 11 ft bedroom to its right and a door between them. Put a sofa, a round dining table for four and a bed in, and set a spare armchair aside.',
   'Here is my plan: (paste your Room Planner link). Move the desk under the window and check that nothing blocks the door.',
+  'Fit as many seats as possible around these two tables in my 20 × 12 ft dining room, and keep the door on the right wall clear.',
+  'Can I fit a king bed and two nightstands in an 11 × 12 ft bedroom?',
 ];
 
 const jsonLd = [
@@ -253,21 +255,40 @@ const code = 'block bg-slate-900 text-slate-100 rounded-lg p-3 text-sm overflow-
         </a>
         , never the raw address: links get long, and browsers accept them.
       </p>
+      <p>
+        However it makes the link, an assistant should work in four steps: <strong>create</strong>{' '}
+        the plan, <strong>check</strong> it, <strong>fix</strong> every error and warning
+        (overlapping pieces, pieces outside the room, pieces in a door's swing or doorway), then{' '}
+        <strong>present</strong> it with the link. It should ask at most one clarifying question;
+        otherwise assume sensible defaults (a door centred on the wall you name, 3 ft or 90 cm
+        wide), say what it assumed, and remind you that you can drag things in the planner.
+      </p>
       <h3>1. Assistants with Room Planner's tools</h3>
       <p>
         With the MCP server below, or WebMCP in Chrome, the assistant uses the tools: they check the
         layout and return the link.
       </p>
-      <h3>2. Agents that can make web requests</h3>
+      <h3>2. Agents that can make web requests or open web pages</h3>
       <p>
         Agentic tools, custom agents and ChatGPT Custom GPTs can call the same operations over plain
         HTTP, with no key: <code>POST /api/plan/check</code>, <code>POST /api/plan/link</code> (the
-        plan, its problems and the link) and <code>GET /api/plan?url=…</code> (read a link). The
-        description, in OpenAPI 3.1, is{' '}
+        plan, its problems and the link) and <code>GET /api/plan?url=…</code> (read and check a
+        link). The description, in OpenAPI 3.1, is{' '}
         <a href={abs('openapi.json')} class="text-indigo-700 underline">
           /openapi.json
         </a>
-        . Code sandboxes in ChatGPT and Claude.ai usually have no internet; they use the next way.
+        . Chat assistants that browse the web (ChatGPT, Claude, Perplexity) can use the GET too,
+        even when their code sandbox has no internet: they make the link the third or fourth way and
+        check it here, and the answer comes back as Markdown.
+      </p>
+      <p id="check">
+        <strong>Check a link before giving it to the user.</strong> An assistant that can open web
+        pages opens <code>{abs('api/plan')}?url=&lt;the link, URL-encoded&gt;</code> (or{' '}
+        <code>?p=&lt;the text after #p=&gt;</code>). It lists the errors and warnings, naming each
+        piece and where it is, such as “Chair at (11, 6) overlaps Chair at (11.75, 6) by 9″” or
+        “Small table is in the way of the door on the right wall (7′–10′ from the top)”. The
+        assistant fixes every one itself and checks again until none are left, and only then gives
+        you the link.
       </p>
       <pre class={code} tabindex="0">{API_CURL}</pre>
       <p class="mt-3">

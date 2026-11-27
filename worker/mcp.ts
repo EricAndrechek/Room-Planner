@@ -61,7 +61,8 @@ const checkArgs = object(
     minClearance: {
       type: 'number',
       minimum: 0,
-      description: "Report gaps below this as tight_clearance, in the plan's unit. Default 24 in.",
+      description:
+        "Report gaps from 6 in (15 cm) up to this as tight_clearance, in the plan's unit. Default 24 in.",
     },
   },
   ['plan'],

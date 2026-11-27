@@ -154,7 +154,7 @@ describe('GET /api/plan for assistants that browse', () => {
   const p = `/api/plan?p=${encodeURIComponent(CHATGPT_READABLE)}`;
 
   it('answers Markdown to an assistant fetcher or Accept: text/markdown, JSON otherwise', async () => {
-    for (const headers of [
+    for (const headers of <Record<string, string>[]>[
       { 'user-agent': 'Mozilla/5.0 (compatible; ChatGPT-User/1.0; +https://openai.com/bot)' },
       { 'user-agent': 'Claude-User (claude-code/1.0; +https://www.anthropic.com)' },
       { 'user-agent': 'Perplexity-User/1.0' },

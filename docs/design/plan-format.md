@@ -573,15 +573,15 @@ characters chat apps, Markdown and browsers leave alone: letters, digits and `- 
 #p=ft;room:Bedroom:12x11;door:bottom:8:3;window:top:4:4;item:Queen_bed:5x6.7@6,3.35;item:Nightstand:1.7x1.3@2.65,0.65;item:Dresser:5x1.5@4.5,10.25
 ```
 
-| Statement                              | Meaning                                                                                                                                                                                                                                                                                                       |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ft`, `in`, `m`, `cm` (or `unit:cm`)   | The unit of every length; default `ft`.                                                                                                                                                                                                                                                                       |
-| `name:<plan name>`                     | The plan's name; default the only room's name.                                                                                                                                                                                                                                                                |
-| `room:<name>:<W>x<L>[@x,y]`            | A rectangle, top-left corner at x,y. Without `@`: the first at 0,0, each next one right of the one before, top-aligned (so they share a wall).                                                                                                                                                                |
-| `room:<name>:x1,y1,x2,y2,...[@x,y]`    | An outline, corners clockwise, shifted by `@`.                                                                                                                                                                                                                                                                |
-| `door:<wall>:<offset>:<width>[:...]`   | On the room before it. Rectangles: `top`/`right`/`bottom`/`left`, offset from the wall's left or top end. Otherwise the wall index, offset clockwise from its start corner. Options: `in`, `out`, `double`, `double-out`, `sliding`, `pocket`, `bifold`, `opening`; `right` (hinge, seen from inside); `180`. |
-| `window:<wall>:<offset>:<width>`       | As a door.                                                                                                                                                                                                                                                                                                    |
-| `item:<label>:<W>x<D>[@x,y[,r]][:...]` | A piece, centre at x,y, r clockwise degrees; no `@`: set aside. Options: `round`, `L-<tl/tr/br/bl>-<w>x<d>` (the cut), `color-<rrggbb>`.                                                                                                                                                                      |
+| Statement                              | Meaning                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ft`, `in`, `m`, `cm` (or `unit:cm`)   | The unit of every length; default `ft`.                                                                                                                                                                                                                                                                                                                                                         |
+| `name:<plan name>`                     | The plan's name; default the only room's name.                                                                                                                                                                                                                                                                                                                                                  |
+| `room:<name>:<W>x<L>[@x,y]`            | A rectangle, top-left corner at x,y. Without `@`: the first at 0,0, each next one right of the one before, top-aligned (so they share a wall).                                                                                                                                                                                                                                                  |
+| `room:<name>:x1,y1,x2,y2,...[@x,y]`    | An outline, corners clockwise, shifted by `@`.                                                                                                                                                                                                                                                                                                                                                  |
+| `door:<wall>:<offset>:<width>[:...]`   | On the room before it. Rectangles: `top`/`right`/`bottom`/`left`, offset from the wall's left or top end (`end-2`, or `right-2`/`bottom-2`: from the other end). Otherwise the wall index, offset clockwise from its start corner (`end-2`: from corner i+1). Options: `in`, `out`, `double`, `double-out`, `sliding`, `pocket`, `bifold`, `opening`; `right` (hinge, seen from inside); `180`. |
+| `window:<wall>:<offset>:<width>`       | As a door.                                                                                                                                                                                                                                                                                                                                                                                      |
+| `item:<label>:<W>x<D>[@x,y[,r]][:...]` | A piece, centre at x,y, r clockwise degrees; no `@`: set aside. Options: `round`, `L-<tl/tr/br/bl>-<w>x<d>` (the cut), `color-<rrggbb>`.                                                                                                                                                                                                                                                        |
 
 - `;` separates statements and `:` fields; `_` in a name is a space (`%5F` is an underscore, and
   any other character is percent-encoded by the writer).
@@ -738,16 +738,22 @@ Details that implementers need:
 - Every plan the format allows is accepted, checked, drawn and linked: several rooms, any outline,
   L and round pieces, pieces set aside (see "Edit links").
 - `url` is the edit link and `editable` is always `true` (kept for clients written while some
-  plans had no link). The link is also the last line of the text content, alone on its line, so a
-  client that shows only text still shows it whole.
+  plans had no link). The link is also the last line of the text content, alone on its line, as
+  Markdown link text (`[Open <plan> in Room Planner](url)`) after a line telling the model to pass
+  it on that way and never as a bare URL, so a client that shows only text still shows it whole and
+  a model does not paste a 900-character address into its reply.
 - `Issue` is `{ code, severity: 'error' | 'warning' | 'info', message, ids: string[] }`. Codes:
   `item_overlap`, `item_outside_room`, `door_blocked`, `doorway_blocked`, `opening_overlap`,
   `opening_off_wall`, `room_overlap`, `window_between_rooms`, `tight_clearance`, `unknown_field`.
   Messages name rooms ("the door between Bedroom and Hall"); a door between rooms is checked on
   both sides (its swing into the next room, a doorway in each). `message` is a full
   sentence with names and distances in the plan's unit ("Sofa overlaps Coffee Table by 4 in").
-- `tight_clearance` is `info`: a gap above zero and below `minClearance` (default 24 in) between
-  two pieces or a piece and a wall. It reuses `measureClearances`. `ok` is true when no issue is an
+- `tight_clearance` is `info`: a gap from 6 in (`TUCKED`) up to `minClearance` (default 24 in)
+  between two pieces or a piece and a wall. Closer than 6 in is taken as meant (chairs side by side
+  or at a table, a dresser just off the wall). Messages name a piece that shares its label with its
+  centre ("Chair at (11, 6)") and a door on a rectangle's wall with its span seen from above
+  ("7'–10' from the top"). The text content groups issues that say the same (`groupIssues`), errors
+  first; `issues` stays one entry per issue. It reuses `measureClearances`. `ok` is true when no issue is an
   error or a warning.
 - `summary` is one paragraph: each room (by the name the app shows, "Room 2" when it has none)
   with its size, area and openings, the doors between rooms, counts, and what is hidden or set
@@ -909,7 +915,7 @@ with no logic of its own:
 | -------------------------------------------------------- | ------------ | ---------------------------------------- |
 | `POST /api/plan/check` (plan, or `{plan, minClearance}`) | `checkPlan`  | `{ok, issues, summary}`                  |
 | `POST /api/plan/link` (plan, or `{plan}`)                | `createPlan` | `{plan, issues, summary, url, editable}` |
-| `GET /api/plan?url=` (or `?s=`, `?p=`)                   | `readPlan`   | as `/link`                               |
+| `GET /api/plan?url=` (or `?s=`, `?p=`)                   | `readPlan`   | as `/link`, or Markdown (see below)      |
 
 Errors are `application/problem+json` (RFC 9457) with `error_kind` from the tools' vocabulary: 400
 when the request cannot be read (not JSON: `bad_json`; no plan, a bad argument or URL), 422 when
@@ -922,6 +928,17 @@ OpenAPI document. Analytics: `api_called` with `{op, ok, error_kind, rooms, item
 transport: 'rest'}` and the MCP events' common properties and privacy rules. ChatGPT's and
 Claude.ai's code sandboxes usually have no internet, so `llms.txt` points them at the offline
 `#s=` way instead (section 5).
+
+Their web browsing does reach the site, though, and an assistant that wrote a link without tools
+has nothing else to check it with (ChatGPT, asked for a Thanksgiving layout, wrote a working `#p=`
+link with two chairs overlapping and the entrance blocked, and called it "a proposed fit, not a
+verified clearance check"). So `GET /api/plan` answers Markdown to `Accept: text/markdown` and to
+the fetchers of assistants that browse (the md-router's `LLM_BOT_UA` plus `Perplexity-User` and a
+few more), unless they ask for JSON: the summary, what the link said that the planner could not
+use, the issues by severity (grouped), what to do next, and the link as Markdown link text once
+nothing is an error or a warning. It carries `Vary: Accept, User-Agent` and `X-Robots-Tag:
+noindex`. Every guide (llms.txt, the Agent Skill, `/agents/#check`) tells an assistant that can
+open pages to check a link there, fix what it lists and check again before handing it over.
 
 ### Rate limiting and abuse
 
