@@ -10,19 +10,23 @@ import * as z from 'zod/mini';
 
 export const PLAN_VERSION = 4;
 
-/** `schema` with a description, which the generated JSON Schema carries (for agents). */
+/**
+ * `schema` with a description, which the generated JSON Schema carries (for agents). Every
+ * property has one (worker/mcp.test.ts walks the tools' schemas): a short field-level fact. The
+ * prose (coordinates, wall numbering, workflow) is in the tool text, worker/descriptions.ts.
+ */
 const d = <T extends z.ZodMiniType>(schema: T, description: string): T => {
   (schema as z.ZodMiniType).register(z.globalRegistry, { description });
   return schema;
 };
 
-const Id = d(
-  z.string().check(z.regex(/^[A-Za-z0-9_-]{1,40}$/)),
-  'Unique within the plan. Letters, digits, "-" and "_".',
-);
-const Coord = z.number().check(z.minimum(-100000), z.maximum(100000));
+const Id = d(z.string().check(z.regex(/^[A-Za-z0-9_-]{1,40}$/)), 'Unique in the plan.');
+const coord = () => z.number().check(z.minimum(-100000), z.maximum(100000));
 const size = () => z.number().check(z.positive(), z.maximum(10000));
-const Point = z.object({ x: Coord, y: Coord });
+const Point = z.object({
+  x: d(coord(), 'Floor x (grows right).'),
+  y: d(coord(), 'Floor y (grows DOWN).'),
+});
 const Color = z.string().check(z.regex(/^#[0-9a-fA-F]{6}$/));
 
 export const OPENING_KINDS = ['door', 'window'] as const;
@@ -51,75 +55,93 @@ export const OFFSET_FROM = ['start', 'end', 'left', 'right', 'top', 'bottom'] as
 
 export const Opening = z.looseObject({
   id: Id,
-  kind: z.enum(OPENING_KINDS),
-  wall: d(z.int().check(z.minimum(0)), 'Wall index. Wall i runs from outline[i] to outline[i+1].'),
+  kind: d(z.enum(OPENING_KINDS), 'Door or window.'),
+  wall: d(z.int().check(z.minimum(0)), 'Wall i runs from outline[i] to outline[i+1].'),
   offset: d(
     z.number().check(z.minimum(0)),
-    'Distance along the wall from its start corner to the near edge of the opening.',
+    "From the wall's start corner to the opening's near edge.",
   ),
   width: d(size(), 'Width along the wall.'),
   from: d(
     z.optional(z.enum(OFFSET_FROM)),
-    'Input only: which end of the wall offset is measured from. "start" (default) is the start ' +
-      'corner (on a rectangle: top wall from the left, right wall from the top, bottom wall from ' +
-      'the right, left wall from the bottom); "end" is the other end. Or name the end as seen ' +
-      'from above: "left" or "right" on a top or bottom wall, "top" or "bottom" on a left or ' +
-      'right wall. The plan comes back with offset measured from the start corner.',
+    'Input only: the end offset is measured from. Default "start".',
   ),
-  type: d(z._default(z.enum(DOOR_TYPES), 'swing-in'), 'Doors only.'),
+  type: d(
+    z._default(z.enum(DOOR_TYPES), 'swing-in'),
+    'Doors only. "swing-in": into the room that lists it.',
+  ),
   hinge: d(
     z._default(z.enum(HINGES), 'start'),
-    'Doors only. Seen from inside the room facing the wall, "start" is on the left.',
+    'Doors only. "start": on the left, from inside facing the wall.',
   ),
-  swingAngle: z.optional(z.union([z.literal(90), z.literal(180)])),
+  swingAngle: d(
+    z.optional(z.union([z.literal(90), z.literal(180)])),
+    'Doors only: how far it opens, degrees.',
+  ),
 });
 
 export const Room = z.looseObject({
   id: Id,
-  name: z.optional(z.string().check(z.maxLength(80))),
+  name: d(z.optional(z.string().check(z.maxLength(80))), 'E.g. "Bedroom".'),
   outline: d(
     z.array(Point).check(z.minLength(3), z.maxLength(64)),
-    'Interior corners in floor coordinates, clockwise as drawn (y grows downward). ' +
-      'A rectangle is 4 points starting at its top-left corner; its walls are then ' +
-      '0 = top, 1 = right, 2 = bottom, 3 = left.',
+    'Interior corners, clockwise. Rectangle from top-left: walls 0 top, 1 right, 2 bottom, 3 left.',
   ),
-  openings: z._default(z.array(Opening).check(z.maxLength(64)), []),
+  openings: d(z._default(z.array(Opening).check(z.maxLength(64)), []), 'Doors and windows.'),
 });
 
 export const Item = z.looseObject({
   id: Id,
-  label: z.string().check(z.maxLength(80)),
-  color: z._default(Color, '#93c5fd'),
-  shape: z._default(z.enum(SHAPES), 'rect'),
-  width: d(size(), 'Bounding-box size along x before rotation.'),
-  depth: d(size(), 'Bounding-box size along y before rotation.'),
+  label: d(z.string().check(z.maxLength(80)), 'E.g. "Queen bed".'),
+  color: d(z._default(Color, '#93c5fd'), 'Fill, "#rrggbb".'),
+  shape: d(z._default(z.enum(SHAPES), 'rect'), '"ellipse": round or oval; "l" needs cut.'),
+  width: d(size(), 'Along x, before rotation.'),
+  depth: d(size(), 'Along y, before rotation.'),
   cut: d(
-    z.optional(z.object({ corner: z.enum(CORNERS), width: size(), depth: size() })),
-    'Shape "l" only: the rectangle removed from one corner of the bounding box.',
+    z.optional(
+      z.object({
+        corner: d(z.enum(CORNERS), 'Corner removed.'),
+        width: d(size(), 'Removed part, along x.'),
+        depth: d(size(), 'Removed part, along y.'),
+      }),
+    ),
+    'Shape "l" only: the rectangle removed from one corner.',
   ),
   placement: d(
     z.optional(
       z.object({
-        x: Coord,
-        y: Coord,
-        rotation: z._default(z.number().check(z.minimum(0), z.lt(360)), 0),
+        x: d(coord(), 'Floor x of the CENTRE.'),
+        y: d(coord(), 'Floor y of the CENTRE.'),
+        rotation: d(z._default(z.number().check(z.minimum(0), z.lt(360)), 0), 'Clockwise degrees.'),
       }),
     ),
-    'Centre of the piece in floor coordinates and its clockwise rotation in degrees. ' +
-      'Omit it to set the piece aside: kept in the plan, not on the floor.',
+    'Omit to set the piece aside: off the floor, not checked.',
   ),
-  locked: z.optional(z.boolean()),
-  hidden: z.optional(z.boolean()),
-  notes: z.optional(z.string().check(z.maxLength(500))),
+  locked: d(z.optional(z.boolean()), 'Not movable in the planner.'),
+  hidden: d(z.optional(z.boolean()), 'Not drawn or checked.'),
+  notes: d(z.optional(z.string().check(z.maxLength(500))), "The user's notes."),
 });
 
 export const Plan = z.looseObject({
-  version: z.literal(PLAN_VERSION),
-  name: z._default(z.string().check(z.maxLength(100)), 'Untitled'),
-  unit: d(z.enum(UNITS), 'Unit of every length in this document.'),
-  rooms: z.array(Room).check(z.minLength(1), z.maxLength(50)),
-  items: z._default(z.array(Item).check(z.maxLength(500)), []),
-  settings: z.optional(z.looseObject({ unitSystem: z.optional(z.enum(UNIT_SYSTEMS)) })),
+  version: d(z.literal(PLAN_VERSION), 'Always 4.'),
+  name: d(z._default(z.string().check(z.maxLength(100)), 'Untitled'), 'Plan name.'),
+  unit: d(z.enum(UNITS), 'Unit of every length.'),
+  rooms: d(
+    z.array(Room).check(z.minLength(1), z.maxLength(50)),
+    'One floor: rooms touch to share a wall, never overlap.',
+  ),
+  items: d(z._default(z.array(Item).check(z.maxLength(500)), []), 'Furniture.'),
+  settings: d(
+    z.optional(
+      z.looseObject({
+        unitSystem: d(
+          z.optional(z.enum(UNIT_SYSTEMS)),
+          'Display unit. Default: unit ("ft" as "ft-in").',
+        ),
+      }),
+    ),
+    'Display preferences.',
+  ),
 });
 export type Plan = z.infer<typeof Plan>;
 /** A plan as written by hand or by an agent: fields with defaults may be left out. */

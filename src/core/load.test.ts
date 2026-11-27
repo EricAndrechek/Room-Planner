@@ -252,20 +252,19 @@ describe('JSON Schema', () => {
 
   it('carries every description an agent needs', () => {
     for (const phrase of [
-      'Unique within the plan',
-      'Wall index. Wall i runs from outline[i] to outline[i+1].',
-      'Distance along the wall from its start corner',
+      'Unique in the plan.',
+      'Wall i runs from outline[i] to outline[i+1].',
+      "From the wall's start corner to the opening's near edge.",
       'Width along the wall.',
-      'Doors only.',
-      'facing the wall, \\"start\\" is on the left',
-      'clockwise as drawn (y grows downward)',
-      '0 = top, 1 = right, 2 = bottom, 3 = left',
-      'Bounding-box size along x before rotation.',
-      'Bounding-box size along y before rotation.',
+      'facing the wall',
+      'Interior corners, clockwise.',
+      'walls 0 top, 1 right, 2 bottom, 3 left',
+      'Along x, before rotation.',
+      'Along y, before rotation.',
       'Shape \\"l\\" only',
-      'Centre of the piece in floor coordinates',
-      'Omit it to set the piece aside: kept in the plan, not on the floor.',
-      'Unit of every length in this document.',
+      'Floor x of the CENTRE.',
+      'Omit to set the piece aside: off the floor, not checked.',
+      'Unit of every length.',
     ]) {
       expect(text).toContain(phrase);
     }

@@ -763,9 +763,12 @@ Details that implementers need:
   from `outline[i]` to `outline[i+1]`), how rooms join (they touch, with no wall thickness, and a
   door on a shared wall, listed once, connects them), the direction of `offset` on each wall, that
   `placement` is the centre, the furniture shapes (`ellipse`, `l` with its `cut`), that leaving out
-  `placement` sets a piece aside, and a short list of common sizes and clearances. There is no catalogue. The
-  format is in both `create_plan` and `check_layout`, since an agent may read only the tool it
-  calls first; the server's `instructions` give the workflow.
+  `placement` sets a piece aside, and a short list of common sizes and clearances. There is no catalogue. All
+  of it is loaded into the model's context every turn, so each fact is said once: the server's
+  `instructions` say when to use the tools and the workflow; `create_plan`'s description carries
+  the format (some clients drop the instructions); `check_layout` and `read_plan` point at it. Each
+  tool's description starts with when to use it. Every property in the input schemas has a
+  one-line description (a field-level fact: a range, a default, a meaning), not prose.
 - The loose schema accepts unknown keys. For agents that is usually a typo, so the MCP layer
   reports each as `unknown_field` (a warning, with its path) instead of rejecting or silently
   keeping it.
@@ -1005,7 +1008,7 @@ supportedProtocolVersions }`, which lists 2026-07-28 and the 2025-era revisions.
 - `llms.txt` gains an "For AI agents" section with the endpoint and one line per tool.
 - A page `/agents/` explains how to add the server to a client and repeats the privacy statement.
 - The official MCP Registry gets a `server.json` (repository root) named
-  `com.andrechek.room-planner/mcp`, a name the owner approved, proven over HTTP: the registry
+  `com.andrechek.room-planner/room-planner`, a name the owner approved, proven over HTTP: the registry
   fetches the public key at `/.well-known/mcp-registry-auth` on `room-planner.andrechek.com` and
   grants exactly `com.andrechek.room-planner/*` (no DNS change). The record is a static
   `text/plain` asset, so it never invokes the Worker, and the service worker neither precaches nor
