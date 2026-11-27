@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { storedDims, storedOpenings, storedPieces, storedUi } from './storage';
 import { isNarrow, openStep, viewPlan } from './ui';
 
@@ -30,7 +30,48 @@ const stored = async <T>(page: Page, what: 'items' | 'dims' | 'doors' | 'windows
 const badge = (page: Page) => page.getByTestId('mode-badge');
 const notice = (page: Page) => page.getByTestId('app-notice');
 
-test.describe('locked furniture in room setup', () => {
+/** Drag from the middle of `el` by (dx, dy) screen px: a mouse, or touch pointers on phones. */
+async function dragBy(page: Page, el: Locator, dx: number, dy: number) {
+  const b = (await el.boundingBox())!;
+  const x = b.x + b.width / 2;
+  const y = b.y + b.height / 2;
+  if (!isNarrow(page)) {
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + dx, y + dy, { steps: 8 });
+    await page.mouse.up();
+    return;
+  }
+  // Touch: what is under the finger gets the pointerdown, the window the rest (as on a phone).
+  await page.evaluate(
+    async ({ x, y, dx, dy }) => {
+      const target = document.elementFromPoint(x, y)!;
+      const at = (cx: number, cy: number, buttons: number) => ({
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        pointerId: 9,
+        pointerType: 'touch',
+        isPrimary: true,
+        clientX: cx,
+        clientY: cy,
+        button: 0,
+        buttons,
+      });
+      target.dispatchEvent(new PointerEvent('pointerdown', at(x, y, 1)));
+      for (let i = 1; i <= 10; i++) {
+        window.dispatchEvent(
+          new PointerEvent('pointermove', at(x + (dx * i) / 10, y + (dy * i) / 10, 1)),
+        );
+        await new Promise((r) => setTimeout(r, 16));
+      }
+      window.dispatchEvent(new PointerEvent('pointerup', at(x + dx, y + dy, 0)));
+    },
+    { x, y, dx, dy },
+  );
+}
+
+test.describe('furniture moves in room setup too', () => {
   test('a fresh visitor starts in Furniture mode and can drag a sample piece', async ({ page }) => {
     await page.goto('/');
     await ready(page);
@@ -42,51 +83,164 @@ test.describe('locked furniture in room setup', () => {
     await returningIn(page, 'room-setup');
     await page.goto('/');
     await ready(page);
-    await expect(badge(page)).toContainText(/Room Setup Mode|Room setup · furniture locked/);
+    await expect(badge(page)).toContainText(/Room Setup Mode|Room setup/);
+    await expect(badge(page)).not.toContainText(/locked/i);
   });
 
-  test('pressing a locked piece explains why, and "Move furniture" switches mode and selects it', async ({
+  test('pressing a piece in Room Setup selects it, and dragging it moves it (no lock notice)', async ({
     page,
   }) => {
     await returningIn(page, 'room-setup');
     await page.goto('/');
     await ready(page);
+    await viewPlan(page);
     const desk = page.getByRole('button', { name: /^Desk,/ });
-    const before = await desk.boundingBox();
-    await desk.click();
-    await expect(notice(page)).toContainText('Furniture is locked while you edit the room.');
-    // Nothing moved.
-    expect(await desk.boundingBox()).toEqual(before);
-
-    // Pressing again right away does not stack or flash a second notice.
-    await desk.click();
-    await expect(notice(page)).toHaveCount(1);
-
-    await notice(page).getByRole('button', { name: 'Move furniture' }).click();
-    await expect(notice(page)).toHaveCount(0);
-    await expect(badge(page)).toContainText(/Furniture Mode|Drag to move/);
+    await expect(desk).not.toHaveAccessibleDescription(/Locked/);
+    const before = (await stored<{ label: string; x: number; y: number }[]>(page, 'items')).find(
+      (i) => i.label === 'Desk',
+    )!;
+    await dragBy(page, desk, -50, -40);
     await expect(desk).toHaveAttribute('aria-pressed', 'true');
+    await expect
+      .poll(
+        async () =>
+          (await stored<{ label: string; x: number }[]>(page, 'items')).find(
+            (i) => i.label === 'Desk',
+          )!.x,
+      )
+      .toBeLessThan(before.x - 0.5);
+    await expect(notice(page)).toHaveCount(0);
+    // Still in Room Setup: the step did not change.
+    await expect(badge(page)).toContainText(/Room Setup Mode|Room setup/);
+    // One undo puts it back.
+    await page.getByRole('button', { name: 'Undo' }).click();
+    await expect
+      .poll(
+        async () =>
+          (await stored<{ label: string; x: number }[]>(page, 'items')).find(
+            (i) => i.label === 'Desk',
+          )!.x,
+      )
+      .toBeCloseTo(before.x, 4);
   });
 
-  test('keyboard: arrows on a locked piece show the same notice', async ({ page, isMobile }) => {
+  test('keyboard: arrows move the focused piece in Room Setup', async ({ page, isMobile }) => {
     test.skip(isMobile, 'keyboard');
     await returningIn(page, 'room-setup');
     await page.goto('/');
     await ready(page);
     const bed = page.getByRole('button', { name: /^Bed,/ });
     await bed.focus();
-    const items = await stored<{ x: number }[]>(page, 'items');
+    const x0 = (await stored<{ label: string; x: number }[]>(page, 'items')).find(
+      (i) => i.label === 'Bed',
+    )!.x;
     await page.keyboard.press('ArrowRight');
-    await expect(notice(page)).toContainText('Furniture is locked');
-    expect(await stored(page, 'items')).toEqual(items);
+    await expect
+      .poll(
+        async () =>
+          (await stored<{ label: string; x: number }[]>(page, 'items')).find(
+            (i) => i.label === 'Bed',
+          )!.x,
+      )
+      .toBeCloseTo(x0 + 0.25, 4);
+    await expect(notice(page)).toHaveCount(0);
   });
 
-  test('the phone badge says furniture is locked, on one line', async ({ page }) => {
+  test('a door handle under a piece still wins in Room Setup, and empty floor still pans', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('seeded')) return;
+      localStorage.clear();
+      localStorage.setItem('room-sim-v3-dims', JSON.stringify({ width: 12, height: 12 }));
+      localStorage.setItem(
+        'room-sim-v3-doors',
+        JSON.stringify([
+          { id: 1, width: 3, position: 4, wall: 'top', hinge: 'left', type: 'swing-in' },
+        ]),
+      );
+      localStorage.setItem('room-sim-v3-windows', '[]');
+      // A rug right over the door's handle (the middle of the door, on the top wall; the bottom
+      // of the plan can be under a toast).
+      localStorage.setItem(
+        'room-sim-v3-items',
+        JSON.stringify([
+          {
+            id: 2,
+            label: 'Rug',
+            width: 3,
+            height: 2,
+            x: 4,
+            y: 0,
+            rotation: 0,
+            color: '#a5b4fc',
+            visible: true,
+          },
+        ]),
+      );
+      localStorage.setItem('room-sim-v3-mode', 'room-setup');
+      sessionStorage.setItem('seeded', '1');
+    });
+    await page.goto('/');
+    await ready(page);
+    await viewPlan(page);
+    const handle = page.getByRole('button', { name: /^Door handle/ });
+    const hb = (await handle.boundingBox())!;
+    const hit = await page.evaluate(
+      ({ x, y }) => document.elementFromPoint(x, y)?.getAttribute('aria-label') ?? '',
+      { x: hb.x + hb.width / 2, y: hb.y + hb.height / 2 },
+    );
+    expect(hit).toMatch(/^Door handle/);
+    const rugBefore = await stored<{ x: number; y: number }[]>(page, 'items');
+    const doorBefore = (await stored<{ position: number }[]>(page, 'doors'))[0]!.position;
+    await dragBy(page, handle, 60, 0);
+    await expect
+      .poll(async () => (await stored<{ position: number }[]>(page, 'doors'))[0]!.position)
+      .toBeGreaterThan(doorBefore + 0.5);
+    expect(await stored(page, 'items')).toEqual(rugBefore);
+
+    // On a phone, a finger on empty floor (the bottom left of the room) pans the plan; nothing on
+    // it moves. (With a mouse the plan pans with the wheel or trackpad.)
+    if (isNarrow(page)) {
+      const room = page.getByTestId('room');
+      const r0 = (await room.boundingBox())!;
+      await page.evaluate(
+        async ({ x, y }) => {
+          const target = document.elementFromPoint(x, y)!;
+          const touch = (cx: number, cy: number) =>
+            new Touch({ identifier: 3, target, clientX: cx, clientY: cy });
+          const fire = (type: string, cx: number, cy: number, end = false) =>
+            target.dispatchEvent(
+              new TouchEvent(type, {
+                bubbles: true,
+                cancelable: true,
+                touches: end ? [] : [touch(cx, cy)],
+                changedTouches: [touch(cx, cy)],
+              }),
+            );
+          fire('touchstart', x, y);
+          for (let i = 1; i <= 8; i++) {
+            fire('touchmove', x + i * 5, y - i * 4);
+            await new Promise((r) => setTimeout(r, 16));
+          }
+          fire('touchend', x + 40, y - 32, true);
+        },
+        { x: r0.x + 16, y: r0.y + r0.height - 16 },
+      );
+      const r1 = (await room.boundingBox())!;
+      expect(Math.abs(r1.x - r0.x - 40)).toBeLessThan(6);
+      expect(await stored(page, 'items')).toEqual(rugBefore);
+    }
+  });
+
+  test('the phone badge fits on one line and says nothing about locked furniture', async ({
+    page,
+  }) => {
     test.skip(!isNarrow(page), 'phone layout');
     await returningIn(page, 'room-setup');
     await page.goto('/');
     await ready(page);
-    await expect(badge(page).getByText('Room setup · furniture locked')).toBeVisible();
+    await expect(badge(page).getByText('Room setup · drag door & window handles')).toBeVisible();
     const truncated = await badge(page).evaluate((el) => el.scrollWidth > el.clientWidth + 1);
     expect(truncated).toBe(false);
   });
@@ -339,19 +493,24 @@ test("an opening that doesn't fit on the chosen wall stays put, and says so", as
   expect((await stored<{ wall: string }[]>(page, 'doors'))[0]!.wall).toBe('bottom');
 });
 
-test('the active step header is a plain label; the inactive one expands its locked section', async ({
+test('the active step header is a plain heading with no status label; the inactive one expands', async ({
   page,
 }) => {
   await page.goto('/');
   await ready(page);
   await openStep(page, 'furniture');
   const headers = page.getByTestId('step-header');
-  const active = headers.filter({ hasText: 'Editing' });
+  const active = headers.filter({ hasNot: page.locator('[aria-expanded]') }).filter({
+    hasText: 'Furniture',
+  });
   await expect(active).toHaveCount(1);
-  await expect(active).toContainText('Furniture');
   expect(await active.evaluate((el) => el.tagName)).toBe('DIV');
   await expect(active).not.toHaveAttribute('role');
-  await expect(page.getByRole('button', { name: /Editing/ })).toHaveCount(0);
+  // Nothing on it looks pressable: no "Editing" pill (it drew dead clicks), no hover or pointer.
+  await expect(page.getByText('Editing', { exact: true })).toHaveCount(0);
+  const cls = (await active.getAttribute('class')) ?? '';
+  expect(cls).not.toMatch(/hover:|cursor-pointer/);
+  expect(await active.evaluate((el) => getComputedStyle(el).cursor)).toBe('auto');
 
   const inactive = page.getByRole('button', { name: /^Room Setup/ });
   await expect(inactive).toHaveAttribute('aria-expanded', 'false');

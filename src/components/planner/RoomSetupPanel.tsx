@@ -175,8 +175,6 @@ export function RoomSetupPanel(props: RoomSetupPanelProps) {
           )
         }
         activeIcon="bg-indigo-100 text-indigo-600"
-        activeText="text-indigo-700"
-        activeDot="bg-indigo-500"
       />
 
       {/* Unlock button when in furniture mode */}

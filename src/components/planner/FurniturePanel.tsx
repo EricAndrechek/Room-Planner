@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { ChevronDown, Plus, Sofa, Trash2, Unlock } from 'lucide-react';
+import { ChevronDown, Plus, Sofa, Trash2 } from 'lucide-react';
 import { glowClass, useCardHighlight, type CardRef } from '../../hooks/useCardHighlight';
 import type { ItemWarning } from '../../core/geometry';
 import { feetToDisplay } from '../../core/units';
@@ -298,8 +298,7 @@ export function FurniturePanel(props: FurniturePanelProps) {
           </>
         }
         activeIcon="bg-emerald-100 text-emerald-600"
-        activeText="text-emerald-800"
-        activeDot="bg-emerald-600"
+        locked={false}
       />
 
       {!isActiveMode && expanded && (
@@ -309,7 +308,7 @@ export function FurniturePanel(props: FurniturePanelProps) {
             onClick={props.onActivate}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg text-xs font-medium transition-colors"
           >
-            <Unlock className="w-3 h-3" />
+            <Sofa className="w-3 h-3" aria-hidden="true" />
             Switch to Furniture Mode
           </button>
         </div>

@@ -12,15 +12,14 @@ interface StepHeaderProps {
   summary: ReactNode;
   /** Icon tile colors while active, e.g. `bg-indigo-100 text-indigo-600`. */
   activeIcon: string;
-  /** "Editing" status color while active, e.g. `text-indigo-700` / `bg-indigo-500`. */
-  activeText: string;
-  activeDot: string;
+  /** Inactive only: say the section is locked (its controls are, until the step is picked). */
+  locked?: boolean;
 }
 
 /**
  * Header of a sidebar step (Room Setup, Furniture). While the step is inactive it is a button that
- * shows or hides the locked section. While active there is nothing to press, so it is not a
- * button and shows its "Editing" status as plain text, not as a pill.
+ * shows or hides the section. While active there is nothing to press, so it is a plain heading
+ * with no status label or other affordance (an "Editing" label there drew clicks).
  */
 export function StepHeader(p: StepHeaderProps) {
   const body = (
@@ -43,10 +42,6 @@ export function StepHeader(p: StepHeaderProps) {
         data-testid="step-header"
       >
         {body}
-        <span className={`flex items-center gap-1.5 text-[10px] font-medium ${p.activeText}`}>
-          <span className={`w-1.5 h-1.5 rounded-full ${p.activeDot}`} aria-hidden="true" />
-          Editing
-        </span>
       </div>
     );
   }
@@ -60,9 +55,11 @@ export function StepHeader(p: StepHeaderProps) {
     >
       {body}
       <div className="flex items-center gap-2">
-        <span className="text-[10px] text-slate-600 flex items-center gap-1">
-          <Lock className="w-3 h-3" /> Locked
-        </span>
+        {p.locked !== false && (
+          <span className="text-[10px] text-slate-600 flex items-center gap-1">
+            <Lock className="w-3 h-3" /> Locked
+          </span>
+        )}
         {p.expanded ? (
           <ChevronUp className="w-4 h-4 text-slate-500" />
         ) : (

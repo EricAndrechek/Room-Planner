@@ -75,7 +75,7 @@ for (const [name, viewport] of [
       await expectNoSeriousViolations(page);
     });
 
-    test('room setup: locked-piece notice, wall controls and a size error have no serious violations', async ({
+    test('room setup: a selected piece, wall controls and a size error have no serious violations', async ({
       page,
     }) => {
       await page.addInitScript(() => {
@@ -86,8 +86,13 @@ for (const [name, viewport] of [
       });
       await page.goto('/');
       await ready(page);
+      // Furniture is selectable (and movable) in room setup: its actions show, no lock notice.
       await page.getByRole('button', { name: /^Desk,/ }).click();
-      await expect(page.getByTestId('app-notice')).toBeVisible();
+      await expect(page.getByRole('button', { name: /^Desk,/ })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      await expect(page.getByTestId('app-notice')).toHaveCount(0);
       await expectNoSeriousViolations(page);
 
       await openStep(page, 'room');

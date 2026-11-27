@@ -71,8 +71,6 @@ interface RoomCanvasProps {
   onItemPointerDown: (e: ReactPointerEvent<HTMLDivElement>, item: Item) => void;
   onRotatePointerDown: (e: ReactPointerEvent<HTMLDivElement>, item: Item) => void;
   onSelectItem: (item: Item) => void;
-  /** Enter/Space on a piece while room setup locks furniture. */
-  onLockedItemPress?: (item: Item) => void;
   onDoorPointerDown: (e: ReactPointerEvent<HTMLDivElement>, door: Opening) => void;
   onWindowPointerDown: (e: ReactPointerEvent<HTMLDivElement>, win: Opening) => void;
   /** Doors whose clearance to highlight (a piece being moved is in their way). */
@@ -119,7 +117,6 @@ export function RoomCanvas({
   onItemPointerDown,
   onRotatePointerDown,
   onSelectItem,
-  onLockedItemPress,
   onDoorPointerDown,
   onWindowPointerDown,
   overlay,
@@ -205,11 +202,11 @@ export function RoomCanvas({
       <p id="floor-plan-help" className="sr-only">
         Press Tab to move between{' '}
         {isRoomSetup
-          ? `${picking ? 'rooms, ' : ''}${corners ? 'door and window handles and the room corners' : 'door and window handles'}`
+          ? `${picking ? 'rooms, ' : ''}${corners ? 'door and window handles, the room corners' : 'door and window handles'} and furniture pieces`
           : 'furniture pieces'}
         .
         {isRoomSetup
-          ? ' Arrow keys slide the focused opening along its wall; hold Shift for larger steps, Alt or Option for fine ones.'
+          ? ' Arrow keys slide the focused opening along its wall, or move the focused piece; hold Shift for larger steps, Alt or Option for fine ones.'
           : ` Arrow keys move the focused piece by ${feetToDisplay(nudgeStep('normal', unitSystem), unitSystem)}; hold Shift for ${feetToDisplay(nudgeStep('coarse', unitSystem), unitSystem)}, or Alt or Option (or Control or Command) for ${feetToDisplay(nudgeStep('fine', unitSystem), unitSystem)} without snapping. With Snap on, a move that ends close to a wall or another piece lines up with it. R rotates it by 90 degrees, Shift and R rotates the other way; with Alt or Option, by 1 degree. I sets it aside. Delete removes it. Escape deselects.`}
         {isRoomSetup ? ' Delete removes the focused door or window.' : ''}
         {picking ? ' Arrow keys move the focused room; its walls snap to the other rooms.' : ''}
@@ -235,14 +232,14 @@ export function RoomCanvas({
                   ? 'Room Setup Mode • Drag corners to reshape • + adds a corner'
                   : picking
                     ? 'Room Setup Mode • Drag a room to move it • Drag door/window handles'
-                    : 'Room Setup Mode • Furniture locked • Drag door/window handles to move them'}
+                    : 'Room Setup Mode • Drag door/window handles to move them'}
               </span>
               <span className="sm:hidden">
                 {corners
                   ? 'Drag corners · + adds one'
                   : picking
                     ? 'Drag a room to move it'
-                    : 'Room setup · furniture locked'}
+                    : 'Room setup · drag door & window handles'}
               </span>
             </>
           ) : (
@@ -501,12 +498,11 @@ export function RoomCanvas({
                 item={item}
                 warning={warnings.get(item.id)}
                 isActive={isActive('item', item.id)}
-                modeLocked={isRoomSetup}
+                dimmed={isRoomSetup}
                 unitSystem={unitSystem}
                 onPointerDown={onItemPointerDown}
                 onRotatePointerDown={onRotatePointerDown}
                 onSelect={onSelectItem}
-                onLockedPress={onLockedItemPress}
                 // Only the selected piece draws zoom-dependent UI (its rotate handle): others keep
                 // their memoized render while zooming.
                 zoom={isActive('item', item.id) ? zoom : 1}

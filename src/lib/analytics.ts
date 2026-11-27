@@ -42,7 +42,6 @@ export type AnalyticsEvent =
   | 'room_renamed'
   | 'room_duplicated'
   | 'opening_moved'
-  | 'locked_piece_pressed'
   | 'dimension_rejected'
   | 'dimension_confirm'
   | 'room_resized'

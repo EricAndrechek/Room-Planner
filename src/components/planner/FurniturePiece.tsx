@@ -12,20 +12,23 @@ interface FurniturePieceProps {
   item: Item;
   warning: ItemWarning | undefined;
   isActive: boolean;
-  /** All furniture is locked during room setup. */
-  modeLocked: boolean;
+  /**
+   * Room setup: the room is what is being edited, so furniture is drawn faded (still selectable and
+   * movable) and stays under the door, window, corner and room handles where they overlap.
+   */
+  dimmed: boolean;
   unitSystem: UnitSystem;
   onPointerDown: (e: ReactPointerEvent<HTMLDivElement>, item: Item) => void;
   onRotatePointerDown: (e: ReactPointerEvent<HTMLDivElement>, item: Item) => void;
   onSelect: (item: Item) => void;
-  /** Enter/Space on a piece that room setup locks (to explain why it does not move). */
-  onLockedPress?: (item: Item) => void;
   /** Canvas zoom: the rotate handle keeps a constant on-screen size. */
   zoom: number;
 }
 
-/** Furniture is drawn at this opacity while the room is being edited (and furniture is locked). */
-const MODE_LOCKED_ALPHA = 0.5;
+/** Furniture is drawn at this opacity while the room is being edited (the selected piece is not). */
+const DIMMED_ALPHA = 0.5;
+/** Room setup: pieces stay under the opening handles (z 20) and the corner handles (z 30+). */
+const DIMMED_Z = { idle: 10, active: 19 };
 
 const SHADOW_ACTIVE = '0 8px 20px -4px rgba(0, 0, 0, 0.15)';
 const SHADOW = '0 1px 3px rgba(0, 0, 0, 0.08)';
@@ -101,20 +104,21 @@ export const FurniturePiece = memo(function FurniturePiece({
   item,
   warning,
   isActive,
-  modeLocked,
+  dimmed,
   unitSystem,
   onPointerDown,
   onRotatePointerDown,
   onSelect,
-  onLockedPress,
   zoom,
 }: FurniturePieceProps) {
   const descId = useId();
   const isItemLocked = !!item.locked;
-  const isLocked = modeLocked || isItemLocked;
+  const isLocked = isItemLocked;
   const color = migrateColor(item.color);
-  // Room setup fades the fill (not the label, which keeps full contrast on the faded color).
-  const fill = modeLocked ? blendOnWhite(color, MODE_LOCKED_ALPHA) : color;
+  // Room setup fades the fill (not the label, which keeps full contrast on the faded color); the
+  // piece being moved or edited shows in full.
+  const faded = dimmed && !isActive;
+  const fill = faded ? blendOnWhite(color, DIMMED_ALPHA) : color;
   const hasWarning = !!warning && (warning.outOfBounds || warning.collision);
   // Softer (amber) than the red overlap warning: in a door's way.
   const doorBlock =
@@ -122,8 +126,8 @@ export const FurniturePiece = memo(function FurniturePiece({
       ? doorBlockText({ door: !!warning.blocksDoor, doorway: !!warning.blocksDoorway })
       : '';
 
-  let borderColor = modeLocked
-    ? blendOnWhite(getBorderColor(color), MODE_LOCKED_ALPHA)
+  let borderColor = faded
+    ? blendOnWhite(getBorderColor(color), DIMMED_ALPHA)
     : getBorderColor(color);
   let borderWidth = '2px';
   let borderStyle = 'solid';
@@ -134,7 +138,7 @@ export const FurniturePiece = memo(function FurniturePiece({
     borderColor = '#d97706'; // amber-600, dashed: distinct from a locked piece's solid amber
     borderWidth = '2px';
     borderStyle = 'dashed';
-  } else if (isItemLocked && !modeLocked) {
+  } else if (isItemLocked) {
     borderColor = '#d97706'; // amber-600
     borderWidth = '3px';
   }
@@ -168,17 +172,13 @@ export const FurniturePiece = memo(function FurniturePiece({
         onPointerDown={(e) => onPointerDown(e, item)}
         onClick={() => onSelect(item)}
         className={`absolute flex items-center justify-center text-xs font-bold select-none transition-shadow ${round || lShape ? '' : 'rounded-md'} ${
-          modeLocked
-            ? 'cursor-not-allowed'
-            : isItemLocked
-              ? 'cursor-pointer'
-              : 'cursor-grab active:cursor-grabbing'
+          isItemLocked ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'
         }`}
         style={{
           ...frame,
           ...shapeStyle,
           color: readableTextOn(fill),
-          zIndex: isActive ? 50 : 10,
+          zIndex: dimmed ? DIMMED_Z[isActive ? 'active' : 'idle'] : isActive ? 50 : 10,
           touchAction: 'none',
         }}
         onFocus={() => {
@@ -189,7 +189,6 @@ export const FurniturePiece = memo(function FurniturePiece({
           if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
             e.preventDefault();
             onSelect(item);
-            if (modeLocked) onLockedPress?.(item);
           }
         }}
         role="button"
@@ -203,11 +202,9 @@ export const FurniturePiece = memo(function FurniturePiece({
       >
         <span id={descId} className="sr-only">
           {[
-            modeLocked
-              ? 'Locked while editing the room.'
-              : isItemLocked
-                ? 'Locked; unlock it in the furniture list to move it.'
-                : 'Arrow keys move, R rotates, Alt or Option with R turns by 1 degree, Delete removes.',
+            isItemLocked
+              ? 'Locked; unlock it in the furniture list to move it.'
+              : 'Arrow keys move, R rotates, Alt or Option with R turns by 1 degree, Delete removes.',
             warning?.outOfBounds ? 'Outside the room.' : '',
             warning?.collision ? 'Overlapping other furniture.' : '',
             warning?.blocksDoor
@@ -263,16 +260,8 @@ export const FurniturePiece = memo(function FurniturePiece({
           </div>
         )}
 
-        {/* Lock badge: grey while the mode locks all furniture, amber for an individually locked item */}
-        {modeLocked && (
-          <div
-            className="absolute -top-2 -right-2 w-5 h-5 bg-slate-600 rounded-full flex items-center justify-center shadow-md"
-            aria-hidden="true"
-          >
-            <Lock className="w-3 h-3 text-white" />
-          </div>
-        )}
-        {isItemLocked && !modeLocked && (
+        {/* Lock badge: a piece the user locked with its padlock */}
+        {isItemLocked && (
           <div
             className="absolute -top-2 -right-2 w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center shadow-md"
             aria-hidden="true"
