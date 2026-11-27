@@ -43,6 +43,12 @@ export const DOOR_TYPES = [
   'opening',
 ] as const;
 
+/**
+ * Which end of its wall an opening's offset is measured from, as an agent may write it. Input
+ * only: `loadPlan` measures every offset from the start corner and drops the field.
+ */
+export const OFFSET_FROM = ['start', 'end', 'left', 'right', 'top', 'bottom'] as const;
+
 export const Opening = z.looseObject({
   id: Id,
   kind: z.enum(OPENING_KINDS),
@@ -52,6 +58,14 @@ export const Opening = z.looseObject({
     'Distance along the wall from its start corner to the near edge of the opening.',
   ),
   width: d(size(), 'Width along the wall.'),
+  from: d(
+    z.optional(z.enum(OFFSET_FROM)),
+    'Input only: which end of the wall offset is measured from. "start" (default) is the start ' +
+      'corner (on a rectangle: top wall from the left, right wall from the top, bottom wall from ' +
+      'the right, left wall from the bottom); "end" is the other end. Or name the end as seen ' +
+      'from above: "left" or "right" on a top or bottom wall, "top" or "bottom" on a left or ' +
+      'right wall. The plan comes back with offset measured from the start corner.',
+  ),
   type: d(z._default(z.enum(DOOR_TYPES), 'swing-in'), 'Doors only.'),
   hinge: d(
     z._default(z.enum(HINGES), 'start'),

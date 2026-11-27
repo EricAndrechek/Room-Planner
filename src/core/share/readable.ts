@@ -15,7 +15,8 @@
  *   room before them. On a rectangle, `wall` is top, right, bottom or left and `offset` runs from
  *   the wall's left end (top and bottom walls) or top end (left and right walls); otherwise `wall`
  *   is the index (wall i runs from corner i to corner i+1) and `offset` runs clockwise from corner
- *   i. Types: in (default), out, double, double-out, sliding, pocket, bifold, opening. `right`
+ *   i. `end-<offset>` measures from the other end (the right or bottom one; corner i+1), and
+ *   `right-`, `bottom-` (or `left-`, `top-`) name the end. Types: in (default), out, double, double-out, sliding, pocket, bifold, opening. `right`
  *   hinges the door on the right, seen from inside the room facing the wall.
  * - `item:<label>:<W>x<D>[@x,y[,rotation]][:round][:L-<corner>-<w>x<d>][:color-<rrggbb>]`: a piece,
  *   its centre at x,y (rotation in clockwise degrees). Without `@` it is set aside. `round` makes it
@@ -205,7 +206,10 @@ export function parseReadable(input: string): ReadablePayload {
         continue;
       }
       const wallText = (fields[1] ?? '').toLowerCase();
-      const offset = num(fields[2]);
+      // `end-2`: 2 from the far end (`right-2`, `bottom-2` and so on name that end).
+      const fromText = /^(start|end|left|right|top|bottom)-?(.*)$/i.exec(fields[2] ?? '');
+      const side = (fromText?.[1] ?? 'start').toLowerCase();
+      const offset = num(fromText ? fromText[2] : fields[2]);
       const width = num(fields[3]);
       if (offset === null || width === null || width <= 0) {
         note('needs <wall>:<offset>:<width>; left out');
@@ -221,12 +225,17 @@ export function parseReadable(input: string): ReadablePayload {
           continue;
         }
         wall = named;
-        // Offsets run from the left or top end; the format's run clockwise from the start corner.
-        if (named === 2 || named === 3) {
-          const b = roomBounds({ outline: room.outline });
-          const len = named === 2 ? b.right - b.left : b.bottom - b.top;
-          along = len - offset - width;
+        const b = roomBounds({ outline: room.outline });
+        const len = named % 2 === 0 ? b.right - b.left : b.bottom - b.top;
+        // Offsets run from the left or top end (the far end: the right or bottom one).
+        const far = named % 2 === 0 ? 'right' : 'bottom';
+        const near = named % 2 === 0 ? 'left' : 'top';
+        if (side !== 'start' && side !== 'end' && side !== far && side !== near) {
+          note(`a ${wallText} wall has no ${side} end; measured from the ${near}`);
         }
+        if (side === 'end' || side === far) along = len - offset - width;
+        // The format's offsets run clockwise from the start corner.
+        if (named === 2 || named === 3) along = len - along - width;
       } else {
         const index = num(wallText);
         if (index === null || !Number.isInteger(index) || index < 0) {
@@ -234,6 +243,13 @@ export function parseReadable(input: string): ReadablePayload {
           continue;
         }
         wall = index;
+        if (side === 'end' && index < room.outline.length) {
+          const p = room.outline[index]!;
+          const q = room.outline[(index + 1) % room.outline.length]!;
+          along = Math.hypot(q.x - p.x, q.y - p.y) - offset - width;
+        } else if (side !== 'start' && side !== 'end') {
+          note(`"${side}" is for named walls; measured from corner ${index}`);
+        }
       }
       const opening: Json = { kind: keyword, wall, offset: Math.max(0, along), width };
       if (keyword === 'door') {

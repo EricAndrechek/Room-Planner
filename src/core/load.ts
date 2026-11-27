@@ -16,6 +16,7 @@ import { migrate, type MigrateOptions } from './migrate';
 import { isJson, type Json } from './migrate/types';
 import {
   HINGES,
+  OFFSET_FROM,
   OPENING_KINDS,
   PLAN_VERSION,
   Plan,
@@ -67,6 +68,8 @@ export function loadPlan(input: unknown, mode: LoadMode, options: LoadOptions = 
   }
   if (!isJson(doc)) return invalid([{ path: [], message: 'This is not a Room Planner plan.' }]);
   doc = migrate(doc, from, PLAN_VERSION, options);
+  const fromIssues = measureFromStart(doc as Json, mode);
+  if (fromIssues.length) return invalid(fromIssues);
 
   let repairs: string[] = [];
   if (mode === 'lenient') ({ doc, repairs } = repair(doc as Json));
@@ -227,6 +230,65 @@ export function checkIntegrity(plan: Plan): LoadIssue[] {
         message: 'The cut must be smaller than the piece in both width and depth.',
       });
     }
+  });
+  return issues;
+}
+
+// --- Offsets from either end (input) ------------------------------------------------------------
+
+/**
+ * Openings written with `from` (OFFSET_FROM: the end of the wall the offset is measured from)
+ * turned into offsets from the wall's start corner, in place, before anything else reads them;
+ * `from` is then removed. An unknown `from`, or a side the wall has no end at (`"left"` on a wall
+ * that runs straight down), is an issue in strict mode and ignored in lenient mode. Openings whose
+ * wall or numbers are unusable are left for the schema to report.
+ */
+function measureFromStart(doc: Json, mode: LoadMode): LoadIssue[] {
+  const issues: LoadIssue[] = [];
+  if (!Array.isArray(doc.rooms)) return issues;
+  doc.rooms.forEach((room, r) => {
+    if (!isJson(room) || !Array.isArray(room.openings)) return;
+    const outline = Array.isArray(room.outline) ? (room.outline as unknown[]) : [];
+    const pts = outline.every((p) => isJson(p) && finite(p.x) && finite(p.y))
+      ? (outline as Pt[])
+      : null;
+    room.openings.forEach((o, i) => {
+      if (!isJson(o) || !('from' in o)) return;
+      const path = ['rooms', r, 'openings', i, 'from'];
+      const fail = (message: string) => {
+        if (mode === 'strict') issues.push({ path, message });
+        delete o.from;
+      };
+      const side = o.from;
+      if (!oneOf(OFFSET_FROM, side)) {
+        return fail(`Must be one of ${OFFSET_FROM.map((f) => `"${f}"`).join(', ')}.`);
+      }
+      const wall = o.wall;
+      if (!pts || pts.length < 3 || !Number.isInteger(wall) || (wall as number) < 0) {
+        delete o.from;
+        return;
+      }
+      if ((wall as number) >= pts.length || !finite(o.offset) || !finite(o.width)) {
+        delete o.from;
+        return;
+      }
+      const a = pts[wall as number]!;
+      const b = pts[((wall as number) + 1) % pts.length]!;
+      let fromEnd: boolean;
+      if (side === 'start' || side === 'end') fromEnd = side === 'end';
+      else {
+        const axis = side === 'left' || side === 'right' ? 'x' : 'y';
+        if (Math.abs(a[axis] - b[axis]) < 1e-9) {
+          return fail(
+            `This wall has no ${side} end (it runs ${axis === 'x' ? 'up and down' : 'across'}); use ${axis === 'x' ? '"top" or "bottom"' : '"left" or "right"'}, or "start" or "end".`,
+          );
+        }
+        const endIsLess = b[axis] < a[axis];
+        fromEnd = side === 'left' || side === 'top' ? endIsLess : !endIsLess;
+      }
+      if (fromEnd) o.offset = wallLengthOf(pts, wall as number) - o.offset - o.width;
+      delete o.from;
+    });
   });
   return issues;
 }
