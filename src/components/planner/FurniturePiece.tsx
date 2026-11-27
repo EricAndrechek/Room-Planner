@@ -39,7 +39,8 @@ interface FurniturePieceProps {
 const DIMMED_ALPHA = 0.5;
 /**
  * Room setup: pieces stay under the opening handles (z 20) and the corner handles (z 30+). Warning
- * badges go above every piece (one more than the selected one), so a neighbour never hides them.
+ * badges go above every piece (one more than the selected one; in Items, above the measurements at
+ * z 60 too), so a neighbour or a guide never hides them.
  */
 const DIMMED_Z = { idle: 10, active: 18 };
 
@@ -308,7 +309,7 @@ export const FurniturePiece = memo(function FurniturePiece({
       {(hasWarning || doorBlock) && (
         <div
           className="absolute pointer-events-none"
-          style={{ ...frame, zIndex: dimmed ? DIMMED_Z.active + 1 : 51 }}
+          style={{ ...frame, zIndex: dimmed ? DIMMED_Z.active + 1 : 61 }}
           data-testid="piece-badges"
         >
           {hasWarning && (

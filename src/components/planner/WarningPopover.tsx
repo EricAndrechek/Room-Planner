@@ -100,7 +100,7 @@ export function WarningPopover({
         }
       }}
     >
-      <div className="mb-1.5 flex items-start justify-between gap-2">
+      <div className="mb-1.5 flex items-center justify-between gap-2">
         <h2 id={titleId} className="text-xs font-semibold text-slate-800">
           {pieceName(item)}
         </h2>
